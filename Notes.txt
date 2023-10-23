@@ -1,0 +1,237 @@
+-------------------
+- To run AsmOSx86 -
+-------------------
+Just double click AsmOSx86.bxrc
+
+--------------------------------------
+- Build AsmOSx86 - Kernel.asm Change -
+--------------------------------------
+Run BuildIt.bat which does the following
+- Runs Build3.bat to assmeble the Kernel
+- Executes DosBox using DosBox1.txt which does the following
+  - Mounts floppy.img (our floppy) on Drive A:
+  - Executes Copy1.bat which does the following
+    - Copies Boot2.bin  to A:
+    - Copies Kernel.bin to A:
+- Fires up AsmOSx86 using Bochs and AsmOSx86.bxrc
+
+-------------------------------------
+- Build AsmOSx86 - Boot2.asm Change -
+-------------------------------------
+Run Build2.bat
+Run BuildIt.bat
+- Yes, this assembles Kernel.asm when even if you didn't change it
+
+-------------------------------------
+- Build AsmOSx86 - Boot1.asm Change -
+-------------------------------------
+Run Build1.bat
+Run Build2.bat (only required if Boot2.asm  was changed)
+Run Build3.bat (only required if Kernel.asm was changed)
+
+Create a floppy image (best to have a clean start!)
+- Open a Windows 10 command prompt and create a 1.44 MB floppy image
+  C:\> cd C:\Projects\AsmOSx86 (e.g.)
+  C:\> fsutil file createnew floppy.img 1474560
+- This creates a file of the correct size with nothing but binary zeros in it
+
+Format the floppy
+- Start Virtual Box
+  - with FreeDos
+  - with floppy.img assigned to the Floppy Device
+- From the FreeDos command prompt
+  C:\> format a:
+- The format command will complain about the floppy, saying stuff like:
+  "Boot sector contents implausible, disk not yet FAT formatted"
+  "Cannot find existing format - forcing full format"
+- Give the volume a label: ASMOSX86
+- Don't be surprised if you have to format more than once to acheive success
+- Shutdown the Virtual Box
+  C:\> shutdown
+
+Copy AsmOSx86 files to the floppy
+- Double click on DosBox.bat
+- Copy the OS files to the floppy in this order (order 'might' not matter)
+  C:\> copy boot2.bin  a:
+  C:\> copy kernel.bin a:
+  C:\> copy boot1.bin  a:
+
+Write the Boot Sector using Debug
+- Start Virtual Box
+  - with FreeDos
+  - with floppy.img assigned to the Floppy Device
+- From the FreeDos command prompt
+  - Start Debug and load Boot1.bin into memory
+    C:\> Debug A:Boot1.bin <enter>
+- Ask Debug to tell you the memory address where it loaded Boot1.bin
+  C:\> D <enter>
+- Debug will display the first 128 bytes of Boot1.bin
+  The first line will look 'something like' this:
+  06B0:0100  E9 AF 00 41 73 6D 4F 53-78 38 36 00 02 01 01 00 ...AsmOSx86.....
+- The first part '06B0:0100' is the address where Debug loaded Boot1.bin
+  Note: the address you see, will (most likely) be different. So don't just
+        blindly use '06B0:0100'
+- Use the address from the 'D' command in the write command when writing
+  Boot1.bin to the boot sector of the floppy
+- The write command has this format
+  W [Address] [Drive] [First Sector] [Number of Sectors to Write]
+  - Address:                    06B0:0100 (the address that the D command displayed)
+  - Drive:                      0 (the A drive, our floppy, is assigned drive number 0)
+  - First Sector:               0 (sector 0 on the floppy 'IS' the boot sector)
+  - Number of Sectors to Write: 1 (we are writting 1 sector)
+- Write the boot sector (Boot1.bin)
+  C:\> W 06B0:0100 0 0 1
+- Now the boot sector on the floppy contains the contents of Boot1.bin
+- To quit Debug use the 'Q' command
+  C:\> Q
+- Shutdown the Virtual Box
+  C:\> shutdown
+
+Write the Boot Sector using UltraEdit
+- Open Boot1.bin in UltraEdit
+- Open floppy.img in UltraEdit
+- Copy Boot1.bin (512 bytes)
+- Paste into floppy.img (first 512 bytes)
+- Close UltraEdit saving floppy.img
+
+Double click DosBox1.bat which does the following
+- Mounts floppy.img (our floppy) on Drive A:
+- Executes Copy1.bat which does the following
+  - Copies Boot2.bin  to A:
+  - Copies Kernel.bin to A:
+- Starts Bochs using AsmOSx86.bxrc which boots from our floppy
+  to start AsmOSx86
+
+---------
+- Files -
+---------
+.git                        The Git folder
+.gitattributes              The Git attributes
+.gitignore                  The Git Ignore file
+
+AsmOSx86.bxrc               Bochs config file for running AsmOSx86
+
+Boot1.asm                   Boot sector code
+Boot1.bin                   Boot sector binary
+Boot1.lst                   Boot sector listing
+Boot2.asm                   Kernel loader code
+Boot2.bin                   Kernel loader binary
+Boot2.lst                   Kernel loader listing
+Build1.bat                  Assembles Boot1.asm
+Build2.bat                  Assembles Boot2.asm
+Build3.bat                  Assembles Kernel.asm
+BuildIt.bat                 Assembles Kernel.asm, runs AsmOSx86
+
+Copy1.bat                   Copies OS files to floppy, called by BuildIt.bat via DosBox1.txt
+
+DosBox.bat                  Runs DosBox using DosBox.txt
+DosBox.txt                  DosBox configuration file used by DosBox.bat
+DosBox1.bat                 Runs DosBox using DosBox1.txt
+DosBox1.txt                 DosBox configuration file used by DosBox1.bat
+
+floppy.img                  A 1.44 MB floppy
+
+Kernel.asm                  Kernel code
+Kernel.bin                  Kernel binary
+Kernel.lst                  Kernel listing
+
+Notes.txt                   This file
+
+--------------------------
+- VGA Mode 3 Color Codes -
+--------------------------
+Normal							Binary Hex
+-----------------   ------ ---
+Black									0000 00h
+Blue									0001 01h
+Green									0010 02h
+Cyan									0011 03h
+Red										0100 04h
+Magenta								0101 05h
+Brown									0110 06h
+Light Gray						0111 07h
+
+Intensity Bit Set		Binary Hex
+-----------------   ------ ---
+Dark Gray						  1000 08h
+Light Blue					  1001 09h
+Light Green					  1010 0Ah
+Light Cyan					  1011 0Bh
+Light Red						  1100 0Ch
+Light Magenta				  1101 0Dh
+Yellow							  1110 0Eh
+White								  1111 0Fh
+
+Normal Background		Binary Hex
+-----------------   ------ ---
+Black								  0000 00h
+Blue									0001 01h
+Green									0010 02h
+Cyan									0011 03h
+Red										0100 04h
+Magenta								0101 05h
+Brown									0110 06h
+Gray									0111 07h
+
+--------------
+- Memory Map -
+--------------
+https://wiki.osdev.org/Memory_Map_(x86)
+
+Real Mode IVT (Interrupt Vector Table)
+0x00000000  0x000003FF           1 Kb
+         0       1,023       1,024 bytes
+
+BDA (BIOS data area)
+0x00000400  0x000004FF         .25 Kb
+     1,024       1,279         256 bytes
+
+Conventional memory
+0x00000500  0x00007BFF       29.75 Kb
+     1,280      31,743      30,464 bytes
+
+BootSector
+0x00007C00  0x00007DFF         .50 Kb
+    31,744      32,255         512 bytes
+
+Conventional memory
+0x00007E00  0x0007FFFF       480.5 Kb
+    32,256     524,287     492,032 bytes
+
+EBDA (Extended BIOS Data Area)
+0x00080000  0x0009FFFF         128 Kb
+   524,288     655,359     131,072 bytes
+
+Video Memory
+------------
+0x000A0000  0x000BFFFF         128 Kb       Video display memory
+   655,360     786,431     131,071 bytes
+0x000B7060  0x000B7FFF
+   749,664     753,663       4,000 bytes    Invisible video page
+0x000B8000  0x000B8F9F
+   753,664     757,663       4,000 bytes    Visible video page
+------------
+
+Video BIOS
+0x000C0000  0x000C7FFF          32 Kb
+   786,432     819,199      32,768 bytes
+
+BIOS Expansions
+0x000C8000  0x000EFFFF         160 Kb
+   819,200     983,039     163,840 bytes
+
+Motherboard BIOS
+0x000F0000  0x000FFFFF          64 Kb
+   983,040   1,048,575      65,535 bytes
+
+2nd Mb of RAM
+0x00100000  0x001FFFFF           1 Mb
+ 1,048,576   2,097,151   1,048,576 bytes
+
+3rd Mb of RAM
+0x00200000  0x002FFFFF           1 Mb
+ 2,097,152   3,145,727   1,048,576 bytes
+
+4th Mb RAM
+0x00300000  0x003FFFFF           1 Mb
+ 3,145,728  4,194,303    1,048,576 bytes

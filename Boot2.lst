@@ -1,0 +1,575 @@
+     1                                  ;**********************************************************
+     2                                  ; Boot2.asm - Stage 2 Boot Loader
+     3                                  ;   A kernel loader that:
+     4                                  ;   1. installs Global Descriptor Table (GDT)
+     5                                  ;   2. enables the A20 line
+     6                                  ;   3. load the kernel from floppy into low memory
+     7                                  ;   4. switch to x86 Protected Mode
+     8                                  ;   5. switch from 16 bit to 32 bit addressing
+     9                                  ;   5. copy kernel to high memory
+    10                                  ;   6. jump to kernel
+    11                                  ;
+    12                                  ; nasm -f bin Boot2.asm -o Boot2.bin -l Boot2.lst
+    13                                  ;**********************************************************
+    14                                  
+    15                                  ; Remember the memory map-- 500h through 7BFFh is unused above the BIOS data area.
+    16                                  ; We are loaded at 500h (50h:0h)
+    17                                  [bits 16]
+    18                                      org   0500h
+    19 00000000 E9BD01                      jmp   Main                          ; jump to Main
+    20                                  
+    21                                  ;--------------------------------------------------------------------------------------------------
+    22                                  ; Prints a null terminated string using BIOS call
+    23                                  ; DS => SI: null terminated string
+    24                                  ;--------------------------------------------------------------------------------------------------
+    25                                  [bits 16]
+    26                                  PutStr:
+    27 00000003 60                          pusha                               ; save registers
+    28 00000004 B40E                        mov   ah,0Eh                        ; write text in teletype mode
+    29                                  PutStr1:
+    30 00000006 AC                          lodsb                               ; load next byte from string from SI to AL
+    31 00000007 08C0                        or    al,al                         ; Does AL=0?
+    32 00000009 7404                        jz    PutStr2                       ; Yep, null terminator found-bail out
+    33 0000000B CD10                        int   10h                           ; invoke BIOS to print 1 character
+    34 0000000D EBF7                        jmp   PutStr1                       ; Repeat until null terminator found
+    35                                  PutStr2:
+    36 0000000F 61                          popa                                ; restore registers
+    37 00000010 C3                          ret                                 ; we are done, so return
+    38                                  
+    39                                  ;--------------------------------------------------------------------------------------------------
+    40                                  ; Install our GDT
+    41                                  ;--------------------------------------------------------------------------------------------------
+    42                                  [bits 16]
+    43                                  InstallGDT:
+    44 00000011 FA                          cli                                 ; disable interrupts
+    45 00000012 60                          pusha                               ; save registers
+    46 00000013 0F0116[7402]                lgdt  [GDT2]                        ; load GDT into GDTR
+    47 00000018 FB                          sti                                 ; enable interrupts
+    48 00000019 61                          popa                                ; restore registers
+    49 0000001A C3                          ret                                 ; All done!
+    50                                  
+    51                                  ;--------------------------------------------------------------------------------------------------
+    52                                  ; Enable A20 line through output port
+    53                                  ;--------------------------------------------------------------------------------------------------
+    54                                  [bits 16]
+    55                                  EnableA20:
+    56 0000001B FA                          cli                                 ; disable interrupts
+    57 0000001C 60                          pusha
+    58                                  
+    59 0000001D E82F00                      call  WaitInput                     ; wait for keypress
+    60 00000020 B0AD                        mov   al,0ADh
+    61 00000022 E664                        out   64h,al                        ; disable keyboard
+    62 00000024 E82800                      call  WaitInput                    
+    63                                  
+    64 00000027 B0D0                        mov   al,0D0h
+    65 00000029 E664                        out   64h,al                        ; tell controller to read output port
+    66 0000002B E82800                      call  WaitOutput                   
+    67                                  
+    68 0000002E E460                        in    al,60h
+    69 00000030 6650                        push  eax                           ; get output port data and store it
+    70 00000032 E81A00                      call  WaitInput                    
+    71                                  
+    72 00000035 B0D1                        mov   al,0D1h
+    73 00000037 E664                        out   64h,al                        ; tell controller to write output port
+    74 00000039 E81300                      call  WaitInput                    
+    75                                  
+    76 0000003C 6658                        pop   eax
+    77 0000003E 0C02                        or    al,2                          ; set bit 1 (enable a20)
+    78 00000040 E660                        out   60h,al                        ; write out data back to the output port
+    79                                  
+    80 00000042 E80A00                      call  WaitInput                    
+    81 00000045 B0AE                        mov   al,0AEh                       ; enable keyboard
+    82 00000047 E664                        out   64h,al
+    83                                  
+    84 00000049 E80300                      call  WaitInput                     ; wait for keypress
+    85 0000004C 61                          popa
+    86 0000004D FB                          sti                                 ; enable interrupts
+    87 0000004E C3                          ret
+    88                                  
+    89                                  ;------------------------------
+    90                                  ; Helper routines for EnableA20
+    91                                  ;------------------------------
+    92                                  WaitInput:
+    93 0000004F E464                        in    al,64h                        ; wait for
+    94 00000051 A802                        test  al,2                          ;  input buffer
+    95 00000053 75FA                        jnz   WaitInput                     ;   to clear
+    96 00000055 C3                          ret
+    97                                  
+    98                                  WaitOutput:
+    99 00000056 E464                        in    al,64h                        ; wait for
+   100 00000058 A801                        test  al,1                          ;  output buffer
+   101 0000005A 74FA                        jz    WaitOutput                    ;   to clear
+   102 0000005C C3                          ret
+   103                                  
+   104                                  ;--------------------------------------------------------------------------------------------------
+   105                                  ; Floppy Driver Routines
+   106                                  ;--------------------------------------------------------------------------------------------------
+   107                                  ;------------------------------------------
+   108                                  ; Convert CHS to LBA
+   109                                  ; LBA = (cluster - 2) * sectors per cluster
+   110                                  ;------------------------------------------
+   111                                  [bits 16]
+   112                                  ClusterLBA:
+   113 0000005D 83E802                      sub   ax,0002h                      ; zero base cluster number
+   114 00000060 31C9                        xor   cx,cx
+   115 00000062 8A0E[1703]                  mov   cl,byte [SectorsPerCluster]   ; convert byte to word
+   116 00000066 F7E1                        mul   cx
+   117 00000068 0306[0103]                  add   ax,word [DataSector]          ; base data sector
+   118 0000006C C3                          ret
+   119                                  
+   120                                  ;---------------------------------------------------------------------------
+   121                                  ; Convert LBA to CHS
+   122                                  ; AX = LBA Address to convert
+   123                                  ;
+   124                                  ; absolute sector = (logical sector / sectors per track) + 1
+   125                                  ; absolute head   = (logical sector / sectors per track) MOD number of heads
+   126                                  ; absolute track  = logical sector / (sectors per track * number of heads)
+   127                                  ;---------------------------------------------------------------------------
+   128                                  [bits 16]
+   129                                  LBACHS:                                 ;
+   130 0000006D 31D2                        xor   dx,dx                         ; prepare dx:ax for operation
+   131 0000006F F736[1A03]                  div   word [SectorsPerTrack]        ; calculate
+   132 00000073 FEC2                        inc   dl                            ; adjust for sector 0
+   133 00000075 8816[FB02]                  mov   byte [AbsoluteSector],dl
+   134 00000079 31D2                        xor   dx,dx                         ; prepare dx:ax for operation
+   135 0000007B F736[0403]                  div   word [HeadsPerCylinder]       ; calculate
+   136 0000007F 8816[FA02]                  mov   byte [AbsoluteHead],dl
+   137 00000083 A2[FC02]                    mov   byte [AbsoluteTrack],al
+   138 00000086 C3                          ret
+   139                                  
+   140                                  ;-----------------------------------
+   141                                  ; Read a series of sectors
+   142                                  ; CX     = Number of sectors to read
+   143                                  ; AX     = Starting sector
+   144                                  ; ES:EBX = Buffer
+   145                                  ;-----------------------------------
+   146                                  [bits 16]
+   147                                  ReadSector:
+   148 00000087 BF0500                      mov   di,0005h                      ; five retries for error
+   149                                  ReadSector1:
+   150 0000008A 50                          push  ax
+   151 0000008B 53                          push  bx
+   152 0000008C 51                          push  cx
+   153 0000008D E8DDFF                      call  LBACHS                        ; convert starting sector to CHS
+   154 00000090 B402                        mov   ah,02h                        ; BIOS read sector
+   155 00000092 B001                        mov   al,01h                        ; read one sector
+   156 00000094 8A2E[FC02]                  mov   ch,byte [AbsoluteTrack]       ; track
+   157 00000098 8A0E[FB02]                  mov   cl,byte [AbsoluteSector]      ; sector
+   158 0000009C 8A36[FA02]                  mov   dh,byte [AbsoluteHead]        ; head
+   159 000000A0 8A16[0303]                  mov   dl,byte [DriveNumber]         ; drive
+   160 000000A4 CD13                        int   13h                           ; invoke BIOS
+   161 000000A6 730C                        jnc   ReadSector2                   ; test for read error
+   162 000000A8 31C0                        xor   ax,ax                         ; BIOS reset disk
+   163 000000AA CD13                        int   13h                           ; invoke BIOS
+   164 000000AC 4F                          dec   di                            ; decrement error counter
+   165 000000AD 59                          pop   cx
+   166 000000AE 5B                          pop   bx
+   167 000000AF 58                          pop   ax
+   168 000000B0 75D8                        jnz   ReadSector1                   ; attempt to read again
+   169 000000B2 CD18                        int   18h
+   170                                  ReadSector2:
+   171 000000B4 59                          pop   cx
+   172 000000B5 5B                          pop   bx
+   173 000000B6 58                          pop   ax
+   174 000000B7 031E[FD02]                  add   bx,word [BytesPerSector]      ; queue next buffer
+   175 000000BB 40                          inc   ax                            ; queue next sector
+   176 000000BC E2C9                        loop  ReadSector                    ; read next sector
+   177 000000BE C3                          ret
+   178                                  
+   179                                  ;------------------------------------
+   180                                  ; Load Root Directory Table to 07E00h
+   181                                  ;------------------------------------
+   182                                  [bits 16]
+   183                                  LoadRootDir:
+   184 000000BF 60                          pusha                               ; store registers
+   185 000000C0 06                          push  es
+   186                                      ; compute size of root directory and store in "CX"
+   187 000000C1 31C9                        xor   cx,cx                         ; clear registers
+   188 000000C3 31D2                        xor   dx,dx
+   189 000000C5 B82000                      mov   ax,32                         ; 32 byte directory entry
+   190 000000C8 F726[1503]                  mul   word [RootEntries]            ; total size of directory
+   191 000000CC F736[FD02]                  div   word [BytesPerSector]         ; sectors used by directory
+   192 000000D0 91                          xchg  ax,cx                         ; move into AX
+   193                                      ; compute location of root directory and store in "AX"
+   194 000000D1 A0[1203]                    mov   al,byte [NumberOfFATs]        ; number of FATs
+   195 000000D4 F726[1803]                  mul   word [SectorsPerFAT]          ; sectors used by FATs
+   196 000000D8 0306[1303]                  add   ax,word [ReservedSectors]
+   197 000000DC A3[0103]                    mov   word [DataSector],ax          ; base of root directory
+   198 000000DF 010E[0103]                  add   word [DataSector],cx
+   199                                      ; read root directory into 07E00h
+   200 000000E3 68E002                      push  word RootSegment
+   201 000000E6 07                          pop   es
+   202 000000E7 BB0000                      mov   bx,0                          ; copy root dir
+   203 000000EA E89AFF                      call  ReadSector                    ; read in directory table
+   204 000000ED 07                          pop   es
+   205 000000EE 61                          popa                                ; restore registers and return
+   206 000000EF C3                          ret
+   207                                  
+   208                                  ;-----------------------------
+   209                                  ; Loads FAT table to 07C00h
+   210                                  ; ES:DI = Root Directory Table
+   211                                  ;-----------------------------
+   212                                  [bits 16]
+   213                                  LoadFAT:
+   214 000000F0 60                          pusha                               ; store registers
+   215 000000F1 06                          push  es
+   216                                      ; compute size of FAT and store in "CX"
+   217 000000F2 31C0                        xor   ax,ax
+   218 000000F4 A0[1203]                    mov   al,byte [NumberOfFATs]        ; number of FATs
+   219 000000F7 F726[1803]                  mul   word [SectorsPerFAT]          ; sectors used by FATs
+   220 000000FB 89C1                        mov   cx,ax
+   221                                      ; compute location of FAT and store in "ax"
+   222 000000FD A1[1303]                    mov   ax,word [ReservedSectors]
+   223                                      ; read FAT into memory (Overwrite our bootloader at 07C00h)
+   224 00000100 68C002                      push  word FatSegment
+   225 00000103 07                          pop   es
+   226 00000104 31DB                        xor   bx,bx
+   227 00000106 E87EFF                      call  ReadSector 
+   228 00000109 07                          pop   es
+   229 0000010A 61                          popa                                ; restore registers and return
+   230 0000010B C3                          ret
+   231                                  
+   232                                  ;----------------------------------------------------------------
+   233                                  ; Search for filename in root table
+   234                                  ; parm DS:SI = File name
+   235                                  ; ret  AX    = File index number in directory table. -1 if error
+   236                                  ;----------------------------------------------------------------
+   237                                  [bits 16]
+   238                                  FindFile:
+   239 0000010C 51                          push  cx                            ; store registers
+   240 0000010D 52                          push  dx
+   241 0000010E 53                          push  bx
+   242 0000010F 89F3                        mov   bx,si                         ; copy filename for later
+   243                                      ; browse root directory for binary image
+   244 00000111 8B0E[1503]                  mov   cx,word [RootEntries]         ; load loop counter
+   245 00000115 BF002E                      mov   di,RootOffset                 ; locate first root entry at 1 MB mark
+   246 00000118 FC                          cld                                 ; clear direction flag
+   247                                  FindFile1:
+   248 00000119 51                          push  cx
+   249 0000011A B90B00                      mov   cx,11                         ; eleven character name. Image name is in SI
+   250 0000011D 89DE                        mov   si,bx                         ; image name is in BX
+   251 0000011F 57                          push  di
+   252 00000120 F3A6                        rep   CMPSB                         ; test for entry match
+   253 00000122 5F                          pop   di
+   254 00000123 740D                        je    FindFile2
+   255 00000125 59                          pop   cx
+   256 00000126 83C720                      add   di,32                         ; queue next directory entry
+   257 00000129 E2EE                        loop  FindFile1
+   258                                      ; Not Found
+   259 0000012B 5B                          pop   bx                            ; restore registers and return
+   260 0000012C 5A                          pop   dx
+   261 0000012D 59                          pop   cx
+   262 0000012E B8FFFF                      mov   ax,-1                         ; set error code
+   263 00000131 C3                          ret
+   264                                  FindFile2:
+   265 00000132 58                          pop   ax                            ; return value into AX contains entry of file
+   266 00000133 5B                          pop   bx                            ; restore registers and return
+   267 00000134 5A                          pop   dx
+   268 00000135 59                          pop   cx
+   269 00000136 C3                          ret
+   270                                  
+   271                                  ;-----------------------------------------
+   272                                  ; Load file
+   273                                  ; parm ES:SI  = File to load
+   274                                  ; parm EBX:BP = Buffer to load file to
+   275                                  ; ret  AX     = -1 on error, 0 on success
+   276                                  ; ret  CX     = number of sectors read
+   277                                  ;-----------------------------------------
+   278                                  [bits 16]
+   279                                  LoadFile:
+   280 00000137 6631C9                      xor   ecx,ecx                       ; size of file in sectors
+   281 0000013A 6651                        push  ecx
+   282 0000013C 53                          push  bx                            ; BX => BP points to buffer to write to; store it for later
+   283 0000013D 55                          push  bp
+   284 0000013E E8CBFF                      call  FindFile                      ; find our file. ES:SI contains our filename
+   285 00000141 83F8FF                      cmp   ax,-1
+   286 00000144 7508                        jne   LoadFile1
+   287                                      ; failed to find file
+   288 00000146 5D                          pop   bp
+   289 00000147 5B                          pop   bx
+   290 00000148 6659                        pop   ecx
+   291 0000014A B8FFFF                      mov   ax,-1
+   292 0000014D C3                          ret
+   293                                  LoadFile1:
+   294 0000014E 6681EF002E0000              sub   edi,RootOffset
+   295 00000155 662D002E0000                sub   eax,RootOffset
+   296                                      ; get starting cluster
+   297 0000015B 68E002                      push  word RootSegment              ; root segment loc
+   298 0000015E 07                          pop   es
+   299 0000015F 268B551A                    mov   dx,word [es:di + 0001Ah]      ; DI points to file entry in root directory table. Refrence the table...
+   300 00000163 8916[FF02]                  mov   word [Cluster],dx             ; file's first cluster
+   301 00000167 5B                          pop   bx                            ; get location to write to so we dont screw up the stack
+   302 00000168 07                          pop   es
+   303 00000169 53                          push  bx                            ; store location for later again
+   304 0000016A 06                          push  es
+   305 0000016B E882FF                      call  LoadFAT
+   306                                  LoadFile2:
+   307                                      ; load the cluster
+   308 0000016E A1[FF02]                    mov   ax,word [Cluster]             ; cluster to read
+   309 00000171 07                          pop   es                            ; bx:bp=es:bx
+   310 00000172 5B                          pop   bx
+   311 00000173 E8E7FE                      call  ClusterLBA
+   312 00000176 31C9                        xor   cx,cx
+   313 00000178 8A0E[1703]                  mov   cl,byte [SectorsPerCluster]
+   314 0000017C E808FF                      call  ReadSector 
+   315 0000017F 6659                        pop   ecx
+   316 00000181 6641                        inc   ecx                           ; add one more sector to counter
+   317 00000183 6651                        push  ecx
+   318 00000185 53                          push  bx
+   319 00000186 06                          push  es
+   320 00000187 B8C002                      mov   ax,FatSegment                 ;start reading from fat
+   321 0000018A 8EC0                        mov   es,ax
+   322 0000018C 31DB                        xor   bx,bx
+   323                                      ; get next cluster
+   324 0000018E A1[FF02]                    mov   ax,word [Cluster]             ; identify current cluster
+   325 00000191 89C1                        mov   cx,ax                         ; copy current cluster
+   326 00000193 89C2                        mov   dx,ax
+   327 00000195 D1EA                        shr   dx,0001h                      ; divide by two
+   328 00000197 01D1                        add   cx,dx                         ; sum for (3/2)
+   329 00000199 BB0000                      mov   bx,0                          ; location of fat in memory
+   330 0000019C 01CB                        add   bx,cx
+   331 0000019E 268B17                      mov   dx,word [es:bx]
+   332 000001A1 A90100                      test  ax,0001h                      ; test for odd or even cluster
+   333 000001A4 7506                        jnz   LoadFile3
+   334 000001A6 81E2FF0F                    AND   dx,0000111111111111b          ; Even cluster - take low 12 bits
+   335 000001AA EB03                        jmp   LoadFile4
+   336                                  LoadFile3:
+   337 000001AC C1EA04                      shr   dx,0004h                      ; Odd cluster  - take high 12 bits
+   338                                  LoadFile4:
+   339 000001AF 8916[FF02]                  mov   word [Cluster],dx
+   340 000001B3 81FAF00F                    cmp   dx,0FF0h                      ; test for end of file marker
+   341 000001B7 72B5                        jb    LoadFile2
+   342                                      ; We're done
+   343 000001B9 07                          pop   es
+   344 000001BA 5B                          pop   bx
+   345 000001BB 6659                        pop   ecx
+   346 000001BD 31C0                        xor   ax,ax
+   347 000001BF C3                          ret
+   348                                  
+   349                                  ;--------------------------------------------------------------------------------------------------
+   350                                  ; Stage 2 Entry Point
+   351                                  ; - Set Data segment registers and stack
+   352                                  ; - Install GDT
+   353                                  ; - Enable A20
+   354                                  ; - Read Kernel.bin into memory
+   355                                  ; - Protected mode (pmode)
+   356                                  ;--------------------------------------------------------------------------------------------------
+   357                                  [bits 16]
+   358                                  Main:
+   359                                      ;----------------------------
+   360                                      ; Set Data Segement registers
+   361                                      ;----------------------------
+   362 000001C0 FA                          cli                                 ; disable interrupts
+   363 000001C1 31C0                        xor   ax,ax                         ; null segments
+   364 000001C3 8ED8                        mov   ds,ax
+   365 000001C5 8EC0                        mov   es,ax
+   366                                  
+   367                                      ;-----------------
+   368                                      ; Set up our Stack
+   369                                      ;-----------------
+   370 000001C7 B80000                      mov   ax,00h                        ; stack begins at 09000h-0FFFFh
+   371 000001CA 8ED0                        mov   SS,ax
+   372 000001CC BCFFFF                      mov   SP,0FFFFh
+   373 000001CF FB                          sti                                 ; enable interrupts
+   374                                  
+   375                                      ;----------------
+   376                                      ; Install our GDT
+   377                                      ;----------------
+   378 000001D0 E83EFE                      call  InstallGDT
+   379                                  
+   380                                      ;-----------
+   381                                      ; Enable A20
+   382                                      ;-----------
+   383 000001D3 E845FE                      call  EnableA20
+   384                                  
+   385                                      ;----------------------
+   386                                      ; Print loading message
+   387                                      ;----------------------
+   388 000001D6 BE[7A02]                    mov   si,LoadingMsg
+   389 000001D9 E827FE                      call  PutStr
+   390                                  
+   391                                      ;----------------------
+   392                                      ; Initialize filesystem
+   393                                      ;----------------------
+   394 000001DC E8E0FE                      call  LoadRootDir                   ; Load root directory table
+   395                                  
+   396                                      ;----------------------
+   397                                      ; Read Stage3 from disk
+   398                                      ;----------------------
+   399 000001DF 66BB00000000                mov   ebx,0                         ; BX:BP points to buffer to load to
+   400 000001E5 BD0030                      mov   bp,RModeBase
+   401 000001E8 BE[0603]                    mov   si,Stage3Name                 ; our file to load
+   402 000001EB E849FF                      call  LoadFile
+   403 000001EE 66890E[1103]                mov   dword [Stage3Size],ecx        ; save the size of Stage3
+   404 000001F3 83F800                      cmp   ax,0                          ; Test for success
+   405 000001F6 740E                        je    GoProtected                   ; yep--onto Stage 3!
+   406                                  
+   407                                      ;------------------
+   408                                      ; This is very bad!
+   409                                      ;------------------
+   410 000001F8 BE[B302]                    mov   si,FailureMsg                 ; Nope--print error
+   411 000001FB E805FE                      call  PutStr                        ;
+   412 000001FE B400                        mov   ah,0                          ; wait
+   413 00000200 CD16                        int   16h                           ;  for keypress
+   414 00000202 CD19                        int   19h                           ; warm boot computer
+   415 00000204 FA                          cli                                 ; If we get here, something really went wrong
+   416 00000205 F4                          hlt
+   417                                  
+   418                                  GoProtected:
+   419 00000206 BE[9402]                    mov   si,Stage3Msg
+   420 00000209 E8F7FD                      call  PutStr
+   421 0000020C B400                        mov   ah,00h                        ; wait
+   422 0000020E CD16                        int   16h                           ;  for keypress
+   423                                      ;--------------
+   424                                      ; Go into pmode
+   425                                      ;--------------
+   426 00000210 FA                          cli                                 ; clear interrupts
+   427 00000211 0F20C0                      mov   eax,cr0                       ; set bit 0 in cr0--enter pmode
+   428 00000214 6683C801                    or    eax,1
+   429 00000218 0F22C0                      mov   cr0,eax
+   430 0000021B EA[2002]0800                jmp   CodeDesc:GoStage3             ; far jump to fix CS. Remember that the code selector is 08h!
+   431                                  
+   432                                    ; Note: Do NOT re-enable interrupts! Doing so will triple fault!
+   433                                    ; We will adjust this in the Kernel.
+   434                                  
+   435                                  ;--------------------------------------------------------------------------------------------------
+   436                                  ; Get to Stage3 - Our Kernel!
+   437                                  ; - Set Data Segment Register
+   438                                  ; - Set up our Stack
+   439                                  ; - Copy Kernel to address 1 MB
+   440                                  ; - Jump to our Kernel!!
+   441                                  ;--------------------------------------------------------------------------------------------------
+   442                                  [bits 32]
+   443                                  GoStage3:
+   444                                      ;----------------------------
+   445                                      ; Set Data Segement registers
+   446                                      ;----------------------------
+   447 00000220 66B81000                    mov   ax,DataDesc                   ; set data segments to data selector (10h)
+   448 00000224 8ED8                        mov   ds,ax
+   449 00000226 8ED0                        mov   SS,ax
+   450 00000228 8EC0                        mov   es,ax
+   451                                  
+   452                                      ;-----------------
+   453                                      ; Set up our Stack
+   454                                      ;-----------------
+   455 0000022A BC00000900                  mov   ESP,90000h                    ; stack begins from 90000h
+   456                                  
+   457                                      ;-------------------
+   458                                      ; Copy Kernel to 1MB
+   459                                      ;-------------------
+   460 0000022F A1[11030000]                mov   eax,dword [Stage3Size]        ; Stage 3 size in sectors
+   461 00000234 0FB71D[FD020000]            movzx ebx,word [BytesPerSector]
+   462 0000023B F7E3                        mul   ebx
+   463 0000023D BB04000000                  mov   ebx,4
+   464 00000242 F7F3                        div   ebx
+   465 00000244 FC                          cld
+   466 00000245 BE00300000                  mov   ESI,RModeBase
+   467 0000024A BF00001000                  mov   edi,PModeBase
+   468 0000024F 89C1                        mov   ecx,eax
+   469 00000251 F3A5                        rep   movsd                         ; copy image to its protected mode address
+   470                                  
+   471                                      ;--------------------
+   472                                      ; Jump to our Kernel!
+   473                                      ;--------------------
+   474 00000253 EA000010000800              jmp   CodeDesc:PModeBase            ; jump to our kernel! Note: This assumes Kernel's entry point is at 1 MB
+   475                                  
+   476                                      ;-------------------
+   477                                      ; We never get here! 
+   478                                      ;-------------------
+   479 0000025A FA                          cli                                 ; Stop 
+   480 0000025B F4                          hlt                                 ;  execution
+   481                                  
+   482                                  ;--------------------------------------------------------------------------------------------------
+   483                                  ; Global Descriptor Table (GDT)
+   484                                  ;--------------------------------------------------------------------------------------------------
+   485                                  GDT1:
+   486                                  ;----------------
+   487                                  ; null descriptor
+   488                                  ;----------------
+   489 0000025C 00000000                											dd  0
+   490 00000260 00000000                											dd  0
+   491                                  NullDesc							equ 0
+   492                                  ;----------------
+   493                                  ; code descriptor
+   494                                  ;----------------
+   495 00000264 FFFF                    											dw  0FFFFh        ; limit low
+   496 00000266 0000                    											dw  0             ; base low
+   497 00000268 00                      											db  0             ; base middle
+   498 00000269 9A                      											db  10011010b     ; access
+   499 0000026A CF                      											db  11001111b     ; granularity
+   500 0000026B 00                      											db  0             ; base high
+   501                                  CodeDesc							equ 8h
+   502                                  ;----------------
+   503                                  ; data descriptor
+   504                                  ;----------------
+   505 0000026C FFFF                    											dw  0FFFFh        ; limit low
+   506 0000026E 0000                    											dw  0             ; base low
+   507 00000270 00                      											db  0             ; base middle
+   508 00000271 92                      											db  10010010b     ; access
+   509 00000272 CF                      											db  11001111b     ; granularity
+   510 00000273 00                      											db  0             ; base high
+   511                                  DataDesc							equ 10h
+   512                                  ;-------------------
+   513                                  ; pointer to our GDT
+   514                                  ;-------------------
+   515                                  GDT2:
+   516 00000274 1700                    											dw  GDT2-GDT1-1   ; limit (Size of GDT)
+   517 00000276 [5C020000]              											dd  GDT1          ; base of GDT
+   518                                  
+   519                                  ;--------------------------------------------------------------------------------------------------
+   520                                  ; Working Storage
+   521                                  ;--------------------------------------------------------------------------------------------------
+   522                                  FatSegment						equ 2C0h
+   523                                  PModeBase							equ 100000h       ; where the kernel is to be loaded to in protected mode
+   524                                  RModeBase							equ 3000h         ; where the kernel is to be loaded to in real mode
+   525                                  RootOffset						equ 2E00h
+   526                                  RootSegment						equ 2E0h
+   527                                  
+   528 0000027A 0D                      LoadingMsg						db  0Dh
+   529 0000027B 0A                      											db  0Ah
+   530 0000027C 41736D4F5378383620-     											db  "AsmOSx86 v0.0.1 Stage 2"
+   530 00000285 76302E302E31205374-
+   530 0000028E 6167652032         
+   531 00000293 00                      											db  00h
+   532                                  
+   533 00000294 0D                      Stage3Msg							db  0Dh
+   534 00000295 0A                      											db  0Ah
+   535 00000296 2048697420456E7465-     											db  " Hit Enter to Jump to Kernel"
+   535 0000029F 7220746F204A756D70-
+   535 000002A8 20746F204B65726E65-
+   535 000002B1 6C                 
+   536 000002B2 00                      											db  00h
+   537                                  
+   538 000002B3 0D                      FailureMsg						db  0Dh
+   539 000002B4 0A                      											db  0Ah
+   540 000002B5 2A2A2A20464154414C-     											db  "*** FATAL: MISSING OR CURRUPT KERNEL.BIN. Press Any Key to Reboot"
+   540 000002BE 3A204D495353494E47-
+   540 000002C7 204F52204355525255-
+   540 000002D0 5054204B45524E454C-
+   540 000002D9 2E42494E2E20507265-
+   540 000002E2 737320416E79204B65-
+   540 000002EB 7920746F205265626F-
+   540 000002F4 6F74               
+   541 000002F6 0D                      			                db  0Dh
+   542 000002F7 0A                      					            db  0Ah
+   543 000002F8 0A                      							        db  0Ah
+   544 000002F9 00                      									    db  00h
+   545                                  
+   546                                  
+   547 000002FA 00                      AbsoluteHead					db  00h
+   548 000002FB 00                      AbsoluteSector				db  00h
+   549 000002FC 00                      AbsoluteTrack					db  00h
+   550 000002FD 0002                    BytesPerSector				dw  512
+   551 000002FF 0000                    Cluster								dw  0000h
+   552 00000301 0000                    DataSector						dw  0000h
+   553 00000303 00                      DriveNumber						db  0
+   554 00000304 0200                    HeadsPerCylinder			dw  2
+   555 00000306 4B45524E454C202042-     Stage3Name						db  "KERNEL  BIN" ; kernel name (Must be 11 bytes)
+   555 0000030F 494E               
+   556 00000311 00                      Stage3Size						db  0             ; size of kernel image in bytes
+   557 00000312 02                      NumberOfFATs					db  2
+   558 00000313 0100                    ReservedSectors				dw  1
+   559 00000315 E000                    RootEntries						dw  224
+   560 00000317 01                      SectorsPerCluster			db  1
+   561 00000318 0900                    SectorsPerFAT					dw  9
+   562 0000031A 1200                    SectorsPerTrack				dw  18
