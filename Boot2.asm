@@ -486,77 +486,77 @@ GDT1:
 ;----------------
 ; null descriptor
 ;----------------
-											dd  0
-											dd  0
-NullDesc							equ 0
+                      dd  0
+                      dd  0
+NullDesc              equ 0
 ;----------------
 ; code descriptor
 ;----------------
-											dw  0FFFFh        ; limit low
-											dw  0             ; base low
-											db  0             ; base middle
-											db  10011010b     ; access
-											db  11001111b     ; granularity
-											db  0             ; base high
-CodeDesc							equ 8h
+                      dw  0FFFFh        ; limit low
+                      dw  0             ; base low
+                      db  0             ; base middle
+                      db  10011010b     ; access
+                      db  11001111b     ; granularity
+                      db  0             ; base high
+CodeDesc              equ 8h
 ;----------------
 ; data descriptor
 ;----------------
-											dw  0FFFFh        ; limit low
-											dw  0             ; base low
-											db  0             ; base middle
-											db  10010010b     ; access
-											db  11001111b     ; granularity
-											db  0             ; base high
-DataDesc							equ 10h
+                      dw  0FFFFh        ; limit low
+                      dw  0             ; base low
+                      db  0             ; base middle
+                      db  10010010b     ; access
+                      db  11001111b     ; granularity
+                      db  0             ; base high
+DataDesc              equ 10h
 ;-------------------
 ; pointer to our GDT
 ;-------------------
 GDT2:
-											dw  GDT2-GDT1-1   ; limit (Size of GDT)
-											dd  GDT1          ; base of GDT
+                      dw  GDT2-GDT1-1   ; limit (Size of GDT)
+                      dd  GDT1          ; base of GDT
 
 ;--------------------------------------------------------------------------------------------------
 ; Working Storage
 ;--------------------------------------------------------------------------------------------------
-FatSegment						equ 2C0h
-PModeBase							equ 100000h       ; where the kernel is to be loaded to in protected mode
-RModeBase							equ 3000h         ; where the kernel is to be loaded to in real mode
-RootOffset						equ 2E00h
-RootSegment						equ 2E0h
+FatSegment            equ 2C0h
+PModeBase             equ 100000h       ; where the kernel is to be loaded to in protected mode
+RModeBase             equ 3000h         ; where the kernel is to be loaded to in real mode
+RootOffset            equ 2E00h
+RootSegment           equ 2E0h
 
-LoadingMsg						db  0Dh
-											db  0Ah
-											db  "AsmOSx86 v0.0.1 Stage 2"
-											db  00h
+LoadingMsg            db  0Dh
+                      db  0Ah
+                      db  "AsmOSx86 v0.0.1 Stage 2"
+                      db  00h
 
-Stage3Msg							db  0Dh
-											db  0Ah
-											db  " Hit Enter to Jump to Kernel"
-											db  00h
+Stage3Msg             db  0Dh
+                      db  0Ah
+                      db  " Hit Enter to Jump to Kernel"
+                      db  00h
 
-FailureMsg						db  0Dh
-											db  0Ah
-											db  "*** FATAL: MISSING OR CURRUPT KERNEL.BIN. Press Any Key to Reboot"
-			                db  0Dh
-					            db  0Ah
-							        db  0Ah
-									    db  00h
+FailureMsg            db  0Dh
+                      db  0Ah
+                      db  "*** FATAL: MISSING OR CURRUPT KERNEL.BIN. Press Any Key to Reboot"
+                      db  0Dh
+                      db  0Ah
+                      db  0Ah
+                      db  00h
 
 
-AbsoluteHead					db  00h
-AbsoluteSector				db  00h
-AbsoluteTrack					db  00h
-BytesPerSector				dw  512
-Cluster								dw  0000h
-DataSector						dw  0000h
-DriveNumber						db  0
-HeadsPerCylinder			dw  2
-Stage3Name						db  "KERNEL  BIN" ; kernel name (Must be 11 bytes)
-Stage3Size						db  0             ; size of kernel image in bytes
-NumberOfFATs					db  2
-ReservedSectors				dw  1
-RootEntries						dw  224
-SectorsPerCluster			db  1
-SectorsPerFAT					dw  9
-SectorsPerTrack				dw  18
+AbsoluteHead          db  00h
+AbsoluteSector        db  00h
+AbsoluteTrack         db  00h
+BytesPerSector        dw  512
+Cluster               dw  0000h
+DataSector            dw  0000h
+DriveNumber           db  0
+HeadsPerCylinder      dw  2
+Stage3Name            db  "KERNEL  BIN" ; kernel name (Must be 11 bytes)
+Stage3Size            db  0             ; size of kernel image in bytes
+NumberOfFATs          db  2
+ReservedSectors       dw  1
+RootEntries           dw  224
+SectorsPerCluster     db  1
+SectorsPerFAT         dw  9
+SectorsPerTrack       dw  18

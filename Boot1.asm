@@ -280,26 +280,26 @@ FindFatFailed:
     mov   si,FailureMsg                 ; print
     call  Print                         ;  failure message
     mov   ah,0x00                       ; wait for
-    int   0x16													;  keypress
+    int   0x16                          ;  keypress
     int   0x19                          ; warm boot computer
 
 ;--------------------------------------------------------------------------------------------------
 ; Working Storage
 ;--------------------------------------------------------------------------------------------------
-    AbsoluteHead			db 0x00
-    AbsoluteSector		db 0x00
-    AbsoluteTrack			db 0x00
-    Cluster						dw 0x0000
-    DataSector				dw 0x0000
-    FailureMsg				db 0x0D, 0x0A, "MISSING BOOT2.BIN", 0x0D, 0x0A, 0x00
-    LoadingMsg				db 0x0D, 0x0A, "AsmOSx86 v0.0.1 Stage 1", 0x00
-    NewLineMsg				db 0x0D, 0x0A, 0x00
-    ProgressMsg				db ".", 0x00
-    Stage2Msg					db 0x0D, 0x0A, " Hit Enter, Jump to Stage 2 ", 0x00
-    Stage2Name				db "BOOT2   BIN"
+    AbsoluteHead      db 0x00
+    AbsoluteSector    db 0x00
+    AbsoluteTrack     db 0x00
+    Cluster           dw 0x0000
+    DataSector        dw 0x0000
+    FailureMsg        db 0x0D, 0x0A, "MISSING BOOT2.BIN", 0x0D, 0x0A, 0x00
+    LoadingMsg        db 0x0D, 0x0A, "AsmOSx86 v0.0.1 Stage 1", 0x00
+    NewLineMsg        db 0x0D, 0x0A, 0x00
+    ProgressMsg       db ".", 0x00
+    Stage2Msg         db 0x0D, 0x0A, " Hit Enter, Jump to Stage 2 ", 0x00
+    Stage2Name        db "BOOT2   BIN"
 
 ;--------------------------------------------------------------------------------------------------
 ; Make it a Boot Sector! (must be exactly 512 bytes)
 ;--------------------------------------------------------------------------------------------------
-    TIMES 510-($-$$)	db 0              ; make boot sector exactly 512 bytes
-											dw 0xAA55         ; Magic Word that makes this a boot sector
+    TIMES 510-($-$$)  db 0              ; make boot sector exactly 512 bytes
+                      dw 0xAA55         ; Magic Word that makes this a boot sector
