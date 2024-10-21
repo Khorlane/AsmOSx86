@@ -2,7 +2,7 @@
 rem -------------------
 rem - Assemble Kernel -
 rem -------------------
-call Build3.bat noexit
+call BuildKernel.bat noexit
 @echo off
 echo.
 rem --------------------------------------
@@ -24,4 +24,4 @@ echo - Boot up AsmOSx86 using Bochs -
 echo --------------------------------
 pause
 @echo on
-"C:\Program Files\Bochs-2.7\bochs.exe" -q -f C:\Projects\AsmOSx86\AsmOSx86.bxrc
+"C:\Program Files\Bochs-2.8\bochs.exe" -q -f C:\Projects\AsmOSx86\AsmOSx86.bxrc

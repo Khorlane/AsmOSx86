@@ -6,7 +6,7 @@ echo -------------------
 @echo on
 del Kernel.bin
 del Kernel.lst
-"C:\Program Files\NASM\nasm" -f bin Kernel.asm -o Kernel.bin -l Kernel.lst
+nasm -f bin Kernel.asm -o Kernel.bin -l Kernel.lst
 @echo off
 echo.
 pause

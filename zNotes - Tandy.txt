@@ -1,0 +1,12 @@
+On Windows
+Using File Explorer, copy Stage1.bin, Stage2.bin, Stage3.bin to a floppy
+
+On the Tandy 2500 SX/25
+Write Stage1.bin to the boot sector using the Debug utility and these commands
+  C:\>Debug Stage1.bin <enter>
+  -D <enter>
+  11D3:0100 E9 AF 00 4D (etc.)
+  -W 11D3:0100 0 0 1 <Enter>
+
+Hit the reset button
+MyOs starts up!

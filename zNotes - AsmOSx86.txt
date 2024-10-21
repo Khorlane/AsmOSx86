@@ -6,8 +6,8 @@ Just double click AsmOSx86.bxrc
 --------------------------------------
 - Build AsmOSx86 - Kernel.asm Change -
 --------------------------------------
-Run BuildIt.bat which does the following
-- Runs Build3.bat to assmeble the Kernel
+Run BuildKernelAndRun.bat which does the following
+- Runs BuildKernel.bat to assmeble the Kernel
 - Executes DosBox using DosBox1.txt which does the following
   - Mounts floppy.img (our floppy) on Drive A:
   - Executes Copy1.bat which does the following
@@ -18,16 +18,16 @@ Run BuildIt.bat which does the following
 -------------------------------------
 - Build AsmOSx86 - Boot2.asm Change -
 -------------------------------------
-Run Build2.bat
-Run BuildIt.bat
+Run BuildBoot2.bat
+Run BuildKernelAndRun.bat
 - Yes, this assembles Kernel.asm when even if you didn't change it
 
 -------------------------------------
 - Build AsmOSx86 - Boot1.asm Change -
 -------------------------------------
-Run Build1.bat
-Run Build2.bat (only required if Boot2.asm  was changed)
-Run Build3.bat (only required if Kernel.asm was changed)
+Run BuildBoot1.bat
+Run BuildBoot2.bat  (only required if Boot2.asm  was changed)
+Run BuildKernel.bat (only required if Kernel.asm was changed)
 
 Create a floppy image (best to have a clean start!)
 - Open a Windows 10 command prompt and create a 1.44 MB floppy image
@@ -41,7 +41,7 @@ Format the floppy
   - with floppy.img assigned to the Floppy Device
 - From the FreeDos command prompt
   C:\> format a:
-- The format command will complain about the floppy, saying stuff like:
+- The format command might complain about the floppy, saying stuff like:
   "Boot sector contents implausible, disk not yet FAT formatted"
   "Cannot find existing format - forcing full format"
 - Give the volume a label: ASMOSX86
@@ -95,21 +95,25 @@ Write the Boot Sector using UltraEdit
 - Close UltraEdit saving floppy.img
 
 Double click DosBox1.bat which does the following
-- Mounts floppy.img (our floppy) on Drive A:
-- Executes Copy1.bat which does the following
-  - Copies Boot2.bin  to A:
-  - Copies Kernel.bin to A:
-- Starts Bochs using AsmOSx86.bxrc which boots from our floppy
-  to start AsmOSx86
+- Starts DosBox using DosBox1.txt and does the following (see [autoexec] section)
+  - Mount our AsmOSx86 folder as Drive C:
+  - Mounts floppy.img (our floppy) as Drive A:
+  - Executes Copy1.bat which does the following
+    - Copies Boot2.bin  to A:
+    - Copies Kernel.bin to A:
+
+Double click AsmOSx86Run.bat
+- Start Bochs using AsmOSx86.bxrc which boots from our floppy
+  and starts AsmOSx86
 
 ---------
 - Files -
 ---------
 .git                        The Git folder
-.gitattributes              The Git attributes
-.gitignore                  The Git Ignore file
 
+AFD*                        Advance Full Screen Debug
 AsmOSx86.bxrc               Bochs config file for running AsmOSx86
+AsmOSx86Run.bat             Fire up AsmOSx86
 
 Boot1.asm                   Boot sector code
 Boot1.bin                   Boot sector binary
@@ -117,12 +121,14 @@ Boot1.lst                   Boot sector listing
 Boot2.asm                   Kernel loader code
 Boot2.bin                   Kernel loader binary
 Boot2.lst                   Kernel loader listing
-Build1.bat                  Assembles Boot1.asm
-Build2.bat                  Assembles Boot2.asm
-Build3.bat                  Assembles Kernel.asm
-BuildIt.bat                 Assembles Kernel.asm, runs AsmOSx86
+BuildBoot1.bat              Assembles Boot1.asm
+BuildBoot2.bat              Assembles Boot2.asm
+BuildBoot2KernelAndRun.bat  Assembles Boot2, Assembles Kernel, Copy to floppy, Fire up AsmOSx86
+BuildKernel.bat             Assembles Kernel.asm
+BuildKernelAndRun.bat       Assembles Kernel.asm, Copy to floppy, Fire up AsmOSx86
 
-Copy1.bat                   Copies OS files to floppy, called by BuildIt.bat via DosBox1.txt
+cmd.exe                     Opens command prompt in this directory
+Copy1.bat                   Copies OS files to floppy, runs under DosBox
 
 DosBox.bat                  Runs DosBox using DosBox.txt
 DosBox.txt                  DosBox configuration file used by DosBox.bat
@@ -131,11 +137,21 @@ DosBox1.txt                 DosBox configuration file used by DosBox1.bat
 
 floppy.img                  A 1.44 MB floppy
 
+ImDisk Virtual Disk Driver  Shortcut to a tool that can be used to format a floppy
+
 Kernel.asm                  Kernel code
 Kernel.bin                  Kernel binary
 Kernel.lst                  Kernel listing
+Keyboard Scan Codes.xlsx    Spreadsheet with keyboard scan code information
 
-Notes.txt                   This file
+LICENSE                     Unlicense https://unlicense.org/
+
+nasm.exe                    Netwide Assembler - NASM version 2.16.02rc1 compiled on Feb 19 2023
+
+README.md                   GitHub ReadMe
+
+zNotes - AsmOSx86.txt       This file
+zNotes - Tandy.txt          Running AsmOSx86 on my Tandy 2500 SX/25
 
 --------------------------
 - VGA Mode 3 Color Codes -

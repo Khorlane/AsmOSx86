@@ -1,7 +1,7 @@
 # AsmOSx86
 Hobbyist Operating System
 
-AsmOSx86 enables exploration of the various aspects of an x86 32 bit protected mode operating system that is written from scratch.
+AsmOSx86 enables exploration of the various aspects of an x86 32 bit protected mode operating system that is written from scratch in x86 Assembly.
 
 OS Design
 ---------
