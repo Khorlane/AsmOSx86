@@ -1,0 +1,15 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+  ],
+  "settings": 
+  {
+    "editor.wordWrap": "off",
+    "[markdown]": 
+    {
+      "editor.wordWrap": "off"
+    },
+  }
+}
