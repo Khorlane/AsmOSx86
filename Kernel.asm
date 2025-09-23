@@ -170,22 +170,21 @@ Stage3:
     mov   ax,008h                       ;  correct ISR
     mov   [EDX+2],ax                    ;  which is IsrTimer
     hlt                                 ; Halt and wait for timer interrupt to get us going again
-
+    
     ;-------------------
     ; Get Keyboard input
     ;-------------------
-    mov   al,0
-    mov   [Row],al                      ; Set starting
-    mov   al,1                          ;  Row, Col
-    mov   [Col],al                      ;  for hex output
     cli                                 ; No Interrupts!
+ClearKbBuffer:
+    call  KbRead                        ; Read the keyboard
+    mov   al,[KbChar]                   ; If nothing
+    cmp   al,0FFh                       ;  read then
+    je    ClearKbBuffer                 ;  jump back
+    mov   al,0                          ; Set starting
+    mov   [Row],al                      ;  Row
+    mov   al,1                          ;  and Col
+    mov   [Col],al                      ;  for hex output
 GetKey:
-    mov   al,[Row]                      ; If Row is
-    cmp   al,25                         ;  25 or more
-    jl    GetKey1                       ;  reset
-    mov   al,0                          ;  it to
-    mov   [Row],al                      ;  zero
-GetKey1:
     call  KbRead                        ; Read the keyboard
     mov   al,[KbChar]                   ; If nothing
     cmp   al,0FFh                       ;  read then
@@ -202,12 +201,13 @@ GetKey1:
     mov   al,1                          ; Reset
     mov   [Col],al                      ;  Col to 1
     mov   al,[Row]                      ; Bump
-    add   al,1                          ;  Row by 1
-    mov   [Row],al                      ;  and put the
-    call  CalcVideoAddr                 ;  keyboard
+    add   al,1                          ;  Row
+    mov   [Row],al                      ;  by 1
+    call  CalcVideoAddr                 ; Put the keyboard
     mov   bl,[KbChar]                   ;  character
     mov   [Char],bl                     ;  on that
     call  PutChar                       ;  row
+    call  MoveCursor                    ; Update cursor
     mov   bl,[KbChar]                   ; Quit
     cmp   bl,071h                       ;  when q (ASCII 071h)
     je    AllDone                       ;  is pressed

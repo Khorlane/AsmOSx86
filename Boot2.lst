@@ -486,63 +486,63 @@
    486                                  ;----------------
    487                                  ; null descriptor
    488                                  ;----------------
-   489 0000025C 00000000                											dd  0
-   490 00000260 00000000                											dd  0
-   491                                  NullDesc							equ 0
+   489 0000025C 00000000                                      dd  0
+   490 00000260 00000000                                      dd  0
+   491                                  NullDesc              equ 0
    492                                  ;----------------
    493                                  ; code descriptor
    494                                  ;----------------
-   495 00000264 FFFF                    											dw  0FFFFh        ; limit low
-   496 00000266 0000                    											dw  0             ; base low
-   497 00000268 00                      											db  0             ; base middle
-   498 00000269 9A                      											db  10011010b     ; access
-   499 0000026A CF                      											db  11001111b     ; granularity
-   500 0000026B 00                      											db  0             ; base high
-   501                                  CodeDesc							equ 8h
+   495 00000264 FFFF                                          dw  0FFFFh        ; limit low
+   496 00000266 0000                                          dw  0             ; base low
+   497 00000268 00                                            db  0             ; base middle
+   498 00000269 9A                                            db  10011010b     ; access
+   499 0000026A CF                                            db  11001111b     ; granularity
+   500 0000026B 00                                            db  0             ; base high
+   501                                  CodeDesc              equ 8h
    502                                  ;----------------
    503                                  ; data descriptor
    504                                  ;----------------
-   505 0000026C FFFF                    											dw  0FFFFh        ; limit low
-   506 0000026E 0000                    											dw  0             ; base low
-   507 00000270 00                      											db  0             ; base middle
-   508 00000271 92                      											db  10010010b     ; access
-   509 00000272 CF                      											db  11001111b     ; granularity
-   510 00000273 00                      											db  0             ; base high
-   511                                  DataDesc							equ 10h
+   505 0000026C FFFF                                          dw  0FFFFh        ; limit low
+   506 0000026E 0000                                          dw  0             ; base low
+   507 00000270 00                                            db  0             ; base middle
+   508 00000271 92                                            db  10010010b     ; access
+   509 00000272 CF                                            db  11001111b     ; granularity
+   510 00000273 00                                            db  0             ; base high
+   511                                  DataDesc              equ 10h
    512                                  ;-------------------
    513                                  ; pointer to our GDT
    514                                  ;-------------------
    515                                  GDT2:
-   516 00000274 1700                    											dw  GDT2-GDT1-1   ; limit (Size of GDT)
-   517 00000276 [5C020000]              											dd  GDT1          ; base of GDT
+   516 00000274 1700                                          dw  GDT2-GDT1-1   ; limit (Size of GDT)
+   517 00000276 [5C020000]                                    dd  GDT1          ; base of GDT
    518                                  
    519                                  ;--------------------------------------------------------------------------------------------------
    520                                  ; Working Storage
    521                                  ;--------------------------------------------------------------------------------------------------
-   522                                  FatSegment						equ 2C0h
-   523                                  PModeBase							equ 100000h       ; where the kernel is to be loaded to in protected mode
-   524                                  RModeBase							equ 3000h         ; where the kernel is to be loaded to in real mode
-   525                                  RootOffset						equ 2E00h
-   526                                  RootSegment						equ 2E0h
+   522                                  FatSegment            equ 2C0h
+   523                                  PModeBase             equ 100000h       ; where the kernel is to be loaded to in protected mode
+   524                                  RModeBase             equ 3000h         ; where the kernel is to be loaded to in real mode
+   525                                  RootOffset            equ 2E00h
+   526                                  RootSegment           equ 2E0h
    527                                  
-   528 0000027A 0D                      LoadingMsg						db  0Dh
-   529 0000027B 0A                      											db  0Ah
-   530 0000027C 41736D4F5378383620-     											db  "AsmOSx86 v0.0.1 Stage 2"
+   528 0000027A 0D                      LoadingMsg            db  0Dh
+   529 0000027B 0A                                            db  0Ah
+   530 0000027C 41736D4F5378383620-                           db  "AsmOSx86 v0.0.1 Stage 2"
    530 00000285 76302E302E31205374-
    530 0000028E 6167652032         
-   531 00000293 00                      											db  00h
+   531 00000293 00                                            db  00h
    532                                  
-   533 00000294 0D                      Stage3Msg							db  0Dh
-   534 00000295 0A                      											db  0Ah
-   535 00000296 2048697420456E7465-     											db  " Hit Enter to Jump to Kernel"
+   533 00000294 0D                      Stage3Msg             db  0Dh
+   534 00000295 0A                                            db  0Ah
+   535 00000296 2048697420456E7465-                           db  " Hit Enter to Jump to Kernel"
    535 0000029F 7220746F204A756D70-
    535 000002A8 20746F204B65726E65-
    535 000002B1 6C                 
-   536 000002B2 00                      											db  00h
+   536 000002B2 00                                            db  00h
    537                                  
-   538 000002B3 0D                      FailureMsg						db  0Dh
-   539 000002B4 0A                      											db  0Ah
-   540 000002B5 2A2A2A20464154414C-     											db  "*** FATAL: MISSING OR CURRUPT KERNEL.BIN. Press Any Key to Reboot"
+   538 000002B3 0D                      FailureMsg            db  0Dh
+   539 000002B4 0A                                            db  0Ah
+   540 000002B5 2A2A2A20464154414C-                           db  "*** FATAL: MISSING OR CURRUPT KERNEL.BIN. Press Any Key to Reboot"
    540 000002BE 3A204D495353494E47-
    540 000002C7 204F52204355525255-
    540 000002D0 5054204B45524E454C-
@@ -550,26 +550,26 @@
    540 000002E2 737320416E79204B65-
    540 000002EB 7920746F205265626F-
    540 000002F4 6F74               
-   541 000002F6 0D                      			                db  0Dh
-   542 000002F7 0A                      					            db  0Ah
-   543 000002F8 0A                      							        db  0Ah
-   544 000002F9 00                      									    db  00h
+   541 000002F6 0D                                            db  0Dh
+   542 000002F7 0A                                            db  0Ah
+   543 000002F8 0A                                            db  0Ah
+   544 000002F9 00                                            db  00h
    545                                  
    546                                  
-   547 000002FA 00                      AbsoluteHead					db  00h
-   548 000002FB 00                      AbsoluteSector				db  00h
-   549 000002FC 00                      AbsoluteTrack					db  00h
-   550 000002FD 0002                    BytesPerSector				dw  512
-   551 000002FF 0000                    Cluster								dw  0000h
-   552 00000301 0000                    DataSector						dw  0000h
-   553 00000303 00                      DriveNumber						db  0
-   554 00000304 0200                    HeadsPerCylinder			dw  2
-   555 00000306 4B45524E454C202042-     Stage3Name						db  "KERNEL  BIN" ; kernel name (Must be 11 bytes)
+   547 000002FA 00                      AbsoluteHead          db  00h
+   548 000002FB 00                      AbsoluteSector        db  00h
+   549 000002FC 00                      AbsoluteTrack         db  00h
+   550 000002FD 0002                    BytesPerSector        dw  512
+   551 000002FF 0000                    Cluster               dw  0000h
+   552 00000301 0000                    DataSector            dw  0000h
+   553 00000303 00                      DriveNumber           db  0
+   554 00000304 0200                    HeadsPerCylinder      dw  2
+   555 00000306 4B45524E454C202042-     Stage3Name            db  "KERNEL  BIN" ; kernel name (Must be 11 bytes)
    555 0000030F 494E               
-   556 00000311 00                      Stage3Size						db  0             ; size of kernel image in bytes
-   557 00000312 02                      NumberOfFATs					db  2
-   558 00000313 0100                    ReservedSectors				dw  1
-   559 00000315 E000                    RootEntries						dw  224
-   560 00000317 01                      SectorsPerCluster			db  1
-   561 00000318 0900                    SectorsPerFAT					dw  9
-   562 0000031A 1200                    SectorsPerTrack				dw  18
+   556 00000311 00                      Stage3Size            db  0             ; size of kernel image in bytes
+   557 00000312 02                      NumberOfFATs          db  2
+   558 00000313 0100                    ReservedSectors       dw  1
+   559 00000315 E000                    RootEntries           dw  224
+   560 00000317 01                      SectorsPerCluster     db  1
+   561 00000318 0900                    SectorsPerFAT         dw  9
+   562 0000031A 1200                    SectorsPerTrack       dw  18

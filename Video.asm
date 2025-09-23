@@ -41,6 +41,13 @@
 ;------------------------------------------
 CalcVideoAddr:
     pusha                               ; Save registers
+    mov   al,[Row]                      ; If Row is
+    cmp   al,25                         ;  is less than 25
+    jl    CalcVideoAddr1                ;  go to CalcVideoAddr1
+    mov   al,24                         ; Set row to 24
+    mov   [Row],al                      ;  and save it
+    call ScrollUp                       ;  and scroll up the screen
+CalcVideoAddr1:    
     xor   eax,eax                       ; Row calculation
     mov   al,[Row]                      ;  row
     dec   eax                           ;  minus 1
@@ -179,3 +186,23 @@ SetColorAttr:
     mov   [ColorAttr],al                ; Save result in ColorAttr
     popa                                ; Restore registers
     ret                                 ; Return to caller
+
+;-----------------
+; Scroll Screen Up
+;-----------------
+ScrollUp:
+    pusha
+    mov   esi,VidMem + 160              ; start of row 2
+    mov   edi,VidMem                    ; start of row 1
+    mov   ecx,24*80                     ; 24 rows × 80 columns
+    rep   movsw                         ; copy each word (char+attr)
+    ; Clear bottom row
+    mov   ax,' '                        ; space character
+    mov   ah,[ColorAttr]                ; current color
+    mov   edi,VidMem + 24*160           ; start of row 25
+    mov   ecx,80
+ScrollClr:
+    stosw
+    loop  ScrollClr
+    popa
+    ret
