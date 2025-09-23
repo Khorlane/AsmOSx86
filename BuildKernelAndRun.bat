@@ -1,3 +1,4 @@
+rem BuildKernelAndRun.bat
 @echo off
 rem -------------------
 rem - Assemble Kernel -

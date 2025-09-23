@@ -1,3 +1,4 @@
+# DosBox1.txt
 # This is the configurationfile for DOSBox 0.74. (Please use the latest version of DOSBox)
 # Lines starting with a # are commentlines and are ignored by DOSBox.
 # They are used to (briefly) document the effect of each option.

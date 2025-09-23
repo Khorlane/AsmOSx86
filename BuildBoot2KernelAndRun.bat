@@ -1,3 +1,4 @@
+rem BuildBoot2KernelAndRun.bat
 @echo off
 rem ------------------
 rem - Assemble Boot2 -

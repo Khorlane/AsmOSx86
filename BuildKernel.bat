@@ -1,3 +1,4 @@
+rem BuildKernel.bat
 @echo off
 echo.
 echo -------------------
