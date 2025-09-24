@@ -106,8 +106,6 @@ Stage3:
     call  SetColorAttr                  ; Set color
     call  ClrScr                        ; Clear screen
 
-    call  FlushKbBuffer                 ; Flush keyboard buffer
-
     ;--------------
     ; Print success
     ;--------------
@@ -298,12 +296,10 @@ FlushKbBuffer:
     ; Optional: Disable keyboard to prevent new data
     mov   al,0ADh                     ; Command: Disable keyboard
     out   064h,al
+    mov   ecx,8
 FlushLoop:
-    in    al,064h                     ; Read status register
-    test  al,01h                      ; Check if output buffer is full
-    jz    DoneFlush                   ; If not, we're done
     in    al,060h                     ; Read and discard scancode
-    jmp   FlushLoop
+    loop  FlushLoop
 DoneFlush:
     ; Optional: Re-enable keyboard
     mov   al,0AEh                     ; Command: Enable keyboard
@@ -334,6 +330,8 @@ String  Msg1,"------   AsmOSx86 v0.0.1   -----"
 String  Msg2,"--------  32 Bit Kernel --------"
 String  Msg3,"AsmOSx86 has ended!!"
 String  Msg4,"ISR Timer Started"
+String  Msg5,"Start clearing keyboard buffer"
+String  Msg6,"Finished clearing keyboard buffer"
 String  NewLine,0Ah
 String  Buffer,"XXXXXXXX"
 
