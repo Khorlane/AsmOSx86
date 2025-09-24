@@ -106,6 +106,8 @@ Stage3:
     call  SetColorAttr                  ; Set color
     call  ClrScr                        ; Clear screen
 
+    call  FlushKbBuffer                 ; Flush keyboard buffer
+
     ;--------------
     ; Print success
     ;--------------
@@ -170,7 +172,7 @@ Stage3:
     mov [EDX+6],eax                    ; Set high offset  
     mov ax,008h                        ; Code segment selector  
     mov [EDX+2],ax                     ; Set segment selector
-    
+
     ;--------------------
     ; ISR - Timer started
     ;--------------------
@@ -288,6 +290,24 @@ SleepDone:
     pop ecx
     pop eax
     ret
+
+;----------------------
+; Flush keyboard buffer
+;----------------------
+FlushKbBuffer:
+    ; Optional: Disable keyboard to prevent new data
+    mov   al,0ADh                     ; Command: Disable keyboard
+    out   064h,al
+FlushLoop:
+    in    al,064h                     ; Read status register
+    test  al,01h                      ; Check if output buffer is full
+    jz    DoneFlush                   ; If not, we're done
+    in    al,060h                     ; Read and discard scancode
+    jmp   FlushLoop
+DoneFlush:
+    ; Optional: Re-enable keyboard
+    mov   al,0AEh                     ; Command: Enable keyboard
+    out   064h,al
 
 ;--------------------------------------------------------------------------------------------------
 ; Interrupt Descriptor Table (IDT)
