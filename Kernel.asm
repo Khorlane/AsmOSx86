@@ -32,26 +32,9 @@ InstallIDT:
 ;--------------------------------------------------------------------------------------------------
 ; Keyboard Routines
 ;--------------------------------------------------------------------------------------------------
-KbRead:
-    ;--------------
-    ; Read scancode
-    ;--------------
-    mov   ecx,2FFFFh                    ; Set count for loop
-KbWait:
-    in    al,064h                       ; Read 8042 Status Register (bit 1 is input buffer status (0=empty, 1=full)
-    test  al,1                          ; If bit 1
-    jnz   KbGetIt                       ;  go get scancode
-    loop  KbWait                        ; Keep looping
-    mov   al,0FFh                       ; No scan
-    mov   [KbChar],al                   ;  code received
-    ret                                 ; All done!
-KbGetIt:
-    in    al,060h                       ; Obtain scancode from
-    mov   [KbChar],al                   ;   Keyboard I/O Port
-    ret                                 ; All done!
-    ;-------------------
-    ; Translate scancode
-    ;-------------------
+;-------------------
+; Translate scancode
+;-------------------
 KbXlate:
     xor   eax,eax
     xor   esi,esi
@@ -172,6 +155,22 @@ Stage3:
     mov   [EDX+2],ax                    ;  which is IsrTimer
     sti                                 ; Enable interrupts globally
     hlt                                 ; Halt and wait for timer interrupt to get us going again
+    
+    ;-----------------
+    ; Set Keyboard IDT  
+    ;-----------------
+    mov edx,021h                       ; IRQ1 maps to vector 0x21  
+    shl edx,3                          ; Multiply by 8 (IDT entry size)
+    add edx,IDT                        ; Point to correct IDT slot
+    mov ax,08E00h                      ; Present, DPL=0, 32-bit interrupt gate
+    mov [EDX+4],ax                     ; Set access rights
+    mov eax,IsrKeyboard                ; Address of ISR
+    mov [edx],eax                      ; Low 16 bits of offset  
+    shr eax,16                         ; High 16 bits of offset  
+    mov [EDX+6],eax                    ; Set high offset  
+    mov ax,008h                        ; Code segment selector  
+    mov [EDX+2],ax                     ; Set segment selector
+    
     ;--------------------
     ; ISR - Timer started
     ;--------------------
@@ -179,24 +178,18 @@ Stage3:
     call  PutStr                        ;  a New Line
     mov   ebx,Msg4                      ; Put
     call  PutStr                        ;  Msg4
-    mov   dword [SleepTicks],3         ; 3 seconds ≈ 54 ticks
+    mov   dword [SleepTicks],100        ; 3 seconds ≈ 100 ticks
     call  Sleep                         ; Sleep for 3 seconds
-    ;call  ClrScr                        ; Clear screen again
+    call  ClrScr                        ; Clear screen
+
     ;-------------------
     ; Get Keyboard input
     ;-------------------
-    cli                                 ; No Interrupts!
-ClearKbBuffer:
-    call  KbRead                        ; Read the keyboard
-    mov   al,[KbChar]                   ; If nothing
-    cmp   al,0FFh                       ;  read then
-    je    ClearKbBuffer                 ;  jump back
     mov   al,0                          ; Set starting
     mov   [Row],al                      ;  Row
     mov   al,1                          ;  and Col
     mov   [Col],al                      ;  for hex output
 GetKey:
-    call  KbRead                        ; Read the keyboard
     mov   al,[KbChar]                   ; If nothing
     cmp   al,0FFh                       ;  read then
     je    GetKey                        ;  jump back
@@ -222,6 +215,8 @@ GetKey:
     mov   bl,[KbChar]                   ; Quit
     cmp   bl,071h                       ;  when q (ASCII 071h)
     je    AllDone                       ;  is pressed
+    mov   al,0FFh                       ; Reset KbChar
+    mov   [KbChar],al                   ;  to wait for next key
     jmp   GetKey                        ; Loop
 
 AllDone:
@@ -240,7 +235,6 @@ AllDone:
     ;---------------
     cli                                 ; Disable interrupts
     hlt                                 ; Halt
-
 
 ;----------------------------------------------
 ; Configure PIT for 18.2 Hz (default frequency)
@@ -263,6 +257,18 @@ IsrTimer:
     mov   al,020h                       ; Send EOI - End of Interrupt
     out   PIC1_CTRL,al                  ;  to master PIC
     popad
+    iretd
+
+;-------------
+; ISR Keyboard  
+;-------------
+IsrKeyboard:  
+    pushad  
+    in al,060h                         ; Read scancode from keyboard  
+    mov [KbChar],al                    ; Store it in KbChar  
+    mov al,020h                        ; Send EOI to PIC  
+    out PIC1_CTRL,al  
+    popad  
     iretd
 
 ;----------------------------------------------------------
