@@ -56,28 +56,28 @@
     41                              <1> ;------------------------------------------
     42                              <1> CalcVideoAddr:
     43 00000005 60                  <1>     pusha                               ; Save registers
-    44 00000006 A0[FD0B0000]        <1>     mov   al,[Row]                      ; If Row is
+    44 00000006 A0[1B0C0000]        <1>     mov   al,[Row]                      ; If Row is
     45 0000000B 3C19                <1>     cmp   al,25                         ;  is less than 25
     46 0000000D 7C0C                <1>     jl    CalcVideoAddr1                ;  go to CalcVideoAddr1
     47 0000000F B018                <1>     mov   al,24                         ; Set row to 24
-    48 00000011 A2[FD0B0000]        <1>     mov   [Row],al                      ;  and save it
+    48 00000011 A2[1B0C0000]        <1>     mov   [Row],al                      ;  and save it
     49 00000016 E82D010000          <1>     call ScrollUp                       ;  and scroll up the screen
     50                              <1> CalcVideoAddr1:    
     51 0000001B 31C0                <1>     xor   eax,eax                       ; Row calculation
-    52 0000001D A0[FD0B0000]        <1>     mov   al,[Row]                      ;  row
+    52 0000001D A0[1B0C0000]        <1>     mov   al,[Row]                      ;  row
     53 00000022 48                  <1>     dec   eax                           ;  minus 1
     54 00000023 BAA0000000          <1>     mov   edx,160                       ;  times
     55 00000028 F7E2                <1>     mul   edx                           ;  160
     56 0000002A 50                  <1>     push  eax                           ;  save it
     57 0000002B 31C0                <1>     xor   eax,eax                       ; Col calculation
-    58 0000002D A0[FE0B0000]        <1>     mov   al,[Col]                      ;  col
+    58 0000002D A0[1C0C0000]        <1>     mov   al,[Col]                      ;  col
     59 00000032 BA02000000          <1>     mov   edx,2                         ;  times
     60 00000037 F7E2                <1>     mul   edx                           ;  2
     61 00000039 83E802              <1>     sub   eax,2                         ;  minus 2
     62 0000003C 5A                  <1>     pop   edx                           ; Add col calculation
     63 0000003D 01D0                <1>     add   eax,edx                       ;  to row calculation
     64 0000003F 0500800B00          <1>     add   eax,VidMem                    ;  plus VidMem
-    65 00000044 A3[FF0B0000]        <1>     mov   [VidAdr],eax                  ; Save in VidAdr
+    65 00000044 A3[1D0C0000]        <1>     mov   [VidAdr],eax                  ; Save in VidAdr
     66 00000049 61                  <1>     popa                                ; Restore registers
     67 0000004A C3                  <1>     ret                                 ; Return to caller
     68                              <1> 
@@ -87,9 +87,9 @@
     72                              <1> ;------------------------------
     73                              <1> PutChar:
     74 0000004B 60                  <1>     pusha                               ; Save registers
-    75 0000004C 8B3D[FF0B0000]      <1>     mov   edi,[VidAdr]                  ; EDI = Video Address
-    76 00000052 8A15[FB0B0000]      <1>     mov   dl,[Char]                     ; DL = character
-    77 00000058 8A35[FA0B0000]      <1>     mov   dh,[ColorAttr]                ; DH = attribute
+    75 0000004C 8B3D[1D0C0000]      <1>     mov   edi,[VidAdr]                  ; EDI = Video Address
+    76 00000052 8A15[190C0000]      <1>     mov   dl,[Char]                     ; DL = character
+    77 00000058 8A35[180C0000]      <1>     mov   dh,[ColorAttr]                ; DH = attribute
     78 0000005E 668917              <1>     mov   [edi],dx                      ; Move attribute and character to video display
     79 00000061 61                  <1>     popa                                ; Restore registers
     80 00000062 C3                  <1>     ret                                 ; Return to caller
@@ -113,22 +113,22 @@
     98 0000007C 751C                <1>     jne   PutStr2                       ;  No
     99 0000007E 31C0                <1>     xor   eax,eax                       ;  Yes
    100 00000080 B001                <1>     mov   al,1                          ;   Set Col
-   101 00000082 A2[FE0B0000]        <1>     mov   [Col],al                      ;   back to
-   102 00000087 A0[FD0B0000]        <1>     mov   al,[Row]                      ;   1 and
+   101 00000082 A2[1C0C0000]        <1>     mov   [Col],al                      ;   back to
+   102 00000087 A0[1B0C0000]        <1>     mov   al,[Row]                      ;   1 and
    103 0000008C FEC0                <1>     inc   al                            ;   bump row
-   104 0000008E A2[FD0B0000]        <1>     mov   [Row],al                      ;   by 1
+   104 0000008E A2[1B0C0000]        <1>     mov   [Row],al                      ;   by 1
    105 00000093 E86DFFFFFF          <1>     call  CalcVideoAddr                 ; Calculate video address
    106 00000098 EB26                <1>     jmp   PutStr3                       ; Continue
    107                              <1> PutStr2:
-   108 0000009A 881D[FB0B0000]      <1>     mov   [Char],bl                     ; Stash our character
+   108 0000009A 881D[190C0000]      <1>     mov   [Char],bl                     ; Stash our character
    109 000000A0 E8A6FFFFFF          <1>     call  PutChar                       ; Print it out
-   110 000000A5 A1[FF0B0000]        <1>     mov   eax,[VidAdr]                  ; Bump
+   110 000000A5 A1[1D0C0000]        <1>     mov   eax,[VidAdr]                  ; Bump
    111 000000AA 83C002              <1>     add   eax,2                         ;  Video Address
-   112 000000AD A3[FF0B0000]        <1>     mov   [VidAdr],eax                  ;  by 2
+   112 000000AD A3[1D0C0000]        <1>     mov   [VidAdr],eax                  ;  by 2
    113 000000B2 31C0                <1>     xor   eax,eax                       ; Bump
-   114 000000B4 A0[FE0B0000]        <1>     mov   al,[Col]                      ;  Col
+   114 000000B4 A0[1C0C0000]        <1>     mov   al,[Col]                      ;  Col
    115 000000B9 0401                <1>     add   al,1                          ;  by
-   116 000000BB A2[FE0B0000]        <1>     mov   [Col],al                      ;  1
+   116 000000BB A2[1C0C0000]        <1>     mov   [Col],al                      ;  1
    117                              <1> PutStr3:
    118 000000C0 46                  <1>     inc   esi                           ; Bump ESI to next character in our string
    119 000000C1 E2B4                <1>     loop  PutStr1                       ; Loop (Decrement CX each time until CX is zero)
@@ -141,8 +141,8 @@
    126                              <1> ;-----------------------
    127                              <1> MoveCursor:
    128 000000CA 60                  <1>     pusha                               ; Save registers
-   129 000000CB 8A3D[FD0B0000]      <1>     mov   bh,[Row]                      ; BH = row
-   130 000000D1 8A1D[FE0B0000]      <1>     mov   bl,[Col]                      ; BL = col
+   129 000000CB 8A3D[1B0C0000]      <1>     mov   bh,[Row]                      ; BH = row
+   130 000000D1 8A1D[1C0C0000]      <1>     mov   bl,[Col]                      ; BL = col
    131 000000D7 FECF                <1>     dec   bh                            ; BH-- (Make row zero based)
    132                              <1> 
    133 000000D9 31C0                <1>     xor   eax,eax                       ; Clear EAX
@@ -180,12 +180,12 @@
    165 0000010C BF00800B00          <1>     mov   edi,VidMem                    ; Set EDI to beginning of Video Memory
    166 00000111 31C9                <1>     xor   ecx,ecx                       ; 2,000 'words'
    167 00000113 66B9D007            <1>     mov   cx,2000                       ;  on the screen
-   168 00000117 8A25[FA0B0000]      <1>     mov   ah,[ColorAttr]                ; Set color attribute
+   168 00000117 8A25[180C0000]      <1>     mov   ah,[ColorAttr]                ; Set color attribute
    169 0000011D B020                <1>     mov   al,' '                        ; We're going to 'blank' out the screen
    170 0000011F F366AB              <1>     rep   stosw                         ; Move AX to video memory pointed to by EDI, Repeat CX times, increment EDI each time
    171 00000122 B001                <1>     mov   al,1
-   172 00000124 A2[FE0B0000]        <1>     mov   [Col],al                      ; Set Col to 1
-   173 00000129 A2[FD0B0000]        <1>     mov   [Row],al                      ; Set Row to 1
+   172 00000124 A2[1C0C0000]        <1>     mov   [Col],al                      ; Set Col to 1
+   173 00000129 A2[1B0C0000]        <1>     mov   [Row],al                      ; Set Row to 1
    174 0000012E 61                  <1>     popa                                ; Restore registers
    175 0000012F C3                  <1>     ret                                 ; Return to caller
    176                              <1> 
@@ -194,11 +194,11 @@
    179                              <1> ;-------------------
    180                              <1> SetColorAttr:
    181 00000130 60                  <1>     pusha                               ; Save registers
-   182 00000131 A0[F80B0000]        <1>     mov   al,[ColorBack]                ; Background color (e.g. 3)
+   182 00000131 A0[160C0000]        <1>     mov   al,[ColorBack]                ; Background color (e.g. 3)
    183 00000136 C0E004              <1>     shl   al,4                          ;  goes in highest 4 bits of AL
-   184 00000139 8A1D[F90B0000]      <1>     mov   bl,[ColorFore]                ; Foreground color in lowest 4 bits of BL (e.g. F)
+   184 00000139 8A1D[170C0000]      <1>     mov   bl,[ColorFore]                ; Foreground color in lowest 4 bits of BL (e.g. F)
    185 0000013F 09D8                <1>     or    eax,ebx                       ; AL now has the combination of background and foreground (e.g. 3F)
-   186 00000141 A2[FA0B0000]        <1>     mov   [ColorAttr],al                ; Save result in ColorAttr
+   186 00000141 A2[180C0000]        <1>     mov   [ColorAttr],al                ; Save result in ColorAttr
    187 00000146 61                  <1>     popa                                ; Restore registers
    188 00000147 C3                  <1>     ret                                 ; Return to caller
    189                              <1> 
@@ -213,7 +213,7 @@
    198 00000158 F366A5              <1>     rep   movsw                         ; copy each word (char+attr)
    199                              <1>     ; Clear bottom row
    200 0000015B 66B82000            <1>     mov   ax,' '                        ; space character
-   201 0000015F 8A25[FA0B0000]      <1>     mov   ah,[ColorAttr]                ; current color
+   201 0000015F 8A25[180C0000]      <1>     mov   ah,[ColorAttr]                ; current color
    202 00000165 BF008F0B00          <1>     mov   edi,VidMem + 24*160           ; start of row 25
    203 0000016A B950000000          <1>     mov   ecx,80
    204                              <1> ScrollClr:
@@ -228,8 +228,8 @@
     20                                  InstallIDT:
     21 00000175 FA                          cli                                 ; Disable interrupts
     22 00000176 60                          pusha                               ; Save registers
-    23 00000177 0F011D[760B0000]            lidt  [IDT2]                        ; Load IDT into IDTR
-    24 0000017E BF[76030000]                mov   edi,IDT1                      ; Set EDI to beginning of IDT
+    23 00000177 0F011D[960B0000]            lidt  [IDT2]                        ; Load IDT into IDTR
+    24 0000017E BF[96030000]                mov   edi,IDT1                      ; Set EDI to beginning of IDT
     25 00000183 66B90008                    mov   cx,2048                       ; 2048 bytes in IDT
     26 00000187 31C0                        xor   eax,eax                       ; Set all 256 IDT entries to NULL (0h)
     27 00000189 F3AA                        rep   stosb                         ; Move AL to IDT pointed to by EDI, Repeat CX times, increment EDI each time
@@ -251,11 +251,11 @@
     43 00000197 750A                        jnz   KbGetIt                       ;  go get scancode
     44 00000199 E2F8                        loop  KbWait                        ; Keep looping
     45 0000019B B0FF                        mov   al,0FFh                       ; No scan
-    46 0000019D A2[FC0B0000]                mov   [KbChar],al                   ;  code received
+    46 0000019D A2[1A0C0000]                mov   [KbChar],al                   ;  code received
     47 000001A2 C3                          ret                                 ; All done!
     48                                  KbGetIt:
     49 000001A3 E460                        in    al,060h                       ; Obtain scancode from
-    50 000001A5 A2[FC0B0000]                mov   [KbChar],al                   ;   Keyboard I/O Port
+    50 000001A5 A2[1A0C0000]                mov   [KbChar],al                   ;   Keyboard I/O Port
     51 000001AA C3                          ret                                 ; All done!
     52                                      ;-------------------
     53                                      ; Translate scancode
@@ -263,19 +263,19 @@
     55                                  KbXlate:
     56 000001AB 31C0                        xor   eax,eax
     57 000001AD 31F6                        xor   esi,esi
-    58 000001AF B9[150C0000]                mov   ecx,ScancodeSz
-    59 000001B4 A0[FC0B0000]                mov   al,[KbChar]                   ; Put scancode in AL
+    58 000001AF B9[330C0000]                mov   ecx,ScancodeSz
+    59 000001B4 A0[1A0C0000]                mov   al,[KbChar]                   ; Put scancode in AL
     60                                  KbXlateLoop1:
-    61 000001B9 3A86[130C0000]              cmp   al,[Scancode+ESI]             ; Compare to Scancode
+    61 000001B9 3A86[310C0000]              cmp   al,[Scancode+ESI]             ; Compare to Scancode
     62 000001BF 7407                        je    KbXlateFound                  ; Match!
     63 000001C1 46                          inc   esi                           ; Bump ESI
     64 000001C2 E2F5                        loop  KbXlateLoop1                  ; Check next
     65 000001C4 B03F                        mov   al,'?'                        ; Not found defaults to ? for now
     66 000001C6 EB06                        jmp   KbXlateDone                   ; Jump to done
     67                                  KbXlateFound:
-    68 000001C8 8A86[160C0000]              mov   al,[CharCode+ESI]             ; Put ASCII character matching the Scancode in AL
+    68 000001C8 8A86[340C0000]              mov   al,[CharCode+ESI]             ; Put ASCII character matching the Scancode in AL
     69                                  KbXlateDone:
-    70 000001CE A2[FC0B0000]                mov   [KbChar],al                   ; Put translated char in KbChar
+    70 000001CE A2[1A0C0000]                mov   [KbChar],al                   ; Put translated char in KbChar
     71 000001D3 C3                          ret                                 ; All done!
     72                                  
     73                                  ;---------
@@ -284,7 +284,7 @@
     76                                  HexDump:
     77 000001D4 60                          pusha                               ; Save registers
     78 000001D5 B908000000                  mov   ecx,8                         ; Move
-    79 000001DA BE[F00B0000]                mov   esi,Buffer+2                  ;  8
+    79 000001DA BE[0E0C0000]                mov   esi,Buffer+2                  ;  8
     80 000001DF B020                        mov   al,020h                       ;  spaces
     81                                  HexDump1:                               ;  to
     82 000001E1 8806                        mov   [esi],al                      ;  clear
@@ -292,9 +292,9 @@
     84 000001E4 E2FB                        loop  HexDump1                      ;  Buffer
     85 000001E6 B908000000                  mov   ecx,8                         ; Setup
     86 000001EB 31D2                        xor   edx,edx                       ;  for translating
-    87 000001ED 8A15[FC0B0000]              mov   dl,[KbChar]                   ;  the keyboard
-    88 000001F3 BB[030C0000]                mov   ebx,HexDigits                 ;  scancode
-    89 000001F8 BE[F70B0000]                mov   esi,Buffer+9                  ;  to hex display
+    87 000001ED 8A15[1A0C0000]              mov   dl,[KbChar]                   ;  the keyboard
+    88 000001F3 BB[210C0000]                mov   ebx,HexDigits                 ;  scancode
+    89 000001F8 BE[150C0000]                mov   esi,Buffer+9                  ;  to hex display
     90                                  HexDump2:
     91 000001FD 88D0                        mov   al,dl                         ; Translate
     92 000001FF 240F                        and   al,15                         ;  each
@@ -325,9 +325,9 @@
    117                                      ; Clear screen
    118                                      ;-------------
    119 00000220 B000                        mov   al,Black                      ; Background
-   120 00000222 A2[F80B0000]                mov   [ColorBack],al                ;  color
+   120 00000222 A2[160C0000]                mov   [ColorBack],al                ;  color
    121 00000227 B005                        mov   al,Purple                     ; Foreground
-   122 00000229 A2[F90B0000]                mov   [ColorFore],al                ;  color
+   122 00000229 A2[170C0000]                mov   [ColorFore],al                ;  color
    123 0000022E E8FDFEFFFF                  call  SetColorAttr                  ; Set color
    124 00000233 E8D2FEFFFF                  call  ClrScr                        ; Clear screen
    125                                  
@@ -335,14 +335,14 @@
    127                                      ; Print success
    128                                      ;--------------
    129 00000238 B00A                        mov   al,10                         ; Set
-   130 0000023A A2[FD0B0000]                mov   [Row],al                      ;  Row,Col
+   130 0000023A A2[1B0C0000]                mov   [Row],al                      ;  Row,Col
    131 0000023F B001                        mov   al,1                          ;  to
-   132 00000241 A2[FE0B0000]                mov   [Col],al                      ;  10,1
-   133 00000246 BB[7C0B0000]                mov   ebx,Msg1                      ; Put
+   132 00000241 A2[1C0C0000]                mov   [Col],al                      ;  10,1
+   133 00000246 BB[9C0B0000]                mov   ebx,Msg1                      ; Put
    134 0000024B E813FEFFFF                  call  PutStr                        ;  Msg1
-   135 00000250 BB[EB0B0000]                mov   ebx,NewLine                   ; Put
+   135 00000250 BB[090C0000]                mov   ebx,NewLine                   ; Put
    136 00000255 E809FEFFFF                  call  PutStr                        ;  a New Line
-   137 0000025A BB[9E0B0000]                mov   ebx,Msg2                      ; Put
+   137 0000025A BB[BE0B0000]                mov   ebx,Msg2                      ; Put
    138 0000025F E8FFFDFFFF                  call  PutStr                        ;  Msg2
    139                                  
    140                                      ;------------------------
@@ -362,186 +362,220 @@
    154 0000027A B001                        mov   al,00000001b                  ; Set ICW4
    155 0000027C E621                        out   PIC1_DATA,al                  ;  We are in
    156 0000027E E6A1                        out   PIC2_DATA,al                  ;  80x86 mode
-   157                                  
-   158                                      ;--------------
-   159                                      ; Set Timer IDT
-   160                                      ;--------------
-   161 00000280 BA20000000                  mov   edx,020h                      ; Timer IRQ 0 is now IRQ 32 (020h)
-   162 00000285 C1E203                      shl   edx,3                         ; Position into
-   163 00000288 81C2[76030000]              add   edx,IDT                       ;  the IDT
-   164 0000028E 66B8008E                    mov   ax,08E00h                     ; Stash
-   165 00000292 66894204                    mov   [EDX+4],ax                    ;  stuff
-   166 00000296 B8[5B030000]                mov   eax,IsrTimer                  ;  into
-   167 0000029B 668902                      mov   [edx],ax                      ;  the IDT
-   168 0000029E C1E810                      shr   eax,16                        ;  to link IRQ 32
-   169 000002A1 66894206                    mov   [EDX+6],ax                    ;  to the
-   170 000002A5 66B80800                    mov   ax,008h                       ;  correct ISR
-   171 000002A9 66894202                    mov   [EDX+2],ax                    ;  which is IsrTimer
-   172 000002AD F4                          hlt                                 ; Halt and wait for timer interrupt to get us going again
-   173                                      
-   174                                      ;-------------------
-   175                                      ; Get Keyboard input
-   176                                      ;-------------------
-   177 000002AE FA                          cli                                 ; No Interrupts!
-   178                                  ClearKbBuffer:
-   179 000002AF E8DAFEFFFF                  call  KbRead                        ; Read the keyboard
-   180 000002B4 A0[FC0B0000]                mov   al,[KbChar]                   ; If nothing
-   181 000002B9 3CFF                        cmp   al,0FFh                       ;  read then
-   182 000002BB 74F2                        je    ClearKbBuffer                 ;  jump back
-   183 000002BD B000                        mov   al,0                          ; Set starting
-   184 000002BF A2[FD0B0000]                mov   [Row],al                      ;  Row
-   185 000002C4 B001                        mov   al,1                          ;  and Col
-   186 000002C6 A2[FE0B0000]                mov   [Col],al                      ;  for hex output
-   187                                  GetKey:
-   188 000002CB E8BEFEFFFF                  call  KbRead                        ; Read the keyboard
-   189 000002D0 A0[FC0B0000]                mov   al,[KbChar]                   ; If nothing
-   190 000002D5 3CFF                        cmp   al,0FFh                       ;  read then
-   191 000002D7 74F2                        je    GetKey                        ;  jump back
-   192 000002D9 E8F6FEFFFF                  call  HexDump                       ; Translate to hex display
-   193 000002DE A0[FD0B0000]                mov   al,[Row]                      ; Bump
-   194 000002E3 0401                        add   al,1                          ;  Row
-   195 000002E5 A2[FD0B0000]                mov   [Row],al                      ;  by 1
-   196 000002EA B001                        mov   al,1                          ; Reset
-   197 000002EC A2[FE0B0000]                mov   [Col],al                      ;  Col to 1
-   198 000002F1 BB[EE0B0000]                mov   ebx,Buffer                    ; Put hex out at upper left
-   199 000002F6 E868FDFFFF                  call  PutStr                        ;  corner of the screen
-   200 000002FB E8ABFEFFFF                  call  KbXlate                       ; Translate scancode to ASCII
-   201 00000300 B001                        mov   al,1                          ; Reset
-   202 00000302 A2[FE0B0000]                mov   [Col],al                      ;  Col to 1
-   203 00000307 A0[FD0B0000]                mov   al,[Row]                      ; Bump
-   204 0000030C 0401                        add   al,1                          ;  Row
-   205 0000030E A2[FD0B0000]                mov   [Row],al                      ;  by 1
-   206 00000313 E8EDFCFFFF                  call  CalcVideoAddr                 ; Put the keyboard
-   207 00000318 8A1D[FC0B0000]              mov   bl,[KbChar]                   ;  character
-   208 0000031E 881D[FB0B0000]              mov   [Char],bl                     ;  on that
-   209 00000324 E822FDFFFF                  call  PutChar                       ;  row
-   210 00000329 E89CFDFFFF                  call  MoveCursor                    ; Update cursor
-   211 0000032E 8A1D[FC0B0000]              mov   bl,[KbChar]                   ; Quit
-   212 00000334 80FB71                      cmp   bl,071h                       ;  when q (ASCII 071h)
-   213 00000337 7402                        je    AllDone                       ;  is pressed
-   214 00000339 EB90                        jmp   GetKey                        ; Loop
-   215                                  
-   216                                  AllDone:
-   217                                      ;---------------
-   218                                      ; Print shutdown
-   219                                      ;---------------
-   220 0000033B BB[EB0B0000]                mov   ebx,NewLine                   ; Put
-   221 00000340 E81EFDFFFF                  call  PutStr                        ;  a New Line
-   222 00000345 BB[EB0B0000]                mov   ebx,NewLine                   ; Put
-   223 0000034A E814FDFFFF                  call  PutStr                        ;  a New Line
-   224 0000034F BB[C00B0000]                mov   ebx,Msg3                      ; Put
-   225 00000354 E80AFDFFFF                  call  PutStr                        ;  Msg3
+   157 00000280 E8B3090000                  call  SetPIT                        ; Configure the PIT for timer interrupts
+   158                                  
+   159                                      ;--------------
+   160                                      ; Set Timer IDT
+   161                                      ;--------------
+   162 00000285 BA20000000                  mov   edx,020h                      ; Timer IRQ 0 is now IRQ 32 (020h)
+   163 0000028A C1E203                      shl   edx,3                         ; Position into
+   164 0000028D 81C2[96030000]              add   edx,IDT                       ;  the IDT
+   165 00000293 66B8008E                    mov   ax,08E00h                     ; Stash
+   166 00000297 66894204                    mov   [EDX+4],ax                    ;  stuff
+   167 0000029B B8[89030000]                mov   eax,IsrTimer                  ;  into
+   168 000002A0 668902                      mov   [edx],ax                      ;  the IDT
+   169 000002A3 C1E810                      shr   eax,16                        ;  to link IRQ 32
+   170 000002A6 66894206                    mov   [EDX+6],ax                    ;  to the
+   171 000002AA 66B80800                    mov   ax,008h                       ;  correct ISR
+   172 000002AE 66894202                    mov   [EDX+2],ax                    ;  which is IsrTimer
+   173 000002B2 FB                          sti                                 ; Enable interrupts globally
+   174 000002B3 F4                          hlt                                 ; Halt and wait for timer interrupt to get us going again
+   175                                      ;--------------------
+   176                                      ; ISR - Timer started
+   177                                      ;--------------------
+   178 000002B4 BB[090C0000]                mov   ebx,NewLine                   ; Put
+   179 000002B9 E8A5FDFFFF                  call  PutStr                        ;  a New Line
+   180 000002BE BB[F60B0000]                mov   ebx,Msg4                      ; Put
+   181 000002C3 E89BFDFFFF                  call  PutStr                        ;  Msg4
+   182 000002C8 C705[640C0000]0300-         mov   dword [SleepTicks],3         ; 3 seconds ≈ 54 ticks
+   182 000002D0 0000               
+   183 000002D2 E874090000                  call  Sleep                         ; Sleep for 3 seconds
+   184 000002D7 E82EFEFFFF                  call  ClrScr                        ; Clear screen again
+   185                                      ;-------------------
+   186                                      ; Get Keyboard input
+   187                                      ;-------------------
+   188 000002DC FA                          cli                                 ; No Interrupts!
+   189                                  ClearKbBuffer:
+   190 000002DD E8ACFEFFFF                  call  KbRead                        ; Read the keyboard
+   191 000002E2 A0[1A0C0000]                mov   al,[KbChar]                   ; If nothing
+   192 000002E7 3CFF                        cmp   al,0FFh                       ;  read then
+   193 000002E9 74F2                        je    ClearKbBuffer                 ;  jump back
+   194 000002EB B000                        mov   al,0                          ; Set starting
+   195 000002ED A2[1B0C0000]                mov   [Row],al                      ;  Row
+   196 000002F2 B001                        mov   al,1                          ;  and Col
+   197 000002F4 A2[1C0C0000]                mov   [Col],al                      ;  for hex output
+   198                                  GetKey:
+   199 000002F9 E890FEFFFF                  call  KbRead                        ; Read the keyboard
+   200 000002FE A0[1A0C0000]                mov   al,[KbChar]                   ; If nothing
+   201 00000303 3CFF                        cmp   al,0FFh                       ;  read then
+   202 00000305 74F2                        je    GetKey                        ;  jump back
+   203 00000307 E8C8FEFFFF                  call  HexDump                       ; Translate to hex display
+   204 0000030C A0[1B0C0000]                mov   al,[Row]                      ; Bump
+   205 00000311 0401                        add   al,1                          ;  Row
+   206 00000313 A2[1B0C0000]                mov   [Row],al                      ;  by 1
+   207 00000318 B001                        mov   al,1                          ; Reset
+   208 0000031A A2[1C0C0000]                mov   [Col],al                      ;  Col to 1
+   209 0000031F BB[0C0C0000]                mov   ebx,Buffer                    ; Put hex out at upper left
+   210 00000324 E83AFDFFFF                  call  PutStr                        ;  corner of the screen
+   211 00000329 E87DFEFFFF                  call  KbXlate                       ; Translate scancode to ASCII
+   212 0000032E B001                        mov   al,1                          ; Reset
+   213 00000330 A2[1C0C0000]                mov   [Col],al                      ;  Col to 1
+   214 00000335 A0[1B0C0000]                mov   al,[Row]                      ; Bump
+   215 0000033A 0401                        add   al,1                          ;  Row
+   216 0000033C A2[1B0C0000]                mov   [Row],al                      ;  by 1
+   217 00000341 E8BFFCFFFF                  call  CalcVideoAddr                 ; Put the keyboard
+   218 00000346 8A1D[1A0C0000]              mov   bl,[KbChar]                   ;  character
+   219 0000034C 881D[190C0000]              mov   [Char],bl                     ;  on that
+   220 00000352 E8F4FCFFFF                  call  PutChar                       ;  row
+   221 00000357 E86EFDFFFF                  call  MoveCursor                    ; Update cursor
+   222 0000035C 8A1D[1A0C0000]              mov   bl,[KbChar]                   ; Quit
+   223 00000362 80FB71                      cmp   bl,071h                       ;  when q (ASCII 071h)
+   224 00000365 7402                        je    AllDone                       ;  is pressed
+   225 00000367 EB90                        jmp   GetKey                        ; Loop
    226                                  
-   227                                      ;---------------
-   228                                      ; Stop execution
-   229                                      ;---------------
-   230 00000359 FA                          cli                                 ; Disable interrupts
-   231 0000035A F4                          hlt                                 ; Halt
-   232                                  
-   233                                      ;--------------------
-   234                                      ; Temporary Timer ISR
-   235                                      ;--------------------
-   236                                  IsrTimer:
-   237 0000035B 60                          pushad
-   238 0000035C BB[EB0B0000]                mov   ebx,NewLine                   ; Put
-   239 00000361 E8FDFCFFFF                  call  PutStr                        ;  a New Line
-   240 00000366 BB[D60B0000]                mov   ebx,Msg4                      ; Put
-   241 0000036B E8F3FCFFFF                  call  PutStr                        ;  Msg4
-   242 00000370 B020                        mov   al,020h                       ; Send EOI - End of Interrupt
-   243 00000372 E620                        out   PIC1_CTRL,al                  ;  to master PIC
-   244 00000374 61                          popad
-   245 00000375 CF                          iretd
-   246                                  
-   247                                  ;--------------------------------------------------------------------------------------------------
-   248                                  ; Interrupt Descriptor Table (IDT)
-   249                                  ;--------------------------------------------------------------------------------------------------
-   250                                  IDT:
-   251                                  IDT1:
-   252 00000376 00<rep 800h>            TIMES 2048  db 0                        ; The IDT is exactly 2048 bytes - 256 entries 8 bytes each
-   253                                  ;-------------------
-   254                                  ; pointer to our IDT
-   255                                  ;-------------------
-   256                                  IDT2:
-   257 00000B76 FF07                                      dw  IDT2-IDT1-1       ; limit (Size of IDT)
-   258 00000B78 [76030000]                                dd  IDT1              ; base of IDT
-   259                                  
-   260                                  ;--------------------------------------------------------------------------------------------------
-   261                                  ; Working Storage
-   262                                  ;--------------------------------------------------------------------------------------------------
-   263                                  %macro String 2
-   264                                  %1          dw  %%EndStr-%1
-   265                                              db  %2
-   266                                  %%EndStr:
-   267                                  %endmacro
-   268                                  String  Msg1,"------   AsmOSx86 v0.0.1   -----"
-   264 00000B7C 2200                <1> %1 dw %%EndStr-%1
-   265 00000B7E 2D2D2D2D2D2D202020- <1>  db %2
-   265 00000B87 41736D4F5378383620- <1>
-   265 00000B90 76302E302E31202020- <1>
-   265 00000B99 2D2D2D2D2D          <1>
-   266                              <1> %%EndStr:
-   269                                  String  Msg2,"--------  32 Bit Kernel --------"
-   264 00000B9E 2200                <1> %1 dw %%EndStr-%1
-   265 00000BA0 2D2D2D2D2D2D2D2D20- <1>  db %2
-   265 00000BA9 20333220426974204B- <1>
-   265 00000BB2 65726E656C202D2D2D- <1>
-   265 00000BBB 2D2D2D2D2D          <1>
-   266                              <1> %%EndStr:
-   270                                  String  Msg3,"AsmOSx86 has ended!!"
-   264 00000BC0 1600                <1> %1 dw %%EndStr-%1
-   265 00000BC2 41736D4F5378383620- <1>  db %2
-   265 00000BCB 68617320656E646564- <1>
-   265 00000BD4 2121                <1>
-   266                              <1> %%EndStr:
-   271                                  String  Msg4,"ISR - Timer - Fired"
-   264 00000BD6 1500                <1> %1 dw %%EndStr-%1
-   265 00000BD8 495352202D2054696D- <1>  db %2
-   265 00000BE1 6572202D2046697265- <1>
-   265 00000BEA 64                  <1>
-   266                              <1> %%EndStr:
-   272                                  String  NewLine,0Ah
-   264 00000BEB 0300                <1> %1 dw %%EndStr-%1
-   265 00000BED 0A                  <1>  db %2
-   266                              <1> %%EndStr:
-   273                                  String  Buffer,"XXXXXXXX"
-   264 00000BEE 0A00                <1> %1 dw %%EndStr-%1
-   265 00000BF0 5858585858585858    <1>  db %2
-   266                              <1> %%EndStr:
-   274                                  
-   275 00000BF8 00                      ColorBack   db  0                       ; Background color (00h - 0Fh)
-   276 00000BF9 00                      ColorFore   db  0                       ; Foreground color (00h - 0Fh)
-   277 00000BFA 00                      ColorAttr   db  0                       ; Combination of background and foreground color (e.g. 3Fh 3=cyan background,F=white text)
-   278 00000BFB 00                      Char        db  0                       ; ASCII character
-   279 00000BFC 00                      KbChar      db  0                       ; Keyboard character
-   280 00000BFD 00                      Row         db  0                       ; Row (1-25)
-   281 00000BFE 00                      Col         db  0                       ; Col (1-80)
-   282 00000BFF 00000000                VidAdr      dd  0                       ; Video Address
-   283 00000C03 303132333435363738-     HexDigits   db  "0123456789ABCDEF"
-   283 00000C0C 39414243444546     
-   284                                  
-   285 00000C13 1011                    Scancode    db  10h, 11h
-   286 00000C15 02                      ScancodeSz  db  ScancodeSz-Scancode
-   287 00000C16 7177                    CharCode    db  71h, 77h
-   288 00000C18 02                      CharCodeSz  db  ScancodeSz-Scancode
-   289                                  
-   290 00000C19 01                      One         db  1
-   291                                  
-   292                                  ;--------------------------------------------------------------------------------------------------
-   293                                  ; Video
-   294                                  ;--------------------------------------------------------------------------------------------------
-   295                                  VidMem      equ 0B8000h                 ; Video Memory (Starting Address)
-   296                                  TotCol      equ 80                      ; width and height of screen
-   297                                  Black       equ 00h                     ; Black
-   298                                  Cyan        equ 03h                     ; Cyan
-   299                                  Purple      equ 05h                     ; Purple
-   300                                  White       equ 0Fh                     ; White
-   301                                  
+   227                                  AllDone:
+   228                                      ;---------------
+   229                                      ; Print shutdown
+   230                                      ;---------------
+   231 00000369 BB[090C0000]                mov   ebx,NewLine                   ; Put
+   232 0000036E E8F0FCFFFF                  call  PutStr                        ;  a New Line
+   233 00000373 BB[090C0000]                mov   ebx,NewLine                   ; Put
+   234 00000378 E8E6FCFFFF                  call  PutStr                        ;  a New Line
+   235 0000037D BB[E00B0000]                mov   ebx,Msg3                      ; Put
+   236 00000382 E8DCFCFFFF                  call  PutStr                        ;  Msg3
+   237                                  
+   238                                      ;---------------
+   239                                      ; Stop execution
+   240                                      ;---------------
+   241 00000387 FA                          cli                                 ; Disable interrupts
+   242 00000388 F4                          hlt                                 ; Halt
+   243                                  
+   244                                      ;----------
+   245                                      ; ISR Timer
+   246                                      ;----------
+   247                                  IsrTimer:
+   248 00000389 60                          pushad
+   249 0000038A FF05[470C0000]              inc   dword [TimerTicks]            ; Increment the tick counter
+   250 00000390 B020                        mov   al,020h                       ; Send EOI - End of Interrupt
+   251 00000392 E620                        out   PIC1_CTRL,al                  ;  to master PIC
+   252 00000394 61                          popad
+   253 00000395 CF                          iretd
+   254                                  
+   255                                  ;--------------------------------------------------------------------------------------------------
+   256                                  ; Interrupt Descriptor Table (IDT)
+   257                                  ;--------------------------------------------------------------------------------------------------
+   258                                  IDT:
+   259                                  IDT1:
+   260 00000396 00<rep 800h>            TIMES 2048  db 0                        ; The IDT is exactly 2048 bytes - 256 entries 8 bytes each
+   261                                  ;-------------------
+   262                                  ; pointer to our IDT
+   263                                  ;-------------------
+   264                                  IDT2:
+   265 00000B96 FF07                                      dw  IDT2-IDT1-1       ; limit (Size of IDT)
+   266 00000B98 [96030000]                                dd  IDT1              ; base of IDT
+   267                                  
+   268                                  ;--------------------------------------------------------------------------------------------------
+   269                                  ; Working Storage
+   270                                  ;--------------------------------------------------------------------------------------------------
+   271                                  %macro String 2
+   272                                  %1          dw  %%EndStr-%1
+   273                                              db  %2
+   274                                  %%EndStr:
+   275                                  %endmacro
+   276                                  String  Msg1,"------   AsmOSx86 v0.0.1   -----"
+   272 00000B9C 2200                <1> %1 dw %%EndStr-%1
+   273 00000B9E 2D2D2D2D2D2D202020- <1>  db %2
+   273 00000BA7 41736D4F5378383620- <1>
+   273 00000BB0 76302E302E31202020- <1>
+   273 00000BB9 2D2D2D2D2D          <1>
+   274                              <1> %%EndStr:
+   277                                  String  Msg2,"--------  32 Bit Kernel --------"
+   272 00000BBE 2200                <1> %1 dw %%EndStr-%1
+   273 00000BC0 2D2D2D2D2D2D2D2D20- <1>  db %2
+   273 00000BC9 20333220426974204B- <1>
+   273 00000BD2 65726E656C202D2D2D- <1>
+   273 00000BDB 2D2D2D2D2D          <1>
+   274                              <1> %%EndStr:
+   278                                  String  Msg3,"AsmOSx86 has ended!!"
+   272 00000BE0 1600                <1> %1 dw %%EndStr-%1
+   273 00000BE2 41736D4F5378383620- <1>  db %2
+   273 00000BEB 68617320656E646564- <1>
+   273 00000BF4 2121                <1>
+   274                              <1> %%EndStr:
+   279                                  String  Msg4,"ISR Timer Started"
+   272 00000BF6 1300                <1> %1 dw %%EndStr-%1
+   273 00000BF8 4953522054696D6572- <1>  db %2
+   273 00000C01 2053746172746564    <1>
+   274                              <1> %%EndStr:
+   280                                  String  NewLine,0Ah
+   272 00000C09 0300                <1> %1 dw %%EndStr-%1
+   273 00000C0B 0A                  <1>  db %2
+   274                              <1> %%EndStr:
+   281                                  String  Buffer,"XXXXXXXX"
+   272 00000C0C 0A00                <1> %1 dw %%EndStr-%1
+   273 00000C0E 5858585858585858    <1>  db %2
+   274                              <1> %%EndStr:
+   282                                  
+   283 00000C16 00                      ColorBack   db  0                       ; Background color (00h - 0Fh)
+   284 00000C17 00                      ColorFore   db  0                       ; Foreground color (00h - 0Fh)
+   285 00000C18 00                      ColorAttr   db  0                       ; Combination of background and foreground color (e.g. 3Fh 3=cyan background,F=white text)
+   286 00000C19 00                      Char        db  0                       ; ASCII character
+   287 00000C1A 00                      KbChar      db  0                       ; Keyboard character
+   288 00000C1B 00                      Row         db  0                       ; Row (1-25)
+   289 00000C1C 00                      Col         db  0                       ; Col (1-80)
+   290 00000C1D 00000000                VidAdr      dd  0                       ; Video Address
+   291 00000C21 303132333435363738-     HexDigits   db  "0123456789ABCDEF"
+   291 00000C2A 39414243444546     
+   292                                  
+   293 00000C31 1011                    Scancode    db  10h, 11h
+   294 00000C33 02                      ScancodeSz  db  ScancodeSz-Scancode
+   295 00000C34 7177                    CharCode    db  71h, 77h
+   296 00000C36 02                      CharCodeSz  db  ScancodeSz-Scancode
+   297                                  
+   298 00000C37 01                      One         db  1
+   299                                  
+   300                                  ;--------------------------------------------------------------------------------------------------
+   301                                  ; Video
    302                                  ;--------------------------------------------------------------------------------------------------
-   303                                  ; PIC - 8259 Programmable Interrupt Controller
-   304                                  ;--------------------------------------------------------------------------------------------------
-   305                                  PIC1        equ 020h                    ; PIC - Master
-   306                                  PIC2        equ 0A0h                    ; PIC - Slave
-   307                                  PIC1_CTRL   equ PIC1                    ; PIC1 Command port
-   308                                  PIC1_DATA   equ PIC1+1                  ; PIC1 Data port
-   309                                  PIC2_CTRL   equ PIC2                    ; PIC2 Command port
-   310                                  PIC2_DATA   equ PIC2+1                  ; PIC2 Data port
+   303                                  VidMem      equ 0B8000h                 ; Video Memory (Starting Address)
+   304                                  TotCol      equ 80                      ; width and height of screen
+   305                                  Black       equ 00h                     ; Black
+   306                                  Cyan        equ 03h                     ; Cyan
+   307                                  Purple      equ 05h                     ; Purple
+   308                                  White       equ 0Fh                     ; White
+   309                                  
+   310                                  ;--------------------------------------------------------------------------------------------------
+   311                                  ; PIC - 8259 Programmable Interrupt Controller
+   312                                  ;--------------------------------------------------------------------------------------------------
+   313                                  PIC1        equ 020h                    ; PIC - Master
+   314                                  PIC2        equ 0A0h                    ; PIC - Slave
+   315                                  PIC1_CTRL   equ PIC1                    ; PIC1 Command port
+   316                                  PIC1_DATA   equ PIC1+1                  ; PIC1 Data port
+   317                                  PIC2_CTRL   equ PIC2                    ; PIC2 Command port
+   318                                  PIC2_DATA   equ PIC2+1                  ; PIC2 Data port
+   319                                  
+   320                                  ; Configure PIT for 18.2 Hz (default frequency)
+   321                                  SetPIT:
+   322 00000C38 B036                        mov   al,00110110b                  ; Set PIT to Mode 3 (Square Wave Generator)
+   323 00000C3A E643                        out   43h,al                        ; Write to PIT control port
+   324 00000C3C 66B8FFFF                    mov   ax,0FFFFh                     ; Divisor for 18.2 Hz (default)
+   325 00000C40 E640                        out   40h,al                        ; Write low byte of divisor
+   326 00000C42 88E0                        mov   al,ah                         ; Write high byte of divisor
+   327 00000C44 E640                        out   40h,al
+   328 00000C46 C3                          ret
+   329                                  
+   330 00000C47 00000000                TimerTicks  dd  0                       ; Counter for timer ticks
+   331                                  
+   332                                  Sleep:
+   333 00000C4B 50                          push eax
+   334 00000C4C 51                          push ecx
+   335 00000C4D 8B0D[470C0000]              mov ecx,[TimerTicks]               ; Get current tick count
+   336 00000C53 030D[640C0000]              add ecx,[SleepTicks]               ; Target tick count = now + SleepTicks
+   337                                  SleepWait:
+   338 00000C59 390D[470C0000]              cmp [TimerTicks],ecx               ; Wait until TimerTicks reaches target
+   339 00000C5F 72F8                        jb SleepWait                       ; If not yet, keep looping
+   340 00000C61 59                          pop ecx
+   341 00000C62 58                          pop eax
+   342 00000C63 C3                          ret
+   343                                  
+   344 00000C64 00000000                SleepTicks  dd  0               ; Number of ticks to sleep

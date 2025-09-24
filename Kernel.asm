@@ -154,6 +154,7 @@ Stage3:
     mov   al,00000001b                  ; Set ICW4
     out   PIC1_DATA,al                  ;  We are in
     out   PIC2_DATA,al                  ;  80x86 mode
+    call  SetPIT                        ; Configure the PIT for timer interrupts
 
     ;--------------
     ; Set Timer IDT
@@ -169,8 +170,18 @@ Stage3:
     mov   [EDX+6],ax                    ;  to the
     mov   ax,008h                       ;  correct ISR
     mov   [EDX+2],ax                    ;  which is IsrTimer
+    sti                                 ; Enable interrupts globally
     hlt                                 ; Halt and wait for timer interrupt to get us going again
-    
+    ;--------------------
+    ; ISR - Timer started
+    ;--------------------
+    mov   ebx,NewLine                   ; Put
+    call  PutStr                        ;  a New Line
+    mov   ebx,Msg4                      ; Put
+    call  PutStr                        ;  Msg4
+    mov   dword [SleepTicks],3         ; 3 seconds ≈ 54 ticks
+    call  Sleep                         ; Sleep for 3 seconds
+    call  ClrScr                        ; Clear screen again
     ;-------------------
     ; Get Keyboard input
     ;-------------------
@@ -230,15 +241,12 @@ AllDone:
     cli                                 ; Disable interrupts
     hlt                                 ; Halt
 
-    ;--------------------
-    ; Temporary Timer ISR
-    ;--------------------
+    ;----------
+    ; ISR Timer
+    ;----------
 IsrTimer:
     pushad
-    mov   ebx,NewLine                   ; Put
-    call  PutStr                        ;  a New Line
-    mov   ebx,Msg4                      ; Put
-    call  PutStr                        ;  Msg4
+    inc   dword [TimerTicks]            ; Increment the tick counter
     mov   al,020h                       ; Send EOI - End of Interrupt
     out   PIC1_CTRL,al                  ;  to master PIC
     popad
@@ -268,7 +276,7 @@ IDT2:
 String  Msg1,"------   AsmOSx86 v0.0.1   -----"
 String  Msg2,"--------  32 Bit Kernel --------"
 String  Msg3,"AsmOSx86 has ended!!"
-String  Msg4,"ISR - Timer - Fired"
+String  Msg4,"ISR Timer Started"
 String  NewLine,0Ah
 String  Buffer,"XXXXXXXX"
 
@@ -308,3 +316,29 @@ PIC1_CTRL   equ PIC1                    ; PIC1 Command port
 PIC1_DATA   equ PIC1+1                  ; PIC1 Data port
 PIC2_CTRL   equ PIC2                    ; PIC2 Command port
 PIC2_DATA   equ PIC2+1                  ; PIC2 Data port
+
+; Configure PIT for 18.2 Hz (default frequency)
+SetPIT:
+    mov   al,00110110b                  ; Set PIT to Mode 3 (Square Wave Generator)
+    out   43h,al                        ; Write to PIT control port
+    mov   ax,0FFFFh                     ; Divisor for 18.2 Hz (default)
+    out   40h,al                        ; Write low byte of divisor
+    mov   al,ah                         ; Write high byte of divisor
+    out   40h,al
+    ret
+
+TimerTicks  dd  0                       ; Counter for timer ticks
+
+Sleep:
+    push eax
+    push ecx
+    mov ecx,[TimerTicks]               ; Get current tick count
+    add ecx,[SleepTicks]               ; Target tick count = now + SleepTicks
+SleepWait:
+    cmp [TimerTicks],ecx               ; Wait until TimerTicks reaches target
+    jb SleepWait                       ; If not yet, keep looping
+    pop ecx
+    pop eax
+    ret
+
+SleepTicks  dd  0               ; Number of ticks to sleep
