@@ -10,6 +10,19 @@
     jmp   Stage3                        ; Jump to entry point
 
 ;--------------------------------------------------------------------------------------------------
+; Global Descriptor Table (GDT) for Kernel
+;--------------------------------------------------------------------------------------------------
+align 8
+GDTTable:
+    dq 0x0000000000000000       ; Null descriptor
+    dq 0x00CF9A000000FFFF       ; Code segment: base=0, limit=4GB, type=code, ring 0
+    dq 0x00CF92000000FFFF       ; Data segment: base=0, limit=4GB, type=data, ring 0
+
+GDTDescriptor:
+    dw GDTDescriptor - GDTTable - 1   ; Limit = size of GDT - 1
+    dd GDTTable                       ; Base address of GDT
+
+;--------------------------------------------------------------------------------------------------
 ; Include Major Components
 ;--------------------------------------------------------------------------------------------------
 %include "Video.asm"                    ; Include video routines
@@ -18,14 +31,17 @@
 ; Install our IDT
 ;--------------------------------------------------------------------------------------------------
 InstallIDT:
+    mov ax, 0x10         ; Ensure ES is valid before stosb
+    mov es, ax
     cli                                 ; Disable interrupts
     pusha                               ; Save registers
+    mov word [IDT2], 2047
+    mov dword [IDT2+2], IDT1
     lidt  [IDT2]                        ; Load IDT into IDTR
     mov   edi,IDT1                      ; Set EDI to beginning of IDT
     mov   cx,2048                       ; 2048 bytes in IDT
     xor   eax,eax                       ; Set all 256 IDT entries to NULL (0h)
     rep   stosb                         ; Move AL to IDT pointed to by EDI, Repeat CX times, increment EDI each time
-
     mov ax,0
 .loop:
     mov edx,FaultHandler
@@ -34,6 +50,14 @@ InstallIDT:
     cmp ax,32
     jl .loop
     
+    mov ax, 0x00
+    mov edx, DivideByZeroHandler
+    call SetIDTGate
+
+    mov ax, 0x08
+    mov edx, DoubleFaultHandler
+    call SetIDTGate
+
     mov   ax,0x08
     mov   edx,FaultHandler
     call  SetIDTGate
@@ -41,6 +65,12 @@ InstallIDT:
     mov   ax,0x0D
     mov   edx,FaultHandler
     call  SetIDTGate
+
+    ; Inspect type byte of IDT[0x00]
+    mov edi, IDT1
+    add edi, 0x00 * 8
+    mov al, [edi+5]
+    call PrintByteHex      ; Should also print 8E if correct
 
     ; Inspect type byte of IDT[0x0D]
     mov edi, IDT1
@@ -108,6 +138,7 @@ HexDump2:
 ; Stage3 - Our Kernel code starts executing here!
 ;--------------------------------------------------------------------------------------------------
 Stage3:
+    lgdt [GDTDescriptor]
     ;--------------
     ; Set registers
     ;--------------
@@ -314,7 +345,31 @@ SetIDTGate:
 
 FaultHandler:
     cli
-    mov ebx,FaultMsg
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+    mov ss, ax
+    mov ebx, FaultMsg
+    call PutStr
+    jmp $
+
+DivideByZeroHandler:
+    cli
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+    mov ss, ax
+    mov ebx, DivideMsg
+    call PutStr
+    jmp $
+
+DoubleFaultHandler:
+    cli
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+    mov ss, ax
+    mov ebx, DoubleMsg
     call PutStr
     jmp $
 
@@ -354,7 +409,7 @@ DoneFlush:
     ret
 
 ;--------------------------------------------------
-; PrintByteHexPM: prints byte in AL as two hex digits
+; PrintByteHex: prints byte in AL as two hex digits
 ;--------------------------------------------------
 PrintByteHex:
     push ax
@@ -368,7 +423,7 @@ PrintByteHex:
     ret
 
 ;--------------------------------------------------
-; PrintNibblePM: prints hex digit in AL (0–F)
+; PrintNibble: prints hex digit in AL (0–F)
 ;--------------------------------------------------
 PrintNibble:
     and al, 0Fh
@@ -386,6 +441,7 @@ PrintNibble:
     mov [edi], al            ; Character byte
     mov byte [edi+1], 0x07   ; Attribute: light gray on black
 
+    mov bx, [CursorPos]
     add bx, 2               ; Advance cursor
     mov [CursorPos], bx
     ret
@@ -393,7 +449,7 @@ PrintNibble:
 ;--------------------------------------------------
 ; CursorPos: tracks current screen position
 ;--------------------------------------------------
-CursorPos: dw 0
+CursorPos: dw 160
 
 ;--------------------------------------------------------------------------------------------------
 ; Working Storage
@@ -412,6 +468,10 @@ String  Msg6,"Finished clearing keyboard buffer"
 String FaultMsg,"------   FAULT: System Halted   ------"
 String  NewLine,0Ah
 String  Buffer,"XXXXXXXX"
+
+String  DivideMsg, "Divide by zero fault"
+String  DoubleMsg, "Double fault triggered"
+
 
 ColorBack   db  0                       ; Background color (00h - 0Fh)
 ColorFore   db  0                       ; Foreground color (00h - 0Fh)
