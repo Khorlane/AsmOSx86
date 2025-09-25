@@ -118,13 +118,6 @@ Stage3:
     mov   esp,90000h                    ; Stack begins from 90000h
    
     call  InstallIDT                    ; Install our Interrupt Descriptor Table
-   
-    mov edi, 0B8000h
-    mov byte [edi], 'X'
-    mov byte [edi+1], 0x07
-
-    cli                                 ; Disable interrupts
-    hlt                                 ; Halt
 
     ;-------------
     ; Clear screen
