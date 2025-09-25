@@ -25,6 +25,29 @@ InstallIDT:
     mov   cx,2048                       ; 2048 bytes in IDT
     xor   eax,eax                       ; Set all 256 IDT entries to NULL (0h)
     rep   stosb                         ; Move AL to IDT pointed to by EDI, Repeat CX times, increment EDI each time
+
+    mov ax,0
+.loop:
+    mov edx,FaultHandler
+    call SetIDTGate
+    inc ax
+    cmp ax,32
+    jl .loop
+    
+    mov   ax,0x08
+    mov   edx,FaultHandler
+    call  SetIDTGate
+
+    mov   ax,0x0D
+    mov   edx,FaultHandler
+    call  SetIDTGate
+
+    ; Inspect type byte of IDT[0x0D]
+    mov edi, IDT1
+    add edi, 0x0D * 8      ; Each gate is 8 bytes
+    mov al, [edi+5]        ; Byte 5 = type field
+    call PrintByteHex      ; Should print 8E if correct
+
     sti                                 ; Enable interrupts
     popa                                ; Restore registers
     ret                                 ; All done!
@@ -93,8 +116,15 @@ Stage3:
     mov   ss,ax                         ;  data selector
     mov   es,ax                         ;  (10h)
     mov   esp,90000h                    ; Stack begins from 90000h
-
+   
     call  InstallIDT                    ; Install our Interrupt Descriptor Table
+   
+    mov edi, 0B8000h
+    mov byte [edi], 'X'
+    mov byte [edi+1], 0x07
+
+    cli                                 ; Disable interrupts
+    hlt                                 ; Halt
 
     ;-------------
     ; Clear screen
@@ -153,8 +183,6 @@ Stage3:
     mov   [EDX+6],ax                    ;  to the
     mov   ax,008h                       ;  correct ISR
     mov   [EDX+2],ax                    ;  which is IsrTimer
-    sti                                 ; Enable interrupts globally
-    hlt                                 ; Halt and wait for timer interrupt to get us going again
     
     ;-----------------
     ; Set Keyboard IDT  
@@ -179,8 +207,8 @@ Stage3:
     mov   ebx,Msg4                      ; Put
     call  PutStr                        ;  Msg4
     mov   dword [SleepTicks],100        ; 3 seconds ≈ 100 ticks
-    call  Sleep                         ; Sleep for 3 seconds
-    call  ClrScr                        ; Clear screen
+    ;call  Sleep                         ; Sleep for 3 seconds
+    ;call  ClrScr                        ; Clear screen
 
     ;-------------------
     ; Get Keyboard input
@@ -271,6 +299,32 @@ IsrKeyboard:
     popad  
     iretd
 
+SetIDTGate:
+    ; ax = vector number
+    ; edx = handler address
+    mov edi, IDT1
+    movzx ebx, ax
+    shl ebx, 3
+    add edi, ebx
+    ; Offset low
+    mov word [edi], dx
+    ; Selector
+    mov word [edi+2], 0x08
+    ; Zero byte
+    mov byte [edi+4], 0
+    ; Type: 0x8E = 32-bit interrupt gate, ring 0, present
+    mov byte [edi+5], 0x8E
+    ; Offset high
+    shr edx, 16
+    mov word [edi+6], dx
+    ret
+
+FaultHandler:
+    cli
+    mov ebx,FaultMsg
+    call PutStr
+    jmp $
+
 ;----------------------------------------------------------
 ; Sleep for approximately the number of ticks in SleepTicks
 ;----------------------------------------------------------
@@ -304,19 +358,49 @@ DoneFlush:
     ; Optional: Re-enable keyboard
     mov   al,0AEh                     ; Command: Enable keyboard
     out   064h,al
+    ret
 
-;--------------------------------------------------------------------------------------------------
-; Interrupt Descriptor Table (IDT)
-;--------------------------------------------------------------------------------------------------
-IDT:
-IDT1:
-TIMES 2048  db 0                        ; The IDT is exactly 2048 bytes - 256 entries 8 bytes each
-;-------------------
-; pointer to our IDT
-;-------------------
-IDT2:
-                  dw  IDT2-IDT1-1       ; limit (Size of IDT)
-                  dd  IDT1              ; base of IDT
+;--------------------------------------------------
+; PrintByteHexPM: prints byte in AL as two hex digits
+;--------------------------------------------------
+PrintByteHex:
+    push ax
+    mov ah, al
+    shr ah, 4
+    call PrintNibble
+
+    pop ax
+    and al, 0Fh
+    call PrintNibble
+    ret
+
+;--------------------------------------------------
+; PrintNibblePM: prints hex digit in AL (0–F)
+;--------------------------------------------------
+PrintNibble:
+    and al, 0Fh
+    cmp al, 9
+    jbe .digit
+    add al, 7          ; Convert 10–15 to 'A'–'F'
+.digit:
+    add al, '0'
+
+    ; Write to video memory at 0xB8000
+    mov ebx, [CursorPos]     ; Get current cursor offset
+    mov edi, 0xB8000
+    add edi, ebx
+
+    mov [edi], al            ; Character byte
+    mov byte [edi+1], 0x07   ; Attribute: light gray on black
+
+    add bx, 2               ; Advance cursor
+    mov [CursorPos], bx
+    ret
+
+;--------------------------------------------------
+; CursorPos: tracks current screen position
+;--------------------------------------------------
+CursorPos: dw 0
 
 ;--------------------------------------------------------------------------------------------------
 ; Working Storage
@@ -332,6 +416,7 @@ String  Msg3,"AsmOSx86 has ended!!"
 String  Msg4,"ISR Timer Started"
 String  Msg5,"Start clearing keyboard buffer"
 String  Msg6,"Finished clearing keyboard buffer"
+String FaultMsg,"------   FAULT: System Halted   ------"
 String  NewLine,0Ah
 String  Buffer,"XXXXXXXX"
 
@@ -372,3 +457,14 @@ PIC1_CTRL   equ PIC1                    ; PIC1 Command port
 PIC1_DATA   equ PIC1+1                  ; PIC1 Data port
 PIC2_CTRL   equ PIC2                    ; PIC2 Command port
 PIC2_DATA   equ PIC2+1                  ; PIC2 Data port
+
+;--------------------------------------------------------------------------------------------------
+; Interrupt Descriptor Table (IDT)
+;--------------------------------------------------------------------------------------------------
+segment .data
+align 4
+IDT:
+IDT1: times 2048 db 0
+IDT2:
+    dw 2047
+    dd IDT1
