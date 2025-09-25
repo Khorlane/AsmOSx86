@@ -116,7 +116,7 @@ Stage3:
     mov   ss,ax                         ;  data selector
     mov   es,ax                         ;  (10h)
     mov   esp,90000h                    ; Stack begins from 90000h
-   
+
     call  InstallIDT                    ; Install our Interrupt Descriptor Table
 
     ;-------------
