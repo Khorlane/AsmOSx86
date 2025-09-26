@@ -26,35 +26,11 @@ Stage3:
   mov   ss,ax                         ;  data selector
   mov   es,ax                         ;  (10h)
   mov   esp,90000h                    ; Stack begins from 90000h
+  ; Load the GDT
+  lea   eax, [GDTDescriptor]          ; Load the address of GDTDescriptor into EAX
+  lgdt  [eax]                         ; Load the GDT using the address in EAX
   
- lea    eax, [GDTDescriptor]         ; Load the address of GDTDescriptor into EAX
- lgdt   [eax]                        ; Load the GDT using the address in EAX
-  
-  ;-------------
-  ; Clear screen
-  ;-------------
-  mov   al,Black                      ; Background
-  mov   [ColorBack],al                ;  color
-  mov   al,Purple                     ; Foreground
-  mov   [ColorFore],al                ;  color
-  call  SetColorAttr                  ; Set color
-  call  ClrScr                        ; Clear screen
-
-  ;--------------
-  ; Print success
-  ;--------------
-  mov   al,10                         ; Set
-  mov   [Row],al                      ;  Row,Col
-  mov   al,1                          ;  to
-  mov   [Col],al                      ;  10,1
-  mov   ebx,Msg1                      ; Put
-  call  PutStr                        ;  Msg1
-  mov   ebx,NewLine                   ; Put
-  call  PutStr                        ;  a New Line
-  mov   ebx,Msg2                      ; Put
-  call  PutStr                        ;  Msg2
-  mov   ebx,NewLine                   ; Put
-  call  PutStr                        ;  a New Line
+  call BootMsg                        ; Print boot message
 
   ;------------------------
   ; Initialize the 8259 PIC
@@ -114,6 +90,33 @@ Stage3:
 .halt:
   jmp .halt                           ; Infinite loop to prevent return
 
+BootMsg:  
+  ;-------------
+  ; Clear screen
+  ;-------------
+  mov   al,Black                      ; Background
+  mov   [ColorBack],al                ;  color
+  mov   al,Purple                     ; Foreground
+  mov   [ColorFore],al                ;  color
+  call  SetColorAttr                  ; Set color
+  call  ClrScr                        ; Clear screen
+  ;--------------
+  ; Print success
+  ;--------------
+  mov   al,10                         ; Set
+  mov   [Row],al                      ;  Row,Col
+  mov   al,1                          ;  to
+  mov   [Col],al                      ;  10,1
+  mov   ebx,Msg1                      ; Put
+  call  PutStr                        ;  Msg1
+  mov   ebx,NewLine                   ; Put
+  call  PutStr                        ;  a New Line
+  mov   ebx,Msg2                      ; Put
+  call  PutStr                        ;  Msg2
+  mov   ebx,NewLine                   ; Put
+  call  PutStr                        ;  a New Line
+  ret
+
 DebugIt:
   call PutStr                         ; Print string at EBX
   mov   ebx,NewLine                   ; Put
@@ -162,7 +165,7 @@ IsrKeyboard:
             db  %2
 %%EndStr:
 %endmacro
-String  Msg1,"------   AsmOSx86 v0.0.1   -----"
+String  Msg1,"------   AsmOSx86 v0.0.2   -----"
 String  Msg2,"--------  32 Bit Kernel --------"
 String  Msg3,"AsmOSx86 has ended!!"
 String  Msg4,"ISR Timer Started"
@@ -220,7 +223,6 @@ PIC2_DATA   equ PIC2+1                  ; PIC2 Data port
 ;--------------------------------------------------------------------------------------------------
 ; Interrupt Descriptor Table (IDT)
 ;--------------------------------------------------------------------------------------------------
-segment .data
 align 4
 IDT:
 IDT1: times 2048 db 0
@@ -231,9 +233,7 @@ IDT2:
 ;--------------------------------------------------------------------------------------------------
 ; Global Descriptor Table (GDT) for Kernel
 ;--------------------------------------------------------------------------------------------------
-segment .data
 align 8
-
 GDTTable:
     dq 0x0000000000000000       ; Null descriptor (selector 0x00)
     dq 0x00CF9A000000FFFF       ; Code segment (selector 0x08)
