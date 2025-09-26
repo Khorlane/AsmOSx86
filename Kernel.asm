@@ -28,11 +28,17 @@ Stage3:
   lea   eax, [GDTDescriptor]          ; Load the address of GDTDescriptor into EAX
   lgdt  [eax]                         ; Load the GDT using the address in EAX
   ; Start it up
-  call BootMsg                        ; Print boot message
-  call InitPic                        ; Initialize PIC
-  call InitPit                        ; Initialize PIT
-  call SetTimerIdt                    ; Set Timer IDT
-  call SetKeyboardIdt                 ; Set Keyboard IDT
+  call  BootMsg                       ; Print boot message
+  call  InitPic                       ; Initialize PIC
+  call  InitPit                       ; Initialize PIT
+  call  InitIdt                       ; Initialize IDT
+  call  SetTimerIdt                   ; Set Timer IDT
+  call  SetKeyboardIdt                ; Set Keyboard IDT
+  sti                                 ; Enable interrupts
+  mov   dword [SleepTicks],200        ; Sleep for 200 ticks
+  call  Sleep                         ; Sleep
+  mov   ebx,Msg7                      ; Put
+  call  DebugIt                       ;  Msg7
 
 .halt:
   jmp .halt                           ; Infinite loop to prevent return
@@ -123,10 +129,54 @@ SetKeyboardIdt:
   call  DebugIt                       ;  Msg6
   ret
 
+InitIdt:
+  cli                                 ; Disable interrupts during initialization
+  mov   edi, IDT1                     ; Set EDI to the start of the IDT
+  mov   ecx, 2048                     ; IDT size in bytes
+  xor   eax, eax                      ; Clear EAX (used to zero out the IDT)
+  rep   stosb                         ; Fill the IDT with zeros (clear all entries)
+  ; Set up default entries for all 256 vectors (optional)
+  mov   ecx, 256                      ; Number of interrupt vectors
+  xor   edx, edx                      ; Clear EDX (used for vector index)
+SetDefaultIdtEntry:
+  ; Example: Set all entries to point to a default ISR (e.g., DefaultIsr)
+  mov   eax, DefaultIsr               ; Address of the default ISR
+  mov   [IDT + edx * 8], eax          ; Set ISR address (low 32 bits)
+  shr   eax, 16                       ; Get high 16 bits of ISR address
+  mov   [IDT + edx * 8 + 6], ax       ; Set ISR address (high 16 bits)
+  mov   ax, 0x08                      ; Code segment selector
+  mov   [IDT + edx * 8 + 2], ax       ; Set segment selector
+  mov   ax, 0x8E00                    ; Access byte: Present, Ring 0, 32-bit interrupt gate
+  mov   [IDT + edx * 8 + 4], ax       ; Set access byte
+  inc   edx                           ; Increment vector index
+  loop  SetDefaultIdtEntry            ; Repeat for all 256 vectors
+  lidt  [IDT2]                        ; Load the IDT descriptor into the IDTR
+  ret
+
+DefaultIsr:
+  cli                                 ; Disable interrupts
+  hlt                                 ; Halt the CPU (or handle the interrupt gracefully)
+  jmp DefaultIsr                      ; Infinite loop to prevent further execution
+
 DebugIt:
-  call PutStr                         ; Print string at EBX
+  call  PutStr                        ; Print string at EBX
   mov   ebx,NewLine                   ; Put
   call  PutStr                        ;  a New Line
+  ret
+
+Sleep:
+  push eax
+  push ecx
+  mov ecx,[TimerTicks]                ; Get current tick count
+  add ecx,[SleepTicks]                ; Target tick count = now + SleepTicks
+SleepWait:
+  cmp [TimerTicks],ecx                ; Has target tick been reached?
+  jae SleepDone                       ; If yes (TimerTicks >= ecx), exit
+  hlt                                 ; Halt until next interrupt
+  jmp SleepWait                       ; Check again
+SleepDone:
+  pop ecx
+  pop eax
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -163,6 +213,7 @@ String  Msg3,"Init PIC"
 String  Msg4,"Init PIT"
 String  Msg5,"Set IDT - Timer"
 String  Msg6,"Set IDT - Keyboard"
+String  Msg7,"Timer is ticking..."
 String  NewLine,0Ah
 String  Buffer,"XXXXXXXX"
 String  MsgA,"AsmOSx86 has ended!!"
