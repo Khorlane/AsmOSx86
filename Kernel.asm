@@ -96,6 +96,35 @@ InitPit:
   mov   ebx,Msg4                      ; Put
   call  DebugIt                       ;  Msg4
   ret
+  
+InitIdt:
+  cli                                 ; Disable interrupts during initialization
+  mov   edi, IDT1                     ; Set EDI to the start of the IDT
+  mov   ecx, 2048                     ; IDT size in bytes
+  xor   eax, eax                      ; Clear EAX (used to zero out the IDT)
+  rep   stosb                         ; Fill the IDT with zeros (clear all entries)
+  ; Set up default entries for all 256 vectors (optional)
+  mov   ecx, 256                      ; Number of interrupt vectors
+  xor   edx, edx                      ; Clear EDX (used for vector index)
+SetDefaultIdtEntry:
+  ; Example: Set all entries to point to a default ISR (e.g., DefaultIsr)
+  mov   eax, DefaultIsr               ; Address of the default ISR
+  mov   [IDT + edx * 8], eax          ; Set ISR address (low 32 bits)
+  shr   eax, 16                       ; Get high 16 bits of ISR address
+  mov   [IDT + edx * 8 + 6], ax       ; Set ISR address (high 16 bits)
+  mov   ax, 0x08                      ; Code segment selector
+  mov   [IDT + edx * 8 + 2], ax       ; Set segment selector
+  mov   ax, 0x8E00                    ; Access byte: Present, Ring 0, 32-bit interrupt gate
+  mov   [IDT + edx * 8 + 4], ax       ; Set access byte
+  inc   edx                           ; Increment vector index
+  loop  SetDefaultIdtEntry            ; Repeat for all 256 vectors
+  lidt  [IDT2]                        ; Load the IDT descriptor into the IDTR
+  ret
+
+DefaultIsr:
+  cli                                 ; Disable interrupts
+  hlt                                 ; Halt the CPU (or handle the interrupt gracefully)
+  jmp DefaultIsr                      ; Infinite loop to prevent further execution
 
 SetTimerIdt:
   mov   edx,020h                      ; Timer IRQ 0 is now IRQ 32 (020h)
@@ -128,35 +157,6 @@ SetKeyboardIdt:
   mov   ebx,Msg6                      ; Put
   call  DebugIt                       ;  Msg6
   ret
-
-InitIdt:
-  cli                                 ; Disable interrupts during initialization
-  mov   edi, IDT1                     ; Set EDI to the start of the IDT
-  mov   ecx, 2048                     ; IDT size in bytes
-  xor   eax, eax                      ; Clear EAX (used to zero out the IDT)
-  rep   stosb                         ; Fill the IDT with zeros (clear all entries)
-  ; Set up default entries for all 256 vectors (optional)
-  mov   ecx, 256                      ; Number of interrupt vectors
-  xor   edx, edx                      ; Clear EDX (used for vector index)
-SetDefaultIdtEntry:
-  ; Example: Set all entries to point to a default ISR (e.g., DefaultIsr)
-  mov   eax, DefaultIsr               ; Address of the default ISR
-  mov   [IDT + edx * 8], eax          ; Set ISR address (low 32 bits)
-  shr   eax, 16                       ; Get high 16 bits of ISR address
-  mov   [IDT + edx * 8 + 6], ax       ; Set ISR address (high 16 bits)
-  mov   ax, 0x08                      ; Code segment selector
-  mov   [IDT + edx * 8 + 2], ax       ; Set segment selector
-  mov   ax, 0x8E00                    ; Access byte: Present, Ring 0, 32-bit interrupt gate
-  mov   [IDT + edx * 8 + 4], ax       ; Set access byte
-  inc   edx                           ; Increment vector index
-  loop  SetDefaultIdtEntry            ; Repeat for all 256 vectors
-  lidt  [IDT2]                        ; Load the IDT descriptor into the IDTR
-  ret
-
-DefaultIsr:
-  cli                                 ; Disable interrupts
-  hlt                                 ; Halt the CPU (or handle the interrupt gracefully)
-  jmp DefaultIsr                      ; Infinite loop to prevent further execution
 
 DebugIt:
   call  PutStr                        ; Print string at EBX
