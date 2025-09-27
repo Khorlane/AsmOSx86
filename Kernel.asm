@@ -29,9 +29,31 @@ Stage3:
   lgdt  [eax]                         ; Load the GDT using the address in EAX
   ; Start it up
   call  BootMsg                       ; Print boot message
+
+  ; Dump GDTDescriptor to verify correct loading
+  mov eax, dword [GDTDescriptor]       ; Load the first 4 bytes (limit and part of base)
+  call HexDump
+  mov eax, dword [GDTDescriptor + 4]   ; Load the next 4 bytes (base address)
+  call HexDump
+
+  ; Initialize IDT2
+  mov   word [IDT2], 2047              ; Set the limit (size of IDT - 1)
+  lea   eax, [IDT1]                    ; Load the address of IDT1
+  mov   dword [IDT2 + 2], eax          ; Set the base address of IDT
+
+ ; Dump IDT2 to verify initialization
+  movzx eax, word [IDT2]               ; Load the limit from IDT2
+  call HexDump                         ; Print the limit
+  mov   eax, dword [IDT2 + 2]          ; Load the base address from IDT2
+  call HexDump                         ; Print the base address
+
+  hlt
+
   call  InitPic                       ; Initialize PIC
   call  InitPit                       ; Initialize PIT
   call  InitIdt                       ; Initialize IDT
+  call  CheckIdt2                     ; Check IDT2 contents
+  call  DumpIdt                       ; Dump IDT information for debugging
   call  SetTimerIdt                   ; Set Timer IDT
   call  SetKeyboardIdt                ; Set Keyboard IDT
   sti                                 ; Enable interrupts
@@ -39,10 +61,19 @@ Stage3:
   call  Sleep                         ; Sleep
   mov   ebx,Msg7                      ; Put
   call  DebugIt                       ;  Msg7
+  cli
 
 .halt:
   jmp .halt                           ; Infinite loop to prevent return
 
+CheckIdt2:
+  pusha
+  mov   eax, dword [IDT2]            ; Load the first 4 bytes of IDT2
+  call  HexDump                      ; Print the value
+  mov   eax, dword [IDT2 + 4]        ; Load the next 4 bytes of IDT2
+  call  HexDump                      ; Print the value
+  popa
+  ret
 BootMsg:  
   ; Set colors and clear screen
   mov   al,Black                      ; Background
@@ -58,12 +89,10 @@ BootMsg:
   mov   [Col],al                      ;  10,1
   mov   ebx,Msg1                      ; Put
   call  PutStr                        ;  Msg1
-  mov   ebx,NewLine                   ; Put
-  call  PutStr                        ;  a New Line
+  call  PutNewLine                    ; Print a New Line
   mov   ebx,Msg2                      ; Put
   call  PutStr                        ;  Msg2
-  mov   ebx,NewLine                   ; Put
-  call  PutStr                        ;  a New Line
+  call  PutNewLine                    ; Print a New Line
   ret
     
 InitPic:
@@ -96,7 +125,7 @@ InitPit:
   mov   ebx,Msg4                      ; Put
   call  DebugIt                       ;  Msg4
   ret
-  
+
 InitIdt:
   cli                                 ; Disable interrupts during initialization
   mov   edi, IDT1                     ; Set EDI to the start of the IDT
@@ -119,12 +148,12 @@ SetDefaultIdtEntry:
   inc   edx                           ; Increment vector index
   loop  SetDefaultIdtEntry            ; Repeat for all 256 vectors
   lidt  [IDT2]                        ; Load the IDT descriptor into the IDTR
+  call  CheckIdt2                     ; Check IDT2 contents
   ret
-
 DefaultIsr:
   cli                                 ; Disable interrupts
   hlt                                 ; Halt the CPU (or handle the interrupt gracefully)
-  jmp DefaultIsr                      ; Infinite loop to prevent further execution
+  jmp   DefaultIsr                    ; Infinite loop to prevent further execution
 
 SetTimerIdt:
   mov   edx,020h                      ; Timer IRQ 0 is now IRQ 32 (020h)
@@ -156,12 +185,6 @@ SetKeyboardIdt:
   mov   [EDX+2],ax                    ; Set segment selector
   mov   ebx,Msg6                      ; Put
   call  DebugIt                       ;  Msg6
-  ret
-
-DebugIt:
-  call  PutStr                        ; Print string at EBX
-  mov   ebx,NewLine                   ; Put
-  call  PutStr                        ;  a New Line
   ret
 
 Sleep:
@@ -200,6 +223,66 @@ IsrKeyboard:
   iretd
 
 ;--------------------------------------------------------------------------------------------------
+; Debug Routines
+;--------------------------------------------------------------------------------------------------
+DebugIt:
+  call  PutStr                        ; Print string at EBX
+  call  PutNewLine                    ; Print a New Line
+  ret
+
+DumpIdt:
+  pusha                               ; Save all registers
+  ; Print "IDT Limit: "
+  mov   ebx, MsgDumpLimit             ; Message string
+  call  PutStr                        ; Print the message
+  ; Load IDT limit from IDT2
+  movzx eax, word [IDT2]              ; Load the limit (16 bits) into EAX
+  call  HexDump                       ; Print the limit in hexadecimal
+  ; Print a new line
+  call  PutNewLine                    ; Print a New Line
+  ; Print "IDT Base: "
+  mov   ebx, MsgDumpBase              ; Message string
+  call  PutStr                        ; Print the message
+  ; Load IDT base from IDT2
+  mov   eax, dword [IDT2 + 2]         ; Load the base address (32 bits) into EAX
+  call  HexDump                       ; Print the base in hexadecimal
+  popa                                ; Restore all registers
+  ret
+
+HexDump:
+  push  eax
+  push  ebx
+  push  ecx
+  push  edx
+  mov   ecx, 8                  ; We want 8 hex digits
+  mov   ebx, Buffer + 2         ; Skip length word, point to first char
+.next_digit:
+  mov   edx, eax                ; Copy eax to edx
+  shr   edx, 28                 ; Shift top nibble into lowest 4 bits
+  and   edx, 0Fh                ; Mask to isolate nibble
+  mov   dl, [HexDigits + edx]   ; Look up ASCII character
+  mov   [ebx], dl               ; Store in Buffer
+  inc   ebx
+  shl   eax, 4                  ; Shift next nibble into position
+  loop  .next_digit  
+  mov   ebx, Buffer                 ; Put
+  call  PutStr
+  call  PutNewLine
+  pop   edx
+  pop   ecx
+  pop   ebx
+  pop   eax
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; Helper Routines
+;--------------------------------------------------------------------------------------------------
+PutNewLine:
+  mov   ebx, NewLine                   ; Put
+  call  PutStr                        ;  a New Line
+  ret
+
+;--------------------------------------------------------------------------------------------------
 ; Working Storage
 ;--------------------------------------------------------------------------------------------------
 %macro String 2
@@ -221,6 +304,10 @@ String  MsgB,"ISR Timer Started"
 String  MsgC,"Start clearing keyboard buffer"
 String  MsgD,"Finished clearing keyboard buffer"
 String  MsgE,"Keyboard IDT Set"
+; Temporary debugging messages
+String  MsgDumpLimit, "IDT Limit: "
+String  MsgDumpBase, "IDT Base: "
+
 
 ColorBack   db  0                       ; Background color (00h - 0Fh)
 ColorFore   db  0                       ; Foreground color (00h - 0Fh)
