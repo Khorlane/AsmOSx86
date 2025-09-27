@@ -27,26 +27,26 @@ Stage3:
   ;-------------
   ; Clear screen
   ;-------------
-  mov   al,Black                        ; Background
-  mov   [ColorBack],al                  ;  color
-  mov   al,Purple                       ; Foreground
-  mov   [ColorFore],al                  ;  color
-  call  SetColorAttr                    ; Set color
-  call  ClrScr                          ; Clear screen
-  mov   al,10                           ; Set
-  mov   [Row],al                        ;  Row,Col
-  mov   al,1                            ;  to
-  mov   [Col],al                        ;  10,1
+  mov   al,Black                      ; Background
+  mov   [ColorBack],al                ;  color
+  mov   al,Purple                     ; Foreground
+  mov   [ColorFore],al                ;  color
+  call  SetColorAttr                  ; Set color
+  call  ClrScr                        ; Clear screen
+  mov   al,10                         ; Set
+  mov   [Row],al                      ;  Row,Col
+  mov   al,1                          ;  to
+  mov   [Col],al                      ;  10,1
 
   ; Debug addresses and memory content
   mov   eax, 0DEADBEEFh
-  call  HexDump       ; expect DEADBEEF
+  call  HexDump                       ; expect DEADBEEF
   mov   eax, esp
-  call  HexDump       ; expect 00090000
+  call  HexDump                       ; expect 00090000
   mov   eax, cs
-  call  HexDump       ; expect 00000008
-  mov eax, [0]          ; should read from linear address 0x00000000
-  call HexDump
+  call  HexDump                       ; expect 00000008
+  mov eax, [0]
+  call HexDump                        ; should read from linear address 0x00000000
 
   hlt
 
