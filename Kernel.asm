@@ -5,7 +5,7 @@
 ; nasm -f bin Kernel.asm -o Kernel.bin -l Kernel.lst
 ;**********************************************************
 
-[bits  32]                              ; 32 bit code
+[bits  32]                            ; 32 bit code
   org   100000h                       ; Kernel starts at 1 MB
   jmp   Stage3                        ; Jump to entry point
 
@@ -26,7 +26,7 @@ IDT1: times 256 dq 0
 IDT2:
   dw 2047
   dd IDT1
-  
+
 ;--------------------------------------------------------------------------------------------------
 ; Include Major Components
 ;--------------------------------------------------------------------------------------------------
@@ -57,14 +57,14 @@ Stage3:
   mov   [Col],al                      ;  10,1
 
   ; Debug addresses and memory content
-  mov   eax, 0DEADBEEFh
+  mov   eax,0DEADBEEFh
   call  HexDump                       ; expect DEADBEEF
-  mov   eax, esp
+  mov   eax,esp
   call  HexDump                       ; expect 00090000
-  mov   eax, cs
+  mov   eax,cs
   call  HexDump                       ; expect 00000008
-  mov eax, [0]
-  call HexDump                        ; should read from linear address 0x00000000
+  mov   eax,[0]
+  call  HexDump                       ; should read from linear address 0x00000000
 
   hlt
 
@@ -74,12 +74,12 @@ Stage3:
 ; DebugIt — Dumps EAX as hex
 ;--------------------------------------------------------------------------------------------------
 DebugIt:
-    call HexDump
-    mov  ebx, Buffer
-    call PutStr
-    mov  ebx, NewLine
-    call PutStr
-    ret
+  call  HexDump
+  mov   ebx,Buffer
+  call  PutStr
+  mov   ebx,NewLine
+  call  PutStr
+  ret
 
 ;--------------------------------------------------------------------------------------------------
 ; HexDump Routine — Converts EAX to 8 ASCII hex digits
@@ -89,21 +89,21 @@ HexDump:
   push  ebx
   push  ecx
   push  edx
-  mov   ecx, 8                  ; We want 8 hex digits
-  mov   ebx, Buffer + 2         ; Skip length word, point to first char
-.next_digit:
-  mov   edx, eax                ; Copy eax to edx
-  shr   edx, 28                 ; Shift top nibble into lowest 4 bits
-  and   edx, 0Fh                ; Mask to isolate nibble
-  mov   dl, [HexDigits + edx]   ; Look up ASCII character
-  mov   [ebx], dl               ; Store in Buffer
-  inc   ebx
-  shl   eax, 4                  ; Shift next nibble into position
-  loop  .next_digit  
-  mov   ebx, Buffer                 ; Put
-  call  PutStr
-  mov   ebx, NewLine                ;  string
-  call  PutStr
+  mov   ecx,8                         ; We want 8 hex digits
+  mov   ebx,Buffer+2                  ; Skip length word, point to first char
+HexDump1:
+  mov   edx,eax                       ; Copy eax to edx
+  shr   edx,28                        ; Shift top nibble into lowest 4 bits
+  and   edx,0Fh                       ; Mask to isolate nibble
+  mov   dl,[HexDigits+edx]            ; Look up ASCII character
+  mov   [ebx],dl                      ; Store in Buffer
+  inc   ebx                           ; Point to next character
+  shl   eax,4                         ; Shift next nibble into position
+  loop  HexDump1
+  mov   ebx,Buffer                    ; Put
+  call  PutStr                        ;  buffer
+  mov   ebx,NewLine                   ; Put
+  call  PutStr                        ;  newline
   pop   edx
   pop   ecx
   pop   ebx
@@ -131,6 +131,7 @@ Row         db  0                       ; Row (1-25)
 Col         db  0                       ; Col (1-80)
 VidAdr      dd  0                       ; Video Address
 HexDigits   db  "0123456789ABCDEF"
+
 ;--------------------------------------------------------------------------------------------------
 ; Video
 ;--------------------------------------------------------------------------------------------------
