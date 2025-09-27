@@ -58,13 +58,13 @@ Stage3:
 
   ; Debug addresses and memory content
   mov   eax,0DEADBEEFh
-  call  HexDump                       ; expect DEADBEEF
+  call  DebugIt                       ; expect DEADBEEF
   mov   eax,esp
-  call  HexDump                       ; expect 00090000
+  call  DebugIt                       ; expect 00090000
   mov   eax,cs
-  call  HexDump                       ; expect 00000008
+  call  DebugIt                       ; expect 00000008
   mov   eax,[0]
-  call  HexDump                       ; should read from linear address 0x00000000
+  call  DebugIt                       ; should read from linear address 0x00000000
 
   hlt
 
@@ -100,10 +100,6 @@ HexDump1:
   inc   ebx                           ; Point to next character
   shl   eax,4                         ; Shift next nibble into position
   loop  HexDump1
-  mov   ebx,Buffer                    ; Put
-  call  PutStr                        ;  buffer
-  mov   ebx,NewLine                   ; Put
-  call  PutStr                        ;  newline
   pop   edx
   pop   ecx
   pop   ebx
