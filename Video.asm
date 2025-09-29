@@ -45,8 +45,8 @@ CalcVideoAddr:
     cmp   al,25                         ;  is less than 25
     jl    CalcVideoAddr1                ;  go to CalcVideoAddr1
     mov   al,24                         ; Set row to 24
-    mov   [Row],al                      ;  and save it
-    call ScrollUp                       ;  and scroll up the screen
+    mov   [Row],al                      ;  save it
+    call  ScrollUp                      ;  and scroll up the screen
 CalcVideoAddr1:
     xor   eax,eax                       ; Row calculation
     mov   al,[Row]                      ;  row
