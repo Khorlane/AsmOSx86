@@ -70,17 +70,45 @@ Stage3:
   mov   eax,[0]
   call  DebugIt                       ; should read from linear address 0x00000000
 
+PollKbLoop:
+  call  KbRead                        ; Read keyboard
+  mov   al,[KbChar]                   ; If nothing
+  cmp   al,0FFh                       ;  read (KbChar == 0xFF)
+  je    PollKbLoop                    ;  keep polling until a key is pressed
+  mov   al,[KbChar]                   ; Get the key
+  movzx eax,al                        ; Move key into EAX
+  call  DebugIt                       ; Dump it as hex
+  call  KbXlate                       ; Translate to ASCII
+  call  PrintKbChar                   ; Print it
+  jmp   PollKbLoop                    ; Repeat
+
   hlt
 
 ;--------------------------------------------------------------------------------------------------
 ; DebugIt — Dumps EAX as hex
 ;--------------------------------------------------------------------------------------------------
 DebugIt:
-  call  HexDump
-  mov   ebx,Buffer
-  call  PutStr
-  mov   ebx,NewLine
-  call  PutStr
+  call  HexDump                       ; Convert EAX to hex string stuff it into Buffer
+  mov   ebx,Buffer                    ; Put
+  call  PutStr                        ;  string
+  mov   ebx,NewLine                   ; Put
+  call  PutStr                        ;  newline
+  ret
+
+PrintKbChar:
+  mov   al,[KbChar]                   ; Get translated character
+  mov   [Buffer+2], al                ; First byte of string (skip length word)
+  mov   ecx,7                         ; Fill remaining 7 bytes
+  mov   ebx,Buffer+3                  ; Start at second character
+  mov   al,' '                        ; Space character
+FillSpaces:
+  mov   [ebx],al                      ; Fill 
+  inc   ebx                           ;  with
+  loop  FillSpaces                    ;  spaces
+  mov   ebx,Buffer                    ; Put
+  call  PutStr                        ;  string
+  mov   ebx,NewLine                   ; Put
+  call  PutStr                        ;  newline
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -109,7 +137,7 @@ HexDump1:
   ret
 
 ;--------------------------------------------------------------------------------------------------
-; Working Storage — Modular Hex Toolkit
+; Working Storage
 ;--------------------------------------------------------------------------------------------------
 %macro String 2
 %1          dw  %%EndStr-%1
@@ -139,3 +167,12 @@ Black       equ 00h                     ; Black
 Cyan        equ 03h                     ; Cyan
 Purple      equ 05h                     ; Purple
 White       equ 0Fh                     ; White
+
+;--------------------------------------------------------------------------------------------------
+; Keyboard
+;--------------------------------------------------------------------------------------------------
+Scancode    db  10h, 11h, 90h, 91h         ; Scancodes for 'q', 'w', 'Q', 'W'
+ScancodeSz  db  ScancodeSz-Scancode
+
+CharCode    db  71h, 77h, 51h, 57h         ; Hexcodes  for 'q', 'w', 'Q', 'W'
+CharCodeSz  db  CharCodeSz-CharCode
