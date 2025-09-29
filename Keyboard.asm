@@ -42,4 +42,4 @@ KbXlateFound:
     mov   al,[CharCode+esi]             ; Put ASCII character matching the Scancode in AL
 KbXlateDone:
     mov   [KbChar],al                   ; Put translated char in KbChar
-    ret     
+    ret
