@@ -27,19 +27,35 @@ KbGetIt:
 
 ; Translate scancode to ASCII character
 KbXlate:
-    xor   eax,eax
-    xor   esi,esi
-    mov   ecx,ScancodeSz
-    mov   al,[KbChar]                   ; Put scancode in AL
-KbXlateLoop1:
-    cmp   al,[Scancode+esi]             ; Compare to Scancode
-    je    KbXlateFound                  ; Match!
-    inc   esi                           ; Bump ESI
-    loop  KbXlateLoop1                  ; Check next
-    mov   al,'?'                        ; Not found defaults to ? for now
-    jmp   KbXlateDone                   ; Jump to done
+  ; Check ignore list first
+  xor   eax,eax
+  xor   esi,esi
+  mov   ecx,IgnoreSz
+  mov   al,[KbChar]       
+KbIgnoreLoop:
+  cmp   al,[IgnoreCode+esi]
+  je    KbIgnoreHit
+  inc   esi
+  loop  KbIgnoreLoop
+  jmp   KbXlateCheck
+KbIgnoreHit:
+  mov   al,'?'
+  jmp   KbXlateDone
+KbXlateCheck:
+  ; Now check translation table  
+  xor   eax,eax
+  xor   esi,esi
+  mov   ecx,ScancodeSz
+  mov   al,[KbChar]                   ; Put scancode in AL
+KbXlateLoop:
+  cmp   al,[Scancode+esi]             ; Compare to Scancode
+  je    KbXlateFound                  ; Match!
+  inc   esi                           ; Bump ESI
+  loop  KbXlateLoop                   ; Check next
+  mov   al,'?'                        ; Not found defaults to ? for now
+  jmp   KbXlateDone                   ; Jump to done
 KbXlateFound:
-    mov   al,[CharCode+esi]             ; Put ASCII character matching the Scancode in AL
+  mov   al,[CharCode+esi]             ; Put ASCII character matching the Scancode in AL
 KbXlateDone:
-    mov   [KbChar],al                   ; Put translated char in KbChar
-    ret
+  mov   [KbChar],al                   ; Put translated char in KbChar
+  ret

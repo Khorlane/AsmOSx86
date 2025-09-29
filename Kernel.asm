@@ -148,19 +148,20 @@ HexDump1:
 String  Buffer,"XXXXXXXX"
 String  NewLine,0Ah
 
-ColorBack   db  0                       ; Background color (00h - 0Fh)
-ColorFore   db  0                       ; Foreground color (00h - 0Fh)
-ColorAttr   db  0                       ; Combination of background and foreground color (e.g. 3Fh 3=cyan background,F=white text)
 Char        db  0                       ; ASCII character
-KbChar      db  0                       ; Keyboard character
-Row         db  0                       ; Row (1-25)
-Col         db  0                       ; Col (1-80)
-VidAdr      dd  0                       ; Video Address
 HexDigits   db  "0123456789ABCDEF"
 
 ;--------------------------------------------------------------------------------------------------
 ; Video
 ;--------------------------------------------------------------------------------------------------
+; Variables
+ColorBack   db  0                       ; Background color (00h - 0Fh)
+ColorFore   db  0                       ; Foreground color (00h - 0Fh)
+ColorAttr   db  0                       ; Combination of background and foreground color (e.g. 3Fh 3=cyan background,F=white text)
+Row         db  0                       ; Row (1-25)
+Col         db  0                       ; Col (1-80)
+VidAdr      dd  0                       ; Video Address
+; Equates
 VidMem      equ 0B8000h                 ; Video Memory (Starting Address)
 TotCol      equ 80                      ; width and height of screen
 Black       equ 00h                     ; Black
@@ -171,8 +172,13 @@ White       equ 0Fh                     ; White
 ;--------------------------------------------------------------------------------------------------
 ; Keyboard
 ;--------------------------------------------------------------------------------------------------
-Scancode    db  10h, 11h, 90h, 91h         ; Scancodes    for 'q', 'w', 'Q', 'W'
-ScancodeSz  db  ScancodeSz-Scancode
-
-CharCode    db  71h, 77h, 51h, 57h         ; ASCII codes  for 'q', 'w', 'Q', 'W'
-CharCodeSz  db  CharCodeSz-CharCode
+; Variables
+KbChar      db  0                          ; Keyboard character
+; Scancode to ASCII translation tables
+Scancode    db  10h, 11h                   ; Make Scancodes  for 'q', 'w'
+ScancodeSz  db  ScancodeSz-Scancode        ; Size of Scancode table
+CharCode    db  71h, 77h                   ; ASCII codes     for 'q', 'w'
+CharCodeSz  db  CharCodeSz-CharCode        ; Size of CharCode table
+; Ignore these scan codes
+IgnoreCode  db  90h, 91h                   ; Break Scancodes for 'q', 'w'
+IgnoreSz    db  IgnoreSz-IgnoreCode        ; Size of Ignore table
