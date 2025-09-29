@@ -102,7 +102,7 @@ PrintKbChar:
   mov   ebx,Buffer+3                  ; Start at second character
   mov   al,' '                        ; Space character
 FillSpaces:
-  mov   [ebx],al                      ; Fill 
+  mov   [ebx],al                      ; Fill
   inc   ebx                           ;  with
   loop  FillSpaces                    ;  spaces
   mov   ebx,Buffer                    ; Put

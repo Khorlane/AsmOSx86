@@ -47,7 +47,7 @@ CalcVideoAddr:
     mov   al,24                         ; Set row to 24
     mov   [Row],al                      ;  and save it
     call ScrollUp                       ;  and scroll up the screen
-CalcVideoAddr1:    
+CalcVideoAddr1:
     xor   eax,eax                       ; Row calculation
     mov   al,[Row]                      ;  row
     dec   eax                           ;  minus 1

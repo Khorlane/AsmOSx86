@@ -31,7 +31,7 @@ KbXlate:
   xor   eax,eax
   xor   esi,esi
   mov   ecx,IgnoreSz
-  mov   al,[KbChar]       
+  mov   al,[KbChar]
 KbIgnoreLoop:
   cmp   al,[IgnoreCode+esi]
   je    KbIgnoreHit
@@ -42,7 +42,7 @@ KbIgnoreHit:
   mov   al,'?'
   jmp   KbXlateDone
 KbXlateCheck:
-  ; Now check translation table  
+  ; Now check translation table
   xor   eax,eax
   xor   esi,esi
   mov   ecx,ScancodeSz
