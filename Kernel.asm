@@ -36,13 +36,15 @@ IDT2:
 ; Kernel Entry Point
 ;--------------------------------------------------------------------------------------------------
 Stage3:
-  lea   eax, [GDTDescriptor]
-  lgdt  [eax]
+  lea   eax, [GDTDescriptor]          ; Load the GDT
+  lgdt  [eax]                         ;  register
   mov   ax,10h                        ; Set data
   mov   ds,ax                         ;  segments to
   mov   ss,ax                         ;  data selector
   mov   es,ax                         ;  (10h)
   mov   esp,90000h                    ; Stack begins from 90000h
+  lea   eax, [IDT2]                   ; Load the IDT
+  lidt  [eax]                         ;  register
 
   ;-------------
   ; Clear screen
