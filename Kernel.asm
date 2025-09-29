@@ -31,11 +31,13 @@ IDT2:
 ; Include Major Components
 ;--------------------------------------------------------------------------------------------------
 %include "Video.asm"
+%include "Keyboard.asm"
 
 ;--------------------------------------------------------------------------------------------------
 ; Kernel Entry Point
 ;--------------------------------------------------------------------------------------------------
 Stage3:
+  ; Set up segments, stack, GDT, IDT
   lea   eax, [GDTDescriptor]          ; Load the GDT
   lgdt  [eax]                         ;  register
   mov   ax,10h                        ; Set data
@@ -46,9 +48,7 @@ Stage3:
   lea   eax, [IDT2]                   ; Load the IDT
   lidt  [eax]                         ;  register
 
-  ;-------------
   ; Clear screen
-  ;-------------
   mov   al,Black                      ; Background
   mov   [ColorBack],al                ;  color
   mov   al,Purple                     ; Foreground
@@ -71,8 +71,6 @@ Stage3:
   call  DebugIt                       ; should read from linear address 0x00000000
 
   hlt
-
-  ; Continue with InitPic, InitPit, etc.
 
 ;--------------------------------------------------------------------------------------------------
 ; DebugIt — Dumps EAX as hex
