@@ -171,8 +171,8 @@ White       equ 0Fh                     ; White
 ;--------------------------------------------------------------------------------------------------
 ; Keyboard
 ;--------------------------------------------------------------------------------------------------
-Scancode    db  10h, 11h, 90h, 91h         ; Scancodes for 'q', 'w', 'Q', 'W'
+Scancode    db  10h, 11h, 90h, 91h         ; Scancodes    for 'q', 'w', 'Q', 'W'
 ScancodeSz  db  ScancodeSz-Scancode
 
-CharCode    db  71h, 77h, 51h, 57h         ; Hexcodes  for 'q', 'w', 'Q', 'W'
+CharCode    db  71h, 77h, 51h, 57h         ; ASCII codes  for 'q', 'w', 'Q', 'W'
 CharCodeSz  db  CharCodeSz-CharCode
