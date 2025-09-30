@@ -61,16 +61,16 @@ Stage3:
   mov   [Col],al                      ;  10,1
 
   ; Debug addresses and memory content
-  mov   eax,0DEADBEEFh
-  mov   [Byte4],eax
-  call  DebugIt                       ; expect DEADBEEF
-  mov   [Byte4],esp
-  call  DebugIt                       ; expect 00090000
-  mov   [Byte4],cs
-  call  DebugIt                       ; expect 00000008
-  mov   eax,[0]
-  mov   [Byte4],eax
-  call  DebugIt                       ; should read from linear address 0x00000000
+  mov   eax,0DEADBEEFh                ; Dump a
+  mov   [Byte4],eax                   ;  known value
+  call  DebugIt                       ;  expect DEADBEEF
+  mov   [Byte4],esp                   ; Dump esp
+  call  DebugIt                       ;  expect 00090000
+  mov   [Byte4],cs                    ; Dump cs
+  call  DebugIt                       ;  expect 00000008
+  mov   eax,[100000h]                 ; Dump 8 bytes
+  mov   [Byte4],eax                   ;  starting at 1MB
+  call  DebugIt                       ;  100000h
 
 KbPollLoop:
   call  KbRead                        ; Read keyboard
@@ -78,7 +78,7 @@ KbPollLoop:
   cmp   al,0FFh                       ;  read (KbChar == 0xFF)
   je    KbPollLoop                    ;  keep polling until a key is pressed
   xor   eax,eax                       ; Print
-  mov   al,[KbChar]                   ;  the 
+  mov   al,[KbChar]                   ;  the
   mov   [Byte4],eax                   ;  scancode
   call  DebugIt                       ;  as hex
   call  KbXlate                       ; Translate scancode to ASCII
