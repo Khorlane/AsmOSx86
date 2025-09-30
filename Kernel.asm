@@ -38,14 +38,14 @@ IDT2:
 ;--------------------------------------------------------------------------------------------------
 Stage3:
   ; Set up segments, stack, GDT, IDT
-  lea   eax, [GDTDescriptor]          ; Load the GDT
+  lea   eax,[GDTDescriptor]           ; Load the GDT
   lgdt  [eax]                         ;  register
   mov   ax,10h                        ; Set data
   mov   ds,ax                         ;  segments to
   mov   ss,ax                         ;  data selector
   mov   es,ax                         ;  (10h)
   mov   esp,90000h                    ; Stack begins from 90000h
-  lea   eax, [IDT2]                   ; Load the IDT
+  lea   eax,[IDT2]                    ; Load the IDT
   lidt  [eax]                         ;  register
 
   ; Clear screen
@@ -62,25 +62,28 @@ Stage3:
 
   ; Debug addresses and memory content
   mov   eax,0DEADBEEFh
+  mov   [Byte4],eax
   call  DebugIt                       ; expect DEADBEEF
-  mov   eax,esp
+  mov   [Byte4],esp
   call  DebugIt                       ; expect 00090000
-  mov   eax,cs
+  mov   [Byte4],cs
   call  DebugIt                       ; expect 00000008
   mov   eax,[0]
+  mov   [Byte4],eax
   call  DebugIt                       ; should read from linear address 0x00000000
 
-PollKbLoop:
+KbPollLoop:
   call  KbRead                        ; Read keyboard
   mov   al,[KbChar]                   ; If nothing
   cmp   al,0FFh                       ;  read (KbChar == 0xFF)
-  je    PollKbLoop                    ;  keep polling until a key is pressed
-  mov   al,[KbChar]                   ; Get the key
-  movzx eax,al                        ; Move key into EAX
-  call  DebugIt                       ; Dump it as hex
-  call  KbXlate                       ; Translate to ASCII
-  call  PrintKbChar                   ; Print it
-  jmp   PollKbLoop                    ; Repeat
+  je    KbPollLoop                    ;  keep polling until a key is pressed
+  xor   eax,eax                       ; Print
+  mov   al,[KbChar]                   ;  the 
+  mov   [Byte4],eax                   ;  scancode
+  call  DebugIt                       ;  as hex
+  call  KbXlate                       ; Translate scancode to ASCII
+  call  KbPrintChar                   ; Print it
+  jmp   KbPollLoop                    ; Repeat
 
   hlt
 
@@ -95,9 +98,9 @@ DebugIt:
   call  PutStr                        ;  newline
   ret
 
-PrintKbChar:
+KbPrintChar:
   mov   al,[KbChar]                   ; Get translated character
-  mov   [Buffer+2], al                ; First byte of string (skip length word)
+  mov   [Buffer+2],al                 ; First byte of string (skip length word)
   mov   ecx,7                         ; Fill remaining 7 bytes
   mov   ebx,Buffer+3                  ; Start at second character
   mov   al,' '                        ; Space character
@@ -115,12 +118,9 @@ FillSpaces:
 ; HexDump Routine — Converts EAX to 8 ASCII hex digits
 ;--------------------------------------------------------------------------------------------------
 HexDump:
-  push  eax
-  push  ebx
-  push  ecx
-  push  edx
+  mov   eax,[Byte4]                   ; Load the value to be dumped
   mov   ecx,8                         ; We want 8 hex digits
-  mov   ebx,Buffer+2                  ; Skip length word, point to first char
+  mov   ebx,Buffer+2                  ; Skip string length, point to first byte of string
 HexDump1:
   mov   edx,eax                       ; Copy eax to edx
   shr   edx,28                        ; Shift top nibble into lowest 4 bits
@@ -130,10 +130,6 @@ HexDump1:
   inc   ebx                           ; Point to next character
   shl   eax,4                         ; Shift next nibble into position
   loop  HexDump1
-  pop   edx
-  pop   ecx
-  pop   ebx
-  pop   eax
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -149,7 +145,10 @@ String  Buffer,"XXXXXXXX"
 String  NewLine,0Ah
 
 Char        db  0                     ; ASCII character
-HexDigits   db  "0123456789ABCDEF"
+Byte1       db  0                     ; 1-byte variable (al, ah)
+Byte2       dw  0                     ; 2-byte variable (ax)
+Byte4       dd  0                     ; 4-byte variable (eax)
+HexDigits   db  "0123456789ABCDEF"    ; Hex digits for conversion
 
 ;--------------------------------------------------------------------------------------------------
 ; Video
