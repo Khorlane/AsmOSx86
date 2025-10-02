@@ -27,5 +27,5 @@
 
 ---
 
-📚 **Project Wiki**  
+# 📚 Project Wiki  
 Explore detailed tutorials and documentation in the [AsmOSx86 Wiki](https://github.com/Khorlane/AsmOSx86/wiki)
