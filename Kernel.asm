@@ -91,23 +91,26 @@ KbPollLoop:
 ; DebugIt — Dumps EAX as hex
 ;--------------------------------------------------------------------------------------------------
 DebugIt:
-  call  HexDump                       ; Convert EAX to hex string stuff it into Buffer
+  call  HexDump                       ; Convert BYTE4 to hex string in Buffer
   mov   ebx,Buffer                    ; Put
   call  PutStr                        ;  string
   mov   ebx,NewLine                   ; Put
   call  PutStr                        ;  newline
   ret
 
+;--------------------------------------------------------------------------------------------------
+; KbPrintChar — Put KbChar into Buffer and print it
+;--------------------------------------------------------------------------------------------------
 KbPrintChar:
   mov   al,[KbChar]                   ; Get translated character
   mov   [Buffer+2],al                 ; First byte of string (skip length word)
   mov   ecx,7                         ; Fill remaining 7 bytes
   mov   ebx,Buffer+3                  ; Start at second character
   mov   al,' '                        ; Space character
-FillSpaces:
+KbPrintChar1:
   mov   [ebx],al                      ; Fill
   inc   ebx                           ;  with
-  loop  FillSpaces                    ;  spaces
+  loop  KbPrintChar1                  ;  spaces
   mov   ebx,Buffer                    ; Put
   call  PutStr                        ;  string
   mov   ebx,NewLine                   ; Put
@@ -115,10 +118,10 @@ FillSpaces:
   ret
 
 ;--------------------------------------------------------------------------------------------------
-; HexDump Routine — Converts EAX to 8 ASCII hex digits
+; HexDump - Convert BYTE4 to hex string in Buffer
 ;--------------------------------------------------------------------------------------------------
 HexDump:
-  mov   eax,[Byte4]                   ; Load the value to be dumped
+  mov   eax,[Byte4]                   ; Load the value to be converted
   mov   ecx,8                         ; We want 8 hex digits
   mov   ebx,Buffer+2                  ; Skip string length, point to first byte of string
 HexDump1:
