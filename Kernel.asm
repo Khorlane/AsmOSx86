@@ -5,9 +5,9 @@
 ; nasm -f bin Kernel.asm -o Kernel.bin -l Kernel.lst
 ;**********************************************************
 
-[bits  32]                            ; 32 bit code
-  org   100000h                       ; Kernel starts at 1 MB
-  jmp   Stage3                        ; Jump to entry point
+[bits  32]                              ; 32 bit code
+  org   100000h                         ; Kernel starts at 1 MB
+  jmp   Stage3                          ; Jump to entry point
 
 GDTTable:
   dq 0x0000000000000000
@@ -39,64 +39,64 @@ IDT2:
 ;--------------------------------------------------------------------------------------------------
 Stage3:
   ; Set up segments, stack, GDT, IDT
-  lea   eax,[GDTDescriptor]           ; Load the GDT
-  lgdt  [eax]                         ;  register
-  mov   ax,10h                        ; Set data
-  mov   ds,ax                         ;  segments to
-  mov   ss,ax                         ;  data selector
-  mov   es,ax                         ;  (10h)
-  mov   esp,90000h                    ; Stack begins from 90000h
-  lea   eax,[IDT2]                    ; Load the IDT
-  lidt  [eax]                         ;  register
+  lea   eax,[GDTDescriptor]             ; Load the GDT
+  lgdt  [eax]                           ;  register
+  mov   ax,10h                          ; Set data
+  mov   ds,ax                           ;  segments to
+  mov   ss,ax                           ;  data selector
+  mov   es,ax                           ;  (10h)
+  mov   esp,90000h                      ; Stack begins from 90000h
+  lea   eax,[IDT2]                      ; Load the IDT
+  lidt  [eax]                           ;  register
 
   ; Clear screen
-  mov   al,Black                      ; Background
-  mov   [ColorBack],al                ;  color
-  mov   al,Purple                     ; Foreground
-  mov   [ColorFore],al                ;  color
-  call  SetColorAttr                  ; Set color
-  call  ClrScr                        ; Clear screen
-  mov   al,10                         ; Set
-  mov   [Row],al                      ;  Row,Col
-  mov   al,1                          ;  to
-  mov   [Col],al                      ;  10,1
+  mov   al,Black                        ; Background
+  mov   [ColorBack],al                  ;  color
+  mov   al,Purple                       ; Foreground
+  mov   [ColorFore],al                  ;  color
+  call  SetColorAttr                    ; Set color
+  call  ClrScr                          ; Clear screen
+  mov   al,10                           ; Set
+  mov   [Row],al                        ;  Row,Col
+  mov   al,1                            ;  to
+  mov   [Col],al                        ;  10,1
 
   ; Debug addresses and memory content
-  mov   eax,0DEADBEEFh                ; Dump a
-  mov   [Byte4],eax                   ;  known value
-  call  DebugIt                       ;  expect DEADBEEF
-  mov   [Byte4],esp                   ; Dump esp
-  call  DebugIt                       ;  expect 00090000
-  mov   [Byte4],cs                    ; Dump cs
-  call  DebugIt                       ;  expect 00000008
-  mov   eax,[100000h]                 ; Dump 8 bytes
-  mov   [Byte4],eax                   ;  starting at 1MB
-  call  DebugIt                       ;  100000h
+  mov   eax,0DEADBEEFh                  ; Dump a
+  mov   [Byte4],eax                     ;  known value
+  call  DebugIt                         ;  expect DEADBEEF
+  mov   [Byte4],esp                     ; Dump esp
+  call  DebugIt                         ;  expect 00090000
+  mov   [Byte4],cs                      ; Dump cs
+  call  DebugIt                         ;  expect 00000008
+  mov   eax,[100000h]                   ; Dump 8 bytes
+  mov   [Byte4],eax                     ;  starting at 1MB
+  call  DebugIt                         ;  100000h
 
   ;-----------------------------------------
   ; Floppy motor test (temporary)
   ;-----------------------------------------
-  call  FloppyInit                    ; controller enabled, drive A:, motors off
-  call  FloppyMotorOn                 ; motor on + internal spin-up wait
+  call  FloppyInit                      ; controller enabled, drive A:, motors off
+  call  FloppyMotorOn                   ; motor on + internal spin-up wait
   ; keep it on ~1 second (1000 x ~1ms)
   mov   ecx, 1000
 .FloppyWait:
-  call  FlpDelay1ms                   ; helper in Floppy.asm
+  call  FlpDelay1ms                     ; helper in Floppy.asm
   loop  .FloppyWait
-  call  FloppyMotorOff                ; motor off
+  call  FloppyMotorOff                  ; motor off
 
 KbPollLoop:
-  call  KbRead                        ; Read keyboard
-  mov   al,[KbChar]                   ; If nothing
-  cmp   al,0FFh                       ;  read (KbChar == 0xFF)
-  je    KbPollLoop                    ;  keep polling until a key is pressed
-  xor   eax,eax                       ; Print
-  mov   al,[KbChar]                   ;  the
-  mov   [Byte4],eax                   ;  scancode
-  call  DebugIt                       ;  as hex
-  call  KbXlate                       ; Translate scancode to ASCII
-  call  KbPrintChar                   ; Print it
-  jmp   KbPollLoop                    ; Repeat
+  call  KbRead                          ; Read keyboard
+  mov   al,[KbChar]                     ; If nothing
+  cmp   al,0FFh                         ;  read (KbChar == 0xFF)
+  je    KbPollLoop                      ;  keep polling until a key is pressed
+  xor   eax,eax                         ; Print
+  mov   al,[KbChar]                     ;  the
+  mov   [Byte4],eax                     ;  scancode
+  call  DebugIt                         ;  as hex
+  call  KbXlate                         ; Translate scancode to ASCII
+  call  KbPrintChar                     ; Print it
+  jmp   KbPollLoop                      ; Repeat
 
   hlt
 
@@ -104,47 +104,47 @@ KbPollLoop:
 ; DebugIt — Dumps EAX as hex
 ;--------------------------------------------------------------------------------------------------
 DebugIt:
-  call  HexDump                       ; Convert BYTE4 to hex string in Buffer
-  mov   ebx,Buffer                    ; Put
-  call  PutStr                        ;  string
-  mov   ebx,NewLine                   ; Put
-  call  PutStr                        ;  newline
+  call  HexDump                         ; Convert BYTE4 to hex string in Buffer
+  mov   ebx,Buffer                      ; Put
+  call  PutStr                          ;  string
+  mov   ebx,NewLine                     ; Put
+  call  PutStr                          ;  newline
   ret
 
 ;--------------------------------------------------------------------------------------------------
 ; KbPrintChar — Put KbChar into Buffer and print it
 ;--------------------------------------------------------------------------------------------------
 KbPrintChar:
-  mov   al,[KbChar]                   ; Get translated character
-  mov   [Buffer+2],al                 ; First byte of string (skip length word)
-  mov   ecx,7                         ; Fill remaining 7 bytes
-  mov   ebx,Buffer+3                  ; Start at second character
-  mov   al,' '                        ; Space character
+  mov   al,[KbChar]                     ; Get translated character
+  mov   [Buffer+2],al                   ; First byte of string (skip length word)
+  mov   ecx,7                           ; Fill remaining 7 bytes
+  mov   ebx,Buffer+3                    ; Start at second character
+  mov   al,' '                          ; Space character
 KbPrintChar1:
-  mov   [ebx],al                      ; Fill
-  inc   ebx                           ;  with
-  loop  KbPrintChar1                  ;  spaces
-  mov   ebx,Buffer                    ; Put
-  call  PutStr                        ;  string
-  mov   ebx,NewLine                   ; Put
-  call  PutStr                        ;  newline
+  mov   [ebx],al                        ; Fill
+  inc   ebx                             ;  with
+  loop  KbPrintChar1                    ;  spaces
+  mov   ebx,Buffer                      ; Put
+  call  PutStr                          ;  string
+  mov   ebx,NewLine                     ; Put
+  call  PutStr                          ;  newline
   ret
 
 ;--------------------------------------------------------------------------------------------------
 ; HexDump - Convert BYTE4 to hex string in Buffer
 ;--------------------------------------------------------------------------------------------------
 HexDump:
-  mov   eax,[Byte4]                   ; Load the value to be converted
-  mov   ecx,8                         ; We want 8 hex digits
-  mov   ebx,Buffer+2                  ; Skip string length, point to first byte of string
+  mov   eax,[Byte4]                     ; Load the value to be converted
+  mov   ecx,8                           ; We want 8 hex digits
+  mov   ebx,Buffer+2                    ; Skip string length, point to first byte of string
 HexDump1:
-  mov   edx,eax                       ; Copy eax to edx
-  shr   edx,28                        ; Shift top nibble into lowest 4 bits
-  and   edx,0Fh                       ; Mask to isolate nibble
-  mov   dl,[HexDigits+edx]            ; Look up ASCII character
-  mov   [ebx],dl                      ; Store in Buffer
-  inc   ebx                           ; Point to next character
-  shl   eax,4                         ; Shift next nibble into position
+  mov   edx,eax                         ; Copy eax to edx
+  shr   edx,28                          ; Shift top nibble into lowest 4 bits
+  and   edx,0Fh                         ; Mask to isolate nibble
+  mov   dl,[HexDigits+edx]              ; Look up ASCII character
+  mov   [ebx],dl                        ; Store in Buffer
+  inc   ebx                             ; Point to next character
+  shl   eax,4                           ; Shift next nibble into position
   loop  HexDump1
   ret
 
@@ -160,35 +160,35 @@ HexDump1:
 String  Buffer,"XXXXXXXX"
 String  NewLine,0Ah
 
-Char        db  0                     ; ASCII character
-Byte1       db  0                     ; 1-byte variable (al, ah)
-Byte2       dw  0                     ; 2-byte variable (ax)
-Byte4       dd  0                     ; 4-byte variable (eax)
-HexDigits   db  "0123456789ABCDEF"    ; Hex digits for conversion
+Char        db  0                       ; ASCII character
+Byte1       db  0                       ; 1-byte variable (al, ah)
+Byte2       dw  0                       ; 2-byte variable (ax)
+Byte4       dd  0                       ; 4-byte variable (eax)
+HexDigits   db  "0123456789ABCDEF"      ; Hex digits for conversion
 
 ;--------------------------------------------------------------------------------------------------
 ; Video
 ;--------------------------------------------------------------------------------------------------
 ; Variables
-ColorBack   db  0                     ; Background color (00h - 0Fh)
-ColorFore   db  0                     ; Foreground color (00h - 0Fh)
-ColorAttr   db  0                     ; Combination of background and foreground color (e.g. 3Fh 3=cyan background,F=white text)
-Row         db  0                     ; Row (1-25)
-Col         db  0                     ; Col (1-80)
-VidAdr      dd  0                     ; Video Address
+ColorBack   db  0                       ; Background color (00h - 0Fh)
+ColorFore   db  0                       ; Foreground color (00h - 0Fh)
+ColorAttr   db  0                       ; Combination of background and foreground color (e.g. 3Fh 3=cyan background,F=white text)
+Row         db  0                       ; Row (1-25)
+Col         db  0                       ; Col (1-80)
+VidAdr      dd  0                       ; Video Address
 ; Equates
-VidMem      equ 0B8000h               ; Video Memory (Starting Address)
-TotCol      equ 80                    ; width and height of screen
-Black       equ 00h                   ; Black
-Cyan        equ 03h                   ; Cyan
-Purple      equ 05h                   ; Purple
-White       equ 0Fh                   ; White
+VidMem      equ 0B8000h                 ; Video Memory (Starting Address)
+TotCol      equ 80                      ; width and height of screen
+Black       equ 00h                     ; Black
+Cyan        equ 03h                     ; Cyan
+Purple      equ 05h                     ; Purple
+White       equ 0Fh                     ; White
 
 ;--------------------------------------------------------------------------------------------------
 ; Keyboard
 ;--------------------------------------------------------------------------------------------------
 ; Variables
-KbChar      db  0                     ; Keyboard character
+KbChar      db  0                       ; Keyboard character
 ; Make scancodes
 Scancode    db 01Eh, 030h, 02Eh, 020h, 012h, 021h, 022h, 023h, 017h, 024h, 025h, 026h     ; Make Scancodes
             db 032h, 031h, 018h, 019h, 010h, 013h, 01Fh, 014h, 016h, 02Fh, 011h, 02Dh     ;  a-z keys
