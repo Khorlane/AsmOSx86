@@ -73,6 +73,18 @@ Stage3:
   mov   [Byte4],eax                   ;  starting at 1MB
   call  DebugIt                       ;  100000h
 
+  ;-----------------------------------------
+  ; Floppy motor test (temporary)
+  ;-----------------------------------------
+  call  FloppyInit                    ; controller enabled, drive A:, motors off
+  call  FloppyMotorOn                 ; motor on + internal spin-up wait
+  ; keep it on ~1 second (1000 x ~1ms)
+  mov   ecx, 1000
+.FloppyWait:
+  call  FlpDelay1ms                   ; helper in Floppy.asm
+  loop  .FloppyWait
+  call  FloppyMotorOff                ; motor off
+
 KbPollLoop:
   call  KbRead                        ; Read keyboard
   mov   al,[KbChar]                   ; If nothing
