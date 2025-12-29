@@ -63,34 +63,34 @@ section .text
 ; FloppyInit — select A:, enable controller (out of reset), disable all motors
 ;--------------------------------------------------------------------------------------------------
 FloppyInit:
-    pusha
-    mov   al,[FlpDrive]                 ; ensure 0..3
-    and   al,DOR_SEL_MASK
-    or    al,DOR_RESET | DOR_DMAIRQ     ; controller running, (DMA/IRQ enabled = harmless)
-    mov   [FlpDorShadow],al
-    mov   dx,FDC_DOR
-    out   dx,al
-    popa
-    ret
+  pusha
+  mov   al,[FlpDrive]                 ; ensure 0..3
+  and   al,DOR_SEL_MASK
+  or    al,DOR_RESET | DOR_DMAIRQ     ; controller running, (DMA/IRQ enabled = harmless)
+  mov   [FlpDorShadow],al
+  mov   dx,FDC_DOR
+  out   dx,al
+  popa
+  ret
 
 ;--------------------------------------------------------------------------------------------------
 ; FloppySetDrive — EAX = drive# (0..3). Keeps controller enabled, motors off.
 ;--------------------------------------------------------------------------------------------------
 FloppySetDrive:
-    pusha
-    mov   eax,[esp+36]                  ; grab caller EAX (pusha saved 8 regs = 32 bytes; ret addr 4; then param EAX)
-    and   al,DOR_SEL_MASK
-    mov   [FlpDrive],al
-    ; rebuild DOR: keep RESET/DMA bits; clear select bits; clear motors
-    mov   bl,[FlpDorShadow]
-    and   bl,(DOR_RESET | DOR_DMAIRQ)   ; keep controller-run + dma flag
-    or    bl,al                         ; add new select
-    mov   [FlpDorShadow],bl
-    mov   dx,FDC_DOR
-    mov   al,bl
-    out   dx,al
-    popa
-    ret
+  pusha
+  mov   eax,[esp+36]                  ; grab caller EAX (pusha saved 8 regs = 32 bytes; ret addr 4; then param EAX)
+  and   al,DOR_SEL_MASK
+  mov   [FlpDrive],al
+  ; rebuild DOR: keep RESET/DMA bits; clear select bits; clear motors
+  mov   bl,[FlpDorShadow]
+  and   bl,(DOR_RESET | DOR_DMAIRQ)   ; keep controller-run + dma flag
+  or    bl,al                         ; add new select
+  mov   [FlpDorShadow],bl
+  mov   dx,FDC_DOR
+  mov   al,bl
+  out   dx,al
+  popa
+  ret
 
 ;--------------------------------------------------------------------------------------------------
 ; FloppyMotorOn — enable motor bit for selected drive, keep controller running
@@ -115,9 +115,9 @@ FloppyMotorOn:
   mov   dx,FDC_DOR
   out   dx,al
   mov   ecx,FLOPPY_SPINUP_TICKS
-  .spin:
-      call  FlpDelay1ms
-      loop  .spin
+.spin:
+  call  FlpDelay1ms
+  loop  .spin
   popa
   ret
 
@@ -125,30 +125,30 @@ FloppyMotorOn:
 ; FloppyMotorOff — clear motor bit for selected drive; leave controller running
 ;--------------------------------------------------------------------------------------------------
 FloppyMotorOff:
-    pusha
-    mov   al,[FlpDrive]                 ; 0..3
-    mov   bl,1
-    shl   bl,4                          ; BL = 0x10
-    mov   cl, al                        ; shift count must be in cl
-    shl   bl, cl                        ; BL = 0x10 << drive
-    mov   al,[FlpDorShadow]
-    not   bl                            ; clear that motor bit only
-    and   al, bl
-    mov   [FlpDorShadow],al
-    mov   dx,FDC_DOR
-    out   dx,al
-    popa
-    ret
+  pusha
+  mov   al,[FlpDrive]                 ; 0..3
+  mov   bl,1
+  shl   bl,4                          ; BL = 0x10
+  mov   cl, al                        ; shift count must be in cl
+  shl   bl, cl                        ; BL = 0x10 << drive
+  mov   al,[FlpDorShadow]
+  not   bl                            ; clear that motor bit only
+  and   al, bl
+  mov   [FlpDorShadow],al
+  mov   dx,FDC_DOR
+  out   dx,al
+  popa
+  ret
 
 ;--------------------------------------------------------------------------------------------------
 ; FlpDelay1ms — very rough ~1ms busy-wait using port 0x80 I/O delays
 ;   NOTE: purely heuristic; tune the inner loop count if needed.
 ;--------------------------------------------------------------------------------------------------
 FlpDelay1ms:
-    push  ecx
-    mov   ecx,4000                      ; tweak per machine/emulator to ~1ms
+  push  ecx
+  mov   ecx,4000                      ; tweak per machine/emulator to ~1ms
 .del1:
-    in    al,80h                        ; tiny I/O delay tick
-    loop  .del1
-    pop   ecx
-    ret
+  in    al,80h                        ; tiny I/O delay tick
+  loop  .del1
+  pop   ecx
+  ret
