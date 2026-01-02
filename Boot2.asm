@@ -41,7 +41,6 @@ PutStr2:
 ;--------------------------------------------------------------------------------------------------
 [bits 16]
 InstallGDT:
-    cli                                 ; disable interrupts
     pusha                               ; save registers
     lgdt  [GDT2]                        ; load GDT into GDTR
     popa                                ; restore registers
@@ -52,7 +51,6 @@ InstallGDT:
 ;--------------------------------------------------------------------------------------------------
 [bits 16]
 EnableA20:
-    cli                                 ; disable interrupts
     pusha
 
     call  WaitInput                     ; wait for keypress
@@ -357,7 +355,7 @@ Main:
     ;----------------------------
     ; Set Data Segement registers
     ;----------------------------
-    cli                                 ; disable interrupts
+    cli                                 ; disable interrupts and never re-enable until pmode
     xor   ax,ax                         ; null segments
     mov   ds,ax
     mov   es,ax
@@ -409,8 +407,7 @@ Main:
     mov   ah,0                          ; wait
     int   16h                           ;  for keypress
     int   19h                           ; warm boot computer
-    cli                                 ; If we get here, something really went wrong
-    hlt
+    hlt                                 ; If we get here, something really went wrong
 
 GoProtected:
     mov   si,Stage3Msg
@@ -420,7 +417,6 @@ GoProtected:
     ;--------------
     ; Go into pmode
     ;--------------
-    cli                                 ; clear interrupts
     mov   eax,cr0                       ; set bit 0 in cr0--enter pmode
     or    eax,1
     mov   cr0,eax
@@ -473,8 +469,7 @@ GoStage3:
     ;-------------------
     ; We never get here! 
     ;-------------------
-    cli                                 ; Stop 
-    hlt                                 ;  execution
+    hlt                                 ; halt execution
 
 ;--------------------------------------------------------------------------------------------------
 ; Global Descriptor Table (GDT)
