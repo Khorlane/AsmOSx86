@@ -44,7 +44,6 @@ InstallGDT:
     cli                                 ; disable interrupts
     pusha                               ; save registers
     lgdt  [GDT2]                        ; load GDT into GDTR
-    sti                                 ; enable interrupts
     popa                                ; restore registers
     ret                                 ; All done!
 
@@ -66,14 +65,14 @@ EnableA20:
     call  WaitOutput                   
 
     in    al,60h
-    push  eax                           ; get output port data and store it
+    push  ax                            ; get output port data and store it
     call  WaitInput                    
 
     mov   al,0D1h
     out   64h,al                        ; tell controller to write output port
     call  WaitInput                    
 
-    pop   eax
+    pop   ax
     or    al,2                          ; set bit 1 (enable a20)
     out   60h,al                        ; write out data back to the output port
 
@@ -83,7 +82,6 @@ EnableA20:
 
     call  WaitInput                     ; wait for keypress
     popa
-    sti                                 ; enable interrupts
     ret
 
 ;------------------------------
@@ -277,8 +275,8 @@ FindFile2:
 ;-----------------------------------------
 [bits 16]
 LoadFile:
-    xor   ecx,ecx                       ; size of file in sectors
-    push  ecx
+    xor   cx,cx                         ; size of file in sectors
+    push  cx
     push  bx                            ; BX => BP points to buffer to write to; store it for later
     push  bp
     call  FindFile                      ; find our file. ES:SI contains our filename
@@ -287,12 +285,12 @@ LoadFile:
     ; failed to find file
     pop   bp
     pop   bx
-    pop   ecx
+    pop   cx
     mov   ax,-1
     ret
 LoadFile1:
-    sub   edi,RootOffset
-    sub   eax,RootOffset
+    sub   di,RootOffset
+    sub   ax,RootOffset
     ; get starting cluster
     push  word RootSegment              ; root segment loc
     pop   es
@@ -312,9 +310,9 @@ LoadFile2:
     xor   cx,cx
     mov   cl,byte [SectorsPerCluster]
     call  ReadSector 
-    pop   ecx
-    inc   ecx                           ; add one more sector to counter
-    push  ecx
+    pop   cx
+    inc   cx                            ; add one more sector to counter
+    push  cx
     push  bx
     push  es
     mov   ax,FatSegment                 ;start reading from fat
@@ -342,7 +340,7 @@ LoadFile4:
     ; We're done
     pop   es
     pop   bx
-    pop   ecx
+    pop   cx
     xor   ax,ax
     ret
 
@@ -370,7 +368,6 @@ Main:
     mov   ax,00h                        ; stack begins at 09000h-0FFFFh
     mov   SS,ax
     mov   SP,0FFFFh
-    sti                                 ; enable interrupts
 
     ;----------------
     ; Install our GDT
@@ -396,11 +393,11 @@ Main:
     ;----------------------
     ; Read Stage3 from disk
     ;----------------------
-    mov   ebx,0                         ; BX:BP points to buffer to load to
+    mov   bx,0                          ; BX:BP points to buffer to load to
     mov   bp,RModeBase
     mov   si,Stage3Name                 ; our file to load
     call  LoadFile
-    mov   dword [Stage3Size],ecx        ; save the size of Stage3
+    mov   [Stage3Size],cx               ; save the size of Stage3
     cmp   ax,0                          ; Test for success
     je    GoProtected                   ; yep--onto Stage 3!
 
@@ -446,18 +443,18 @@ GoStage3:
     ;----------------------------
     mov   ax,DataDesc                   ; set data segments to data selector (10h)
     mov   ds,ax
-    mov   SS,ax
+    mov   ss,ax
     mov   es,ax
 
     ;-----------------
     ; Set up our Stack
     ;-----------------
-    mov   ESP,90000h                    ; stack begins from 90000h
+    mov   esp,90000h                    ; stack begins from 90000h
 
     ;-------------------
     ; Copy Kernel to 1MB
     ;-------------------
-    mov   eax,dword [Stage3Size]        ; Stage 3 size in sectors
+    movzx eax,word [Stage3Size]         ; Stage 3 size in sectors
     movzx ebx,word [BytesPerSector]
     mul   ebx
     mov   ebx,4
@@ -532,7 +529,7 @@ LoadingMsg            db  0Dh
 
 Stage3Msg             db  0Dh
                       db  0Ah
-                      db  " Hit Enter to Jump to Kernel"
+                      db  " Hit Enter to Jump to Kernel!"
                       db  00h
 
 FailureMsg            db  0Dh
@@ -553,7 +550,7 @@ DataSector            dw  0000h
 DriveNumber           db  0
 HeadsPerCylinder      dw  2
 Stage3Name            db  "KERNEL  BIN" ; kernel name (Must be 11 bytes)
-Stage3Size            dd  0             ; size of kernel image in sectors
+Stage3Size            dw  0             ; size of kernel image in sectors
 NumberOfFATs          db  2
 ReservedSectors       dw  1
 RootEntries           dw  224
