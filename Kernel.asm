@@ -72,13 +72,19 @@ FlushCS:
   mov   eax,0DEADBEEFh                  ; Dump a
   mov   [Byte4],eax                     ;  known value
   call  DebugIt                         ;  expect DEADBEEF
-  mov   [Byte4],esp                     ; Dump esp
+  xor   eax,eax                         ; Dump
+  mov   [Byte4],eax                     ;  value of
+  mov   [Byte4],esp                     ;  esp
   call  DebugIt                         ;  expect 00090000
-  mov   [Byte4],cs                      ; Dump cs
+  xor   eax,eax                         ; Dump
+  mov   [Byte4],eax                     ;  value of
+  mov   [Byte4],cs                      ;  cs
   call  DebugIt                         ;  expect 00000008
-  mov   eax,[100000h]                   ; Dump 8 bytes
-  mov   [Byte4],eax                     ;  starting at 1MB
-  call  DebugIt                         ;  100000h
+  xor   eax,eax                         ; Dump
+  mov   [Byte4],eax                     ;  8 bytes of 
+  mov   eax,[100000h]                   ;  memory, starting
+  mov   [Byte4],eax                     ;  at address
+  call  DebugIt                         ;  1mb (100000h)
 
   ;-----------------------------------------
   ; Floppy motor test (temporary)
@@ -172,6 +178,7 @@ Byte1       db  0                       ; 1-byte variable (al, ah)
 Byte2       dw  0                       ; 2-byte variable (ax)
 Byte4       dd  0                       ; 4-byte variable (eax)
 HexDigits   db  "0123456789ABCDEF"      ; Hex digits for conversion
+Zero        equ 00000000h               ; Constant zero
 
 ;--------------------------------------------------------------------------------------------------
 ; Video
