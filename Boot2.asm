@@ -16,7 +16,7 @@
 ; We are loaded at 500h (50h:0h)
 [bits 16]
     org   0500h
-    jmp   Main                          ; jump to Main
+    jmp   Main                          ; Jump to Main
 
 ;--------------------------------------------------------------------------------------------------
 ; Prints a null terminated string using BIOS call
@@ -24,26 +24,26 @@
 ;--------------------------------------------------------------------------------------------------
 [bits 16]
 PutStr:
-    pusha                               ; save registers
-    mov   ah,0Eh                        ; write text in teletype mode
+    pusha                               ; Save registers
+    mov   ah,0Eh                        ; Write text in teletype mode
 PutStr1:
-    lodsb                               ; load next byte from string from SI to AL
+    lodsb                               ; Load next byte from string from SI to AL
     or    al,al                         ; Does AL=0?
     jz    PutStr2                       ; Yep, null terminator found-bail out
-    int   10h                           ; invoke BIOS to print 1 character
+    int   10h                           ; Invoke BIOS to print 1 character
     jmp   PutStr1                       ; Repeat until null terminator found
 PutStr2:
-    popa                                ; restore registers
-    ret                                 ; we are done, so return
+    popa                                ; Restore registers
+    ret                                 ; We are done, so return
 
 ;--------------------------------------------------------------------------------------------------
 ; Install our GDT
 ;--------------------------------------------------------------------------------------------------
 [bits 16]
 InstallGDT:
-    pusha                               ; save registers
-    lgdt  [GDT2]                        ; load GDT into GDTR
-    popa                                ; restore registers
+    pusha                               ; Save registers
+    lgdt  [GDT2]                        ; Load GDT into GDTR
+    popa                                ; Restore registers
     ret                                 ; All done!
 
 ;--------------------------------------------------------------------------------------------------
@@ -53,32 +53,32 @@ InstallGDT:
 EnableA20:
     pusha
 
-    call  WaitInput                     ; wait for keypress
+    call  WaitInput                     ; Wait for keypress
     mov   al,0ADh
-    out   64h,al                        ; disable keyboard
+    out   64h,al                        ; Disable keyboard
     call  WaitInput                    
 
     mov   al,0D0h
-    out   64h,al                        ; tell controller to read output port
+    out   64h,al                        ; Tell controller to read output port
     call  WaitOutput                   
 
     in    al,60h
-    push  ax                            ; get output port data and store it
+    push  ax                            ; Get output port data and store it
     call  WaitInput                    
 
     mov   al,0D1h
-    out   64h,al                        ; tell controller to write output port
+    out   64h,al                        ; Tell controller to write output port
     call  WaitInput                    
 
     pop   ax
-    or    al,2                          ; set bit 1 (enable a20)
-    out   60h,al                        ; write out data back to the output port
+    or    al,2                          ; Set bit 1 (enable a20)
+    out   60h,al                        ; Write out data back to the output port
 
     call  WaitInput                    
-    mov   al,0AEh                       ; enable keyboard
+    mov   al,0AEh                       ; Enable keyboard
     out   64h,al
 
-    call  WaitInput                     ; wait for keypress
+    call  WaitInput                     ; Wait for keypress
     popa
     ret
 
@@ -87,13 +87,13 @@ EnableA20:
 ;------------------------------
 [bits 16]
 WaitInput:
-    in    al,64h                        ; wait for
+    in    al,64h                        ; Wait for
     test  al,2                          ;  input buffer
     jnz   WaitInput                     ;   to clear
     ret
 
 WaitOutput:
-    in    al,64h                        ; wait for
+    in    al,64h                        ; Wait for
     test  al,1                          ;  output buffer
     jz    WaitOutput                    ;   to clear
     ret
@@ -107,11 +107,11 @@ WaitOutput:
 ;------------------------------------------
 [bits 16]
 ClusterLBA:
-    sub   ax,0002h                      ; zero base cluster number
-    xor   cx,cx
-    mov   cl,byte [SectorsPerCluster]   ; convert byte to word
-    mul   cx
-    add   ax,word [DataSector]          ; base data sector
+    sub   ax,0002h                      ; Zero base cluster number
+    xor   cx,cx                         ; Put Sectors per
+    mov   cl,byte [SectorsPerCluster]   ;  cluster in cx
+    mul   cx                            ; ax = ax * sectors per cluster  
+    add   ax,word [DataSector]          ; ax = ax + data sector
     ret
 
 ;---------------------------------------------------------------------------
@@ -124,12 +124,12 @@ ClusterLBA:
 ;---------------------------------------------------------------------------
 [bits 16]
 LBACHS:                                 ;
-    xor   dx,dx                         ; prepare dx:ax for operation
-    div   word [SectorsPerTrack]        ; calculate
-    inc   dl                            ; adjust for sector 0
+    xor   dx,dx                         ; Prepare dx:ax for operation
+    div   word [SectorsPerTrack]        ; Calculate
+    inc   dl                            ; Adjust for sector 0
     mov   byte [AbsoluteSector],dl
-    xor   dx,dx                         ; prepare dx:ax for operation
-    div   word [HeadsPerCylinder]       ; calculate
+    xor   dx,dx                         ; Prepare dx:ax for operation
+    div   word [HeadsPerCylinder]       ; Calculate
     mov   byte [AbsoluteHead],dl
     mov   byte [AbsoluteTrack],al
     ret
@@ -142,35 +142,35 @@ LBACHS:                                 ;
 ;-----------------------------------
 [bits 16]
 ReadSector:
-    mov   di,0005h                      ; five retries for error
+    mov   di,0005h                      ; Five retries for error
 ReadSector1:
     push  ax
     push  bx
     push  cx
-    call  LBACHS                        ; convert starting sector to CHS
+    call  LBACHS                        ; Convert starting sector to CHS
     mov   ah,02h                        ; BIOS read sector
-    mov   al,01h                        ; read one sector
-    mov   ch,byte [AbsoluteTrack]       ; track
-    mov   cl,byte [AbsoluteSector]      ; sector
-    mov   dh,byte [AbsoluteHead]        ; head
-    mov   dl,byte [DriveNumber]         ; drive
-    int   13h                           ; invoke BIOS
-    jnc   ReadSector2                   ; test for read error
+    mov   al,01h                        ; Read one sector
+    mov   ch,byte [AbsoluteTrack]       ; Track
+    mov   cl,byte [AbsoluteSector]      ; Sector
+    mov   dh,byte [AbsoluteHead]        ; Head
+    mov   dl,byte [DriveNumber]         ; Drive
+    int   13h                           ; Invoke BIOS
+    jnc   ReadSector2                   ; Test for read error
     xor   ax,ax                         ; BIOS reset disk
-    int   13h                           ; invoke BIOS
-    dec   di                            ; decrement error counter
+    int   13h                           ; Invoke BIOS
+    dec   di                            ; Decrement error counter
     pop   cx
     pop   bx
     pop   ax
-    jnz   ReadSector1                   ; attempt to read again
+    jnz   ReadSector1                   ; Attempt to read again
     int   18h
 ReadSector2:
     pop   cx
     pop   bx
     pop   ax
-    add   bx,word [BytesPerSector]      ; queue next buffer
-    inc   ax                            ; queue next sector
-    loop  ReadSector                    ; read next sector
+    add   bx,word [BytesPerSector]      ; Queue next buffer
+    inc   ax                            ; Queue next sector
+    loop  ReadSector                    ; Read next sector
     ret
 
 ;------------------------------------
@@ -178,28 +178,28 @@ ReadSector2:
 ;------------------------------------
 [bits 16]
 LoadRootDir:
-    pusha                               ; store registers
+    pusha                               ; Store registers
     push  es
     ; compute size of root directory and store in "CX"
-    xor   cx,cx                         ; clear registers
+    xor   cx,cx                         ; Clear registers
     xor   dx,dx
     mov   ax,32                         ; 32 byte directory entry
-    mul   word [RootEntries]            ; total size of directory
-    div   word [BytesPerSector]         ; sectors used by directory
-    xchg  ax,cx                         ; move into AX
+    mul   word [RootEntries]            ; Total size of directory
+    div   word [BytesPerSector]         ; Sectors used by directory
+    xchg  ax,cx                         ; Move into AX
     ; compute location of root directory and store in "AX"
-    mov   al,byte [NumberOfFATs]        ; number of FATs
-    mul   word [SectorsPerFAT]          ; sectors used by FATs
+    mov   al,byte [NumberOfFATs]        ; Number of FATs
+    mul   word [SectorsPerFAT]          ; Sectors used by FATs
     add   ax,word [ReservedSectors]
-    mov   word [DataSector],ax          ; base of root directory
+    mov   word [DataSector],ax          ; Base of root directory
     add   word [DataSector],cx
     ; read root directory into 07E00h
     push  word RootSegment
     pop   es
-    mov   bx,0                          ; copy root dir
-    call  ReadSector                    ; read in directory table
+    mov   bx,0                          ; Copy root dir
+    call  ReadSector                    ; Read in directory table
     pop   es
-    popa                                ; restore registers and return
+    popa                                ; Restore registers and return
     ret
 
 ;-----------------------------
@@ -208,12 +208,12 @@ LoadRootDir:
 ;-----------------------------
 [bits 16]
 LoadFAT:
-    pusha                               ; store registers
+    pusha                               ; Store registers
     push  es
     ; compute size of FAT and store in "CX"
     xor   ax,ax
-    mov   al,byte [NumberOfFATs]        ; number of FATs
-    mul   word [SectorsPerFAT]          ; sectors used by FATs
+    mov   al,byte [NumberOfFATs]        ; Number of FATs
+    mul   word [SectorsPerFAT]          ; Sectors used by FATs
     mov   cx,ax
     ; compute location of FAT and store in "ax"
     mov   ax,word [ReservedSectors]
@@ -223,7 +223,7 @@ LoadFAT:
     xor   bx,bx
     call  ReadSector 
     pop   es
-    popa                                ; restore registers and return
+    popa                                ; Restore registers and return
     ret
 
 ;----------------------------------------------------------------
@@ -233,34 +233,34 @@ LoadFAT:
 ;----------------------------------------------------------------
 [bits 16]
 FindFile:
-    push  cx                            ; store registers
+    push  cx                            ; Store registers
     push  dx
     push  bx
-    mov   bx,si                         ; copy filename for later
+    mov   bx,si                         ; Copy filename for later
     ; browse root directory for binary image
-    mov   cx,word [RootEntries]         ; load loop counter
-    mov   di,RootOffset                 ; locate first root entry at 1 MB mark
-    cld                                 ; clear direction flag
+    mov   cx,word [RootEntries]         ; Load loop counter
+    mov   di,RootOffset                 ; Locate first root entry at 1 MB mark
+    cld                                 ; Clear direction flag
 FindFile1:
     push  cx
-    mov   cx,11                         ; eleven character name. Image name is in SI
-    mov   si,bx                         ; image name is in BX
+    mov   cx,11                         ; Eleven character name. Image name is in SI
+    mov   si,bx                         ; Image name is in BX
     push  di
-    rep   cmpsb                         ; test for entry match
+    rep   cmpsb                         ; Test for entry match
     pop   di
     je    FindFile2
     pop   cx
-    add   di,32                         ; queue next directory entry
+    add   di,32                         ; Queue next directory entry
     loop  FindFile1
     ; Not Found
-    pop   bx                            ; restore registers and return
+    pop   bx                            ; Restore registers and return
     pop   dx
     pop   cx
-    mov   ax,-1                         ; set error code
+    mov   ax,-1                         ; Set error code
     ret
 FindFile2:
-    pop   ax                            ; return value into AX contains entry of file
-    pop   bx                            ; restore registers and return
+    pop   ax                            ; Return value into AX contains entry of file
+    pop   bx                            ; Restore registers and return
     pop   dx
     pop   cx
     ret
@@ -274,11 +274,11 @@ FindFile2:
 ;-----------------------------------------
 [bits 16]
 LoadFile:
-    xor   cx,cx                         ; size of file in sectors
+    xor   cx,cx                         ; Size of file in sectors
     push  cx
     push  bx                            ; BX => BP points to buffer to write to; store it for later
     push  bp
-    call  FindFile                      ; find our file. ES:SI contains our filename
+    call  FindFile                      ; Find our file. ES:SI contains our filename
     cmp   ax,-1
     jne   LoadFile1
     ; failed to find file
@@ -291,18 +291,18 @@ LoadFile1:
     sub   di,RootOffset
     sub   ax,RootOffset
     ; get starting cluster
-    push  word RootSegment              ; root segment loc
+    push  word RootSegment              ; Root segment loc
     pop   es
     mov   dx,word [es:di + 0001Ah]      ; DI points to file entry in root directory table. Refrence the table...
-    mov   word [Cluster],dx             ; file's first cluster
-    pop   bx                            ; get location to write to so we dont screw up the stack
+    mov   word [Cluster],dx             ; File's first cluster
+    pop   bx                            ; Get location to write to so we dont screw up the stack
     pop   es
-    push  bx                            ; store location for later again
+    push  bx                            ; Store location for later again
     push  es
     call  LoadFAT
 LoadFile2:
     ; load the cluster
-    mov   ax,word [Cluster]             ; cluster to read
+    mov   ax,word [Cluster]             ; Cluster to read
     pop   es                            ; bx:bp=es:bx
     pop   bx
     call  ClusterLBA
@@ -310,23 +310,23 @@ LoadFile2:
     mov   cl,byte [SectorsPerCluster]
     call  ReadSector 
     pop   cx
-    inc   cx                            ; add one more sector to counter
+    inc   cx                            ; Add one more sector to counter
     push  cx
     push  bx
     push  es
-    mov   ax,FatSegment                 ;start reading from fat
+    mov   ax,FatSegment                 ; Start reading from fat
     mov   es,ax
     xor   bx,bx
     ; get next cluster
-    mov   ax,word [Cluster]             ; identify current cluster
-    mov   cx,ax                         ; copy current cluster
+    mov   ax,word [Cluster]             ; Identify current cluster
+    mov   cx,ax                         ; Copy current cluster
     mov   dx,ax
-    shr   dx,0001h                      ; divide by two
-    add   cx,dx                         ; sum for (3/2)
-    mov   bx,0                          ; location of fat in memory
+    shr   dx,0001h                      ; Divide by two
+    add   cx,dx                         ; Sum for (3/2)
+    mov   bx,0                          ; Location of fat in memory
     add   bx,cx
     mov   dx,word [es:bx]
-    test  ax,0001h                      ; test for odd or even cluster
+    test  ax,0001h                      ; Test for odd or even cluster
     jnz   LoadFile3
     and   dx,0000111111111111b          ; Even cluster - take low 12 bits
     jmp   LoadFile4
@@ -334,7 +334,7 @@ LoadFile3:
     shr   dx,0004h                      ; Odd cluster  - take high 12 bits
 LoadFile4:
     mov   word [Cluster],dx
-    cmp   dx,0FF0h                      ; test for end of file marker
+    cmp   dx,0FF0h                      ; Test for end of file marker
     jb    LoadFile2
     ; We're done
     pop   es
@@ -356,32 +356,32 @@ Main:
     ;----------------------------
     ; Set Data Segement registers
     ;----------------------------
-    cli                                 ; disable interrupts and never re-enable until pmode
-    xor   ax,ax                         ; null segments
-    mov   ds,ax
-    mov   es,ax
+    cli                                 ; Disable interrupts and never re-enable in this stage
+    xor   ax,ax                         ; Zero out AX
+    mov   ds,ax                         ; Set data segments to null
+    mov   es,ax                         ; Set extra segment to null
 
     ;-----------------
     ; Set up our Stack
     ;-----------------
-    mov   ax,00h                        ; stack begins at 09000h-0FFFFh
-    mov   SS,ax
-    mov   SP,0FFFFh
+    mov   ax,00h                        ; Set stack 
+    mov   ss,ax                         ;  segment to 0000h
+    mov   sp,0FFFFh                     ;  stack pointer set to FFFFh (last byte of the first 64 KB of memory)
 
     ;----------------
     ; Install our GDT
     ;----------------
-    call  InstallGDT
+    call  InstallGDT                    ; install our GDT
 
     ;-----------
     ; Enable A20
     ;-----------
-    call  EnableA20
+    call  EnableA20                     ; Enable A20 line
 
     ;----------------------
     ; Print loading message
     ;----------------------
-    mov   si,LoadingMsg
+    mov   si,LoadingMsg                 ; Print loading message
     call  PutStr
 
     ;----------------------
@@ -393,10 +393,10 @@ Main:
     ; Read Stage3 from disk
     ;----------------------
     mov   bx,0                          ; BX:BP points to buffer to load to
-    mov   bp,RModeBase
-    mov   si,Stage3Name                 ; our file to load
-    call  LoadFile
-    mov   [Stage3Size],cx               ; save the size of Stage3
+    mov   bp,RModeBase                  ; Address to load Stage3
+    mov   si,Stage3Name                 ; Name of our file to load
+    call  LoadFile                      ; Load Stage3 (our kernel)
+    mov   [Stage3Size],cx               ; Save the size of Stage3
     cmp   ax,0                          ; Test for success
     je    GoProtected                   ; yep--onto Stage 3!
 
@@ -405,23 +405,23 @@ Main:
     ;------------------
     mov   si,FailureMsg                 ; Nope--print error
     call  PutStr                        ;
-    mov   ah,0                          ; wait
+    mov   ah,0                          ; Wait
     int   16h                           ;  for keypress
-    int   19h                           ; warm boot computer
+    int   19h                           ; Warm boot computer
     hlt                                 ; If we get here, something really went wrong
 
 GoProtected:
     mov   si,Stage3Msg
     call  PutStr
-    mov   ah,00h                        ; wait
+    mov   ah,00h                        ; Wait
     int   16h                           ;  for keypress
     ;--------------
     ; Go into pmode
     ;--------------
-    mov   eax,cr0                       ; set bit 0 in cr0--enter pmode
+    mov   eax,cr0                       ; Set bit 0 in cr0--enter pmode
     or    eax,1
     mov   cr0,eax
-    jmp   CodeDesc:GoStage3             ; far jump to fix CS. Remember that the code selector is 08h!
+    jmp   CodeDesc:GoStage3             ; Far jump to fix CS. Remember that the code selector is 08h!
 
   ; Note: Do NOT re-enable interrupts! Doing so will triple fault!
   ; We will adjust this in the Kernel.
@@ -438,7 +438,7 @@ GoStage3:
     ;----------------------------
     ; Set Data Segement registers
     ;----------------------------
-    mov   ax,DataDesc                   ; set data segments to data selector (10h)
+    mov   ax,DataDesc                   ; Set data segments to data selector (10h)
     mov   ds,ax
     mov   ss,ax
     mov   es,ax
@@ -446,7 +446,7 @@ GoStage3:
     ;-----------------
     ; Set up our Stack
     ;-----------------
-    mov   esp,90000h                    ; stack begins from 90000h
+    mov   esp,90000h                    ; Stack begins from 90000h
 
     ;-------------------
     ; Copy Kernel to 1MB
@@ -460,17 +460,17 @@ GoStage3:
     mov   esi,RModeBase
     mov   edi,PModeBase
     mov   ecx,eax
-    rep   movsd                         ; copy image to its protected mode address
+    rep   movsd                         ; Copy image to its protected mode address
 
     ;--------------------
     ; Jump to our Kernel!
     ;--------------------
-    jmp   CodeDesc:PModeBase            ; jump to our kernel! Note: This assumes Kernel's entry point is at 1 MB
+    jmp   CodeDesc:PModeBase            ; Jump to our kernel! Note: This assumes Kernel's entry point is at 1 MB
 
     ;-------------------
     ; We never get here! 
     ;-------------------
-    hlt                                 ; halt execution
+    hlt                                 ; Halt execution
 
 ;--------------------------------------------------------------------------------------------------
 ; Global Descriptor Table (GDT)
