@@ -249,7 +249,7 @@ FindFile1:
     mov   cx,11                         ; eleven character name. Image name is in SI
     mov   si,bx                         ; image name is in BX
     push  di
-    rep   CMPSB                         ; test for entry match
+    rep   cmpsb                         ; test for entry match
     pop   di
     je    FindFile2
     pop   cx
@@ -331,7 +331,7 @@ LoadFile2:
     mov   dx,word [es:bx]
     test  ax,0001h                      ; test for odd or even cluster
     jnz   LoadFile3
-    AND   dx,0000111111111111b          ; Even cluster - take low 12 bits
+    and   dx,0000111111111111b          ; Even cluster - take low 12 bits
     jmp   LoadFile4
 LoadFile3:
     shr   dx,0004h                      ; Odd cluster  - take high 12 bits
@@ -463,7 +463,7 @@ GoStage3:
     mov   ebx,4
     div   ebx
     cld
-    mov   ESI,RModeBase
+    mov   esi,RModeBase
     mov   edi,PModeBase
     mov   ecx,eax
     rep   movsd                         ; copy image to its protected mode address
@@ -553,7 +553,7 @@ DataSector            dw  0000h
 DriveNumber           db  0
 HeadsPerCylinder      dw  2
 Stage3Name            db  "KERNEL  BIN" ; kernel name (Must be 11 bytes)
-Stage3Size            db  0             ; size of kernel image in bytes
+Stage3Size            dd  0             ; size of kernel image in sectors
 NumberOfFATs          db  2
 ReservedSectors       dw  1
 RootEntries           dw  224

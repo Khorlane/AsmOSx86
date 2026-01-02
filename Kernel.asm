@@ -10,9 +10,12 @@
   jmp   Stage3                          ; Jump to entry point
 
 GDTTable:
-  dq 0x0000000000000000
-  dq 0x00CF9A000000FFFF
-  dq 0x00CF92000000FFFF
+  dq 0x0000000000000000                 ; Null Descriptor
+  NullDesc              equ 0
+  dq 0x00CF9A000000FFFF                 ; Code Segment Descriptor
+  CodeDesc              equ 8h
+  dq 0x00CF92000000FFFF                 ; Data Segment Descriptor
+  DataDesc              equ 10h
 GDTTableEnd:
 
 GDTDescriptor:
@@ -41,10 +44,14 @@ Stage3:
   ; Set up segments, stack, GDT, IDT
   lea   eax,[GDTDescriptor]             ; Load the GDT
   lgdt  [eax]                           ;  register
-  mov   ax,10h                          ; Set data
-  mov   ds,ax                           ;  segments to
-  mov   ss,ax                           ;  data selector
-  mov   es,ax                           ;  (10h)
+  jmp   CodeDesc:FlushCS                ; Far jump to reload CS’s hidden descriptor cache
+FlushCS:
+  mov   ax,DataDesc                     ; Set segment registers to data selector
+  mov   ds,ax                           ;  Data segment
+  mov   ss,ax                           ;  Stack segment
+  mov   es,ax                           ;  Extra segment
+  mov   fs,ax                           ;  General-purpose segment
+  mov   gs,ax                           ;  General-purpose segment
   mov   esp,90000h                      ; Stack begins from 90000h
   lea   eax,[IDT2]                      ; Load the IDT
   lidt  [eax]                           ;  register
