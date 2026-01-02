@@ -85,6 +85,7 @@ EnableA20:
 ;------------------------------
 ; Helper routines for EnableA20
 ;------------------------------
+[bits 16]
 WaitInput:
     in    al,64h                        ; wait for
     test  al,2                          ;  input buffer
