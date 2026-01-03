@@ -47,38 +47,38 @@ InstallGDT:
     ret                                 ; All done!
 
 ;--------------------------------------------------------------------------------------------------
-; Enable A20 line through output port
+; Enable A20 line of 8042 keyboard controller to access memory above 1 MB
 ;--------------------------------------------------------------------------------------------------
 [bits 16]
 EnableA20:
     pusha
-
-    call  WaitInput                     ; Wait for keypress
-    mov   al,0ADh
-    out   64h,al                        ; Disable keyboard
-    call  WaitInput                    
-
-    mov   al,0D0h
-    out   64h,al                        ; Tell controller to read output port
-    call  WaitOutput                   
-
-    in    al,60h
-    push  ax                            ; Get output port data and store it
-    call  WaitInput                    
-
-    mov   al,0D1h
-    out   64h,al                        ; Tell controller to write output port
-    call  WaitInput                    
-
-    pop   ax
-    or    al,2                          ; Set bit 1 (enable a20)
-    out   60h,al                        ; Write out data back to the output port
-
-    call  WaitInput                    
-    mov   al,0AEh                       ; Enable keyboard
-    out   64h,al
-
-    call  WaitInput                     ; Wait for keypress
+    ; Disable the keyboard interface
+    call  WaitInput                     ; Ensure that the 8042 input buffer is empty
+    mov   al,0ADh                       ; Send 0xAD (Disable Keyboard)
+    out   64h,al                        ;  command to 8042 controller command port (0x64)
+    ; Instruct the keyboard controller to put its current output port value onto port 0x60
+    call  WaitInput                     ; Ensure that the 8042 input buffer is empty
+    mov   al,0D0h                       ; Send 0xD0 (Read Output Port and put output port value onto port 60h (0x60))
+    out   64h,al                        ;  command to 8042 controller command port (0x64)
+    ; Read the current value of the keyboard controller's output port and saving it.
+    call  WaitOutput                    ; Ensure value on port 60h is ready to be read
+    in    al,60h                        ; Get output port data into register al
+    push  ax                            ; Save value by pushing it onto the stack
+    ; Instruct the keyboard controller that you are about to write a new value to its output port.
+    call  WaitInput                     ; Ensure that the 8042 input buffer is empty
+    mov   al,0D1h                       ; Send 0xD1 (Write Output Port from port 60h (0x60))   
+    out   64h,al                        ;  command to 8042 controller command port (0x64)
+    ; Enable the A20 line
+    call  WaitInput                     ; Ensure that the 8042 input buffer is empty
+    pop   ax                            ; Get saved output port data from stack
+    or    al,2                          ; Flip only bit 1 on (enable A20)
+    out   60h,al                        ; Write modified value back to the output port
+    ; Re-enable the keyboard interface
+    call  WaitInput                     ; Ensure that the 8042 input buffer is empty
+    mov   al,0AEh                       ; Send 0xAE (Enable Keyboard)
+    out   64h,al                        ;  command to 8042 controller command port (0x64)
+    ; The A20 line should now be enabled and we can access memory above 1 MB
+    call  WaitInput                     ; Ensure that the 8042 input buffer is empty
     popa
     ret
 
