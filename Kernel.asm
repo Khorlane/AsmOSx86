@@ -9,6 +9,9 @@
   org   100000h                         ; Kernel starts at 1 MB
   jmp   Stage3                          ; Jump to entry point
 
+;--------------------------------------------------------------------------------------------------
+; Global Descriptor Table (GDT)
+;--------------------------------------------------------------------------------------------------
 GDTTable:
   dq 0x0000000000000000                 ; Null Descriptor
   dq 0x00CF9A000000FFFF                 ; Code Segment Descriptor
