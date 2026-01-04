@@ -292,7 +292,7 @@ FindFatFailed:
     Cluster           dw 0x0000
     DataSector        dw 0x0000
     FailureMsg        db 0x0D, 0x0A, "MISSING BOOT2.BIN", 0x0D, 0x0A, 0x00
-    LoadingMsg        db 0x0D, 0x0A, "AsmOSx86 v0.0.1 Stage 1", 0x00
+    LoadingMsg        db 0x0D, 0x0A, "AsmOSx86 v0.0.2 Stage 1", 0x00
     NewLineMsg        db 0x0D, 0x0A, 0x00
     ProgressMsg       db ".", 0x00
     Stage2Msg         db 0x0D, 0x0A, " Hit Enter, Jump to Stage 2 ", 0x00

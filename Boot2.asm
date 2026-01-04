@@ -520,7 +520,7 @@ RootSegment           equ 2E0h
 
 LoadingMsg            db  0Dh
                       db  0Ah
-                      db  "AsmOSx86 v0.0.1 Stage 2"
+                      db  "AsmOSx86 v0.0.2 Stage 2"
                       db  00h
 
 Stage3Msg             db  0Dh
