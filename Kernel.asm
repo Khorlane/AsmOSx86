@@ -11,16 +11,20 @@
 
 GDTTable:
   dq 0x0000000000000000                 ; Null Descriptor
-  NullDesc              equ 0
   dq 0x00CF9A000000FFFF                 ; Code Segment Descriptor
-  CodeDesc              equ 8h
   dq 0x00CF92000000FFFF                 ; Data Segment Descriptor
-  DataDesc              equ 10h
 GDTTableEnd:
 
 GDTDescriptor:
   dw GDTTableEnd - GDTTable - 1
   dd GDTTable
+
+;--------------------------------------------------------------------------------------------------
+; GDT Selector Equates
+;--------------------------------------------------------------------------------------------------
+  NullDesc              equ 00h             ; Null Descriptor
+  CodeDesc              equ 08h             ; Code Segment Descriptor
+  DataDesc              equ 10h             ; Data Segment Descriptor
 
 ;--------------------------------------------------------------------------------------------------
 ; Interrupt Descriptor Table (IDT)
