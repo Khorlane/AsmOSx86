@@ -78,7 +78,7 @@ FloppyInit:
 ;--------------------------------------------------------------------------------------------------
 FloppySetDrive:
   pusha
-  mov   eax,[esp+36]                  ; grab caller EAX (pusha saved 8 regs = 32 bytes; ret addr 4; then param EAX)
+  mov   eax,[esp+28]                  ; grab caller EAX (pusha saved 8 regs = 32 bytes, EAX is at +28)
   and   al,DOR_SEL_MASK
   mov   [FlpDrive],al
   ; rebuild DOR: keep RESET/DMA bits; clear select bits; clear motors
