@@ -138,7 +138,7 @@ Booter:
     ;-------------------------------------------------------
     ;- code located at 0000:7C00, adjust segment registers
     ;-------------------------------------------------------
-    cli                                 ; disable interrupts
+    cli                                 ; Disable interrupts and never re-enable in this stage
     mov   ax,0x07C0                     ; setup
     mov   ds,ax                         ;  registers
     mov   es,ax                         ;   to point
@@ -151,7 +151,6 @@ Booter:
     mov   ax,0x0000                     ; set the
     mov   ss,ax                         ;  stack to
     mov   sp,0xFFFF                     ;   somewhere safe
-    sti                                 ; restore interrupts
 
     ;-------------------------
     ;- Display loading message
