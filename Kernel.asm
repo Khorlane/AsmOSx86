@@ -197,6 +197,7 @@ ColorFore   db  0                       ; Foreground color (00h - 0Fh)
 ColorAttr   db  0                       ; Combination of background and foreground color (e.g. 3Fh 3=cyan background,F=white text)
 Row         db  0                       ; Row (1-25)
 Col         db  0                       ; Col (1-80)
+TvRowOfs    dd  0                       ; Row Offset
 VidAdr      dd  0                       ; Video Address
 ; Equates
 VidMem      equ 0B8000h                 ; Video Memory (Starting Address)

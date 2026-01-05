@@ -53,13 +53,13 @@ CalcVideoAddr1:
     dec   eax                           ;  minus 1
     mov   edx,160                       ;  times
     mul   edx                           ;  160
-    push  eax                           ;  save it
+    mov   [TvRowOfs],eax                ;  save it
     xor   eax,eax                       ; Col calculation
     mov   al,[Col]                      ;  col
     mov   edx,2                         ;  times
     mul   edx                           ;  2
     sub   eax,2                         ;  minus 2
-    pop   edx                           ; Add col calculation
+    mov   edx,[TvRowOfs]                ; Add col calculation
     add   eax,edx                       ;  to row calculation
     add   eax,VidMem                    ;  plus VidMem
     mov   [VidAdr],eax                  ; Save in VidAdr
