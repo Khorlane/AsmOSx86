@@ -181,24 +181,38 @@ HexDump1:
 String  Buffer,"XXXXXXXX"
 String  NewLine,0Ah
 
+; Kernel Context (all mutable "variables" live here)
+align 4
+KernelCtx:
 Char        db  0                       ; ASCII character
 Byte1       db  0                       ; 1-byte variable (al, ah)
+KbChar      db  0                       ; Keyboard character
+ColorBack   db  0                       ; Background color (00h - 0Fh)
+ColorFore   db  0                       ; Foreground color (00h - 0Fh)
+ColorAttr   db  0                       ; Combination of background and foreground color (e.g. 3Fh 3=cyan background,F=white text)
+Row         db  0                       ; Row (1-25)
+Col         db  0                       ; Col (1-80)
+align 2
 Byte2       dw  0                       ; 2-byte variable (ax)
+align 4
 Byte4       dd  0                       ; 4-byte variable (eax)
+TvRowOfs    dd  0                       ; Row Offset
+VidAdr      dd  0                       ; Video Address
+KernelCtxEnd:
+align 4
+KernelCtxSz  equ KernelCtxEnd - KernelCtx
+; NASM sanity check. The kernel context memory block must be divisible by 4
+; due to `rep movsd` in the ContextSwitch routine
+%if (KernelCtxSz % 4) != 0
+  %error "KernelCtxSz is not dword aligned"
+%endif
+
 HexDigits   db  "0123456789ABCDEF"      ; Hex digits for conversion
 Zero        equ 00000000h               ; Constant zero
 
 ;--------------------------------------------------------------------------------------------------
 ; Video
 ;--------------------------------------------------------------------------------------------------
-; Variables
-ColorBack   db  0                       ; Background color (00h - 0Fh)
-ColorFore   db  0                       ; Foreground color (00h - 0Fh)
-ColorAttr   db  0                       ; Combination of background and foreground color (e.g. 3Fh 3=cyan background,F=white text)
-Row         db  0                       ; Row (1-25)
-Col         db  0                       ; Col (1-80)
-TvRowOfs    dd  0                       ; Row Offset
-VidAdr      dd  0                       ; Video Address
 ; Equates
 VidMem      equ 0B8000h                 ; Video Memory (Starting Address)
 TotCol      equ 80                      ; width and height of screen
@@ -210,8 +224,6 @@ White       equ 0Fh                     ; White
 ;--------------------------------------------------------------------------------------------------
 ; Keyboard
 ;--------------------------------------------------------------------------------------------------
-; Variables
-KbChar      db  0                       ; Keyboard character
 ; Make scancodes
 Scancode    db 01Eh, 030h, 02Eh, 020h, 012h, 021h, 022h, 023h, 017h, 024h, 025h, 026h     ; Make Scancodes
             db 032h, 031h, 018h, 019h, 010h, 013h, 01Fh, 014h, 016h, 02Fh, 011h, 02Dh     ;  a-z keys
