@@ -356,7 +356,7 @@ Main:
     ;----------------------------
     ; Set Data Segement registers
     ;----------------------------
-    cli                                 ; Disable interrupts and never re-enable in this stage
+    cli                                 ; Disable interrupts, we don't need them yet
     xor   ax,ax                         ; Zero out AX
     mov   ds,ax                         ; Set data segments to null
     mov   es,ax                         ; Set extra segment to null

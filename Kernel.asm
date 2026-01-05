@@ -48,6 +48,7 @@ IDT2:
 ; Kernel Entry Point
 ;--------------------------------------------------------------------------------------------------
 Stage3:
+  cli                                   ; Disable interrupts during setup
   ; Set up segments, stack, GDT, IDT
   lea   eax,[GDTDescriptor]             ; Load the GDT
   lgdt  [eax]                           ;  register
