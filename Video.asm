@@ -94,17 +94,23 @@ PutStr:
     add   esi,2                         ; Bump past the length field to the beginning of string
 PutStr1:
     mov   bl,[esi]                      ; Get next character
-    cmp   bl,0Ah                        ; NewLine?
+    cmp   bl,0Dh                        ; CR?
     jne   PutStr2                       ;  No
     xor   eax,eax                       ;  Yes
     mov   al,1                          ;   Set Col
-    mov   [Col],al                      ;   back to
-    mov   al,[Row]                      ;   1 and
-    inc   al                            ;   bump row
-    mov   [Row],al                      ;   by 1
-    call  CalcVideoAddr                 ; Calculate video address
-    jmp   PutStr3                       ; Continue
+    mov   [Col],al                      ;   to 1
+    call  CalcVideoAddr                 ;   and update address
+    jmp   PutStr5                       ; Continue
 PutStr2:
+    cmp   bl,0Ah                        ; LF?
+    jne   PutStr3                       ;  No
+    xor   eax,eax                       ;  Yes
+    mov   al,[Row]                      ;   bump row
+    inc   al                            ;   by 1
+    mov   [Row],al                      ;   (do not change Col)
+    call  CalcVideoAddr                 ;   and update address
+    jmp   PutStr5                       ; Continue
+PutStr3:
     mov   [Char],bl                     ; Stash our character
     call  PutChar                       ; Print it out
     mov   eax,[VidAdr]                  ; Bump
@@ -114,7 +120,7 @@ PutStr2:
     mov   al,[Col]                      ;  Col
     add   al,1                          ;  by
     mov   [Col],al                      ;  1
-PutStr3:
+PutStr5:
     inc   esi                           ; Bump ESI to next character in our string
     loop  PutStr1                       ; Loop (Decrement CX each time until CX is zero)
     call  MoveCursor                    ; Update cursor (do this once after displaying the string, more efficient)

@@ -178,8 +178,8 @@ HexDump1:
 %%EndStr:
 %endmacro
 
-String  Buffer,"XXXXXXXX"
-String  NewLine,0Ah
+String  Buffer,"XXXXXXXX"               ; General purpose string buffer (8 chars + 2 byte length)
+String  NewLine,`\r\n`                  ; Carriage Return + Line Feed
 
 ; Kernel Context (all mutable "variables" live here)
 align 4
