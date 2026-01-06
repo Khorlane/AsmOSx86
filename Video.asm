@@ -80,7 +80,7 @@ PutChar:
     ret                                 ; Return to caller
 
 ;---------------------------------
-; Print a null terminated string
+; Print a string to the screen
 ; EBX = address of string to print
 ;---------------------------------
 PutStr:
