@@ -1,6 +1,8 @@
 # zCombineAll.ps1
 # Combines all .asm, .ps1, and README.md files (recursively) into one file
 # with clear file boundaries, for review and archival purposes.
+#
+# Excludes Boot1.asm and Boot2.asm (kernel focus)
 
 $OutputFile = "AsmOSx86_FullDump.lst"
 
@@ -11,7 +13,11 @@ if (Test-Path $OutputFile) {
 
 Get-ChildItem -Recurse -File |
     Where-Object {
-        $_.Extension -in @(".asm", ".ps1") -or $_.Name -ieq "README.md"
+        (
+            $_.Extension -in @(".asm", ".ps1") -or
+            $_.Name -ieq "README.md"
+        ) -and
+        $_.Name -inotmatch '^Boot[12]\.asm$'
     } |
     Sort-Object FullName |
     ForEach-Object {
