@@ -128,8 +128,8 @@ DebugIt:
   call  HexDump                         ; Convert BYTE4 to hex string in Buffer
   mov   ebx,Buffer                      ; Put
   call  PutStr                          ;  string
-  mov   ebx,NewLine                     ; Put
-  call  PutStr                          ;  newline
+  mov   ebx,CrLf                        ; Put
+  call  PutStr                          ;  CrLf
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -147,8 +147,8 @@ KbPrintChar1:
   loop  KbPrintChar1                    ;  spaces
   mov   ebx,Buffer                      ; Put
   call  PutStr                          ;  string
-  mov   ebx,NewLine                     ; Put
-  call  PutStr                          ;  newline
+  mov   ebx,CrLf                        ; Put
+  call  PutStr                          ;  CrLf
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -184,7 +184,7 @@ HexDump1:
 %endmacro
 
 String  Buffer,"XXXXXXXX"               ; General purpose string buffer (8 chars + 2 byte length)
-String  NewLine,0Dh,0Ah                 ; Carriage Return + Line Feed
+String  CrLf,0Dh,0Ah                    ; Carriage Return + Line Feed (CrLf)
 
 ; Kernel Context (all mutable "variables" live here)
 align 4
