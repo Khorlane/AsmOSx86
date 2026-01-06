@@ -172,14 +172,19 @@ HexDump1:
 ;--------------------------------------------------------------------------------------------------
 ; Working Storage
 ;--------------------------------------------------------------------------------------------------
-%macro String 2
+%macro String 2+
 %1          dw  %%EndStr-%1
             db  %2
+%rotate 1
+%rep %0-2
+            db  %2
+%rotate 1
+%endrep
 %%EndStr:
 %endmacro
 
 String  Buffer,"XXXXXXXX"               ; General purpose string buffer (8 chars + 2 byte length)
-String  NewLine,`\r\n`                  ; Carriage Return + Line Feed
+String  NewLine,0Dh,0Ah                 ; Carriage Return + Line Feed
 
 ; Kernel Context (all mutable "variables" live here)
 align 4
