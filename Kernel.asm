@@ -179,6 +179,7 @@ HexDump1:
 ;--------------------------------------------------------------------------------------------------
 ; Working Storage
 ;--------------------------------------------------------------------------------------------------
+; String Macro - Define a string with length prefix
 %macro String 2+
 %1          dw  %%EndStr-%1
             db  %2
@@ -189,13 +190,12 @@ HexDump1:
 %endrep
 %%EndStr:
 %endmacro
-
+; Strings
 String  Buffer,"XXXXXXXX"               ; General purpose string buffer (8 chars + 2 byte length)
 String  CnBannerStr,"AsmOSx86 Console (Session 0)"
 String  CnBootMsg,"A Hobbyist Operating System in x86 Assembly"
 String  CrLf,0Dh,0Ah                    ; Carriage Return + Line Feed (CrLf)
 String  TimeStr,"HH:MM:SS"              ; Time string buffer
-
 
 ; Kernel Context (all mutable "variables" live here)
 align 4
