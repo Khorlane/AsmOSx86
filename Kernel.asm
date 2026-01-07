@@ -43,6 +43,7 @@ IDT2:
 %include "Console.asm"
 %include "Floppy.asm"
 %include "Keyboard.asm"
+%include "Time.asm"
 %include "Video.asm"
 
 ;--------------------------------------------------------------------------------------------------
@@ -80,6 +81,7 @@ FlushCS:
   ; Console
   call  CnInit                          ; Initialize console
   call  CnBoot                          ; Print initial boot messages
+  call  TimePrint                       ; Time (HH:MM:SS) -> TimeStr -> Console
 
   ; Debug addresses and memory content
   mov   eax,0DEADBEEFh                  ; Dump a
@@ -192,6 +194,8 @@ String  Buffer,"XXXXXXXX"               ; General purpose string buffer (8 chars
 String  CnBannerStr,"AsmOSx86 Console (Session 0)"
 String  CnBootMsg,"A Hobbyist Operating System in x86 Assembly"
 String  CrLf,0Dh,0Ah                    ; Carriage Return + Line Feed (CrLf)
+String  TimeStr,"HH:MM:SS"              ; Time string buffer
+
 
 ; Kernel Context (all mutable "variables" live here)
 align 4
