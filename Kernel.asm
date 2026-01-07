@@ -44,6 +44,7 @@ IDT2:
 %include "Floppy.asm"
 %include "Keyboard.asm"
 %include "Time.asm"
+%include "Timer.asm"
 %include "Video.asm"
 
 ;--------------------------------------------------------------------------------------------------
@@ -66,6 +67,10 @@ FlushCS:
   lea   eax,[IDT2]                      ; Load the IDT
   lidt  [eax]                           ;  register
 
+  ; Initialize components
+  call  TimerInit                       ; Initialize PIT timer
+  call  CnInit                          ; Initialize console
+
   ; Clear screen
   mov   al,Black                        ; Background
   mov   [ColorBack],al                  ;  color
@@ -79,9 +84,11 @@ FlushCS:
   mov   [Col],al                        ;  1,1
 
   ; Console
-  call  CnInit                          ; Initialize console
   call  CnBoot                          ; Print initial boot messages
-  call  TimePrint                       ; Time (HH:MM:SS) -> TimeStr -> Console
+  call  TimePrint                       ; Time (HH:MM:SS)
+  mov   eax,1000                        ; Delay                 
+  call  TimerDelayMs                    ;  1 second
+  call  TimePrint                       ; Time (HH:MM:SS) again
 
   ; Debug addresses and memory content
   mov   eax,0DEADBEEFh                  ; Dump a
