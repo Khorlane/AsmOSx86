@@ -6,14 +6,15 @@
 ;   It is the machine console used for boot/status/debug output and
 ;   operator-only commands (later).
 ;
-;   Policy:
+;   Contract (current):
 ;     - Console writes strings ONLY (PutStr).
+;     - Console messages ALWAYS end with CrLf.
 ;     - Mode 0 newline: CR and LF are separate controls with their
 ;       traditional meanings (handled inside PutStr).
 ;**********************************************************
 
 ;--------------------------------------------------------------------------------------------------
-; ConsoleInit - initialize console state (colors, start row/col, etc.)
+; CnInit - initialize console state (colors, start row/col, etc.)
 ;--------------------------------------------------------------------------------------------------
 CnInit:
   pusha                                 ; Save registers
@@ -23,12 +24,23 @@ CnInit:
   ret                                   ; Return to caller
 
 ;--------------------------------------------------------------------------------------------------
-; CnMsg - Print a console message (string)
+; CnCrLf - print CrLf
+;--------------------------------------------------------------------------------------------------
+CnCrLf:
+  pusha                                 ; Save registers
+  mov   ebx,CrLf                        ; Put
+  call  PutStr                          ;  CrLf
+  popa                                  ; Restore registers
+  ret                                   ; Return to caller
+
+;--------------------------------------------------------------------------------------------------
+; CnPrint - Print a console message (string) followed by CrLf
 ;   EBX = Address of String to print
 ;--------------------------------------------------------------------------------------------------
-CnMsg:
+CnPrint:
   pusha                                 ; Save registers
   call  PutStr                          ; Print the string
+  call  CnCrLf                          ;  followed by CrLf
   popa                                  ; Restore registers
   ret                                   ; Return to caller
 
@@ -38,8 +50,17 @@ CnMsg:
 CnBanner:
   pusha                                 ; Save registers
   mov   ebx,CnBannerStr                 ; Put banner
-  call  PutStr                          ;  string
-  mov   ebx,CrLf                        ; Put
-  call  PutStr                          ;  CrLf
+  call  CnPrint                         ;  string (+ CrLf)
+  popa                                  ; Restore registers
+  ret                                   ; Return to caller
+
+;--------------------------------------------------------------------------------------------------
+; CnBoot - Print boot-time console output
+;--------------------------------------------------------------------------------------------------
+CnBoot:
+  pusha                                 ; Save registers
+  call  CnBanner                        ; Print banner (+ CrLf)
+  mov   ebx,CnBootMsg                   ; Put boot
+  call  CnPrint                         ;  message (+ CrLf)
   popa                                  ; Restore registers
   ret                                   ; Return to caller

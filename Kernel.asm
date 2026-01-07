@@ -75,18 +75,11 @@ FlushCS:
   mov   al,1                            ; Set
   mov   [Row],al                        ;  Row,Col
   mov   al,1                            ;  to
-  mov   [Col],al                        ;  10,1
+  mov   [Col],al                        ;  1,1
 
   ; Console
   call  CnInit                          ; Initialize console
-  mov   ebx,CnBannerStr                 ; Put banner
-  call  CnMsg                           ;  message
-  mov   ebx,CrLf                        ; Put
-  call  PutStr                          ;  CrLf
-  mov   ebx,CnBootMsg                   ; Put boot
-  call  CnMsg                           ;  message
-  mov   ebx,CrLf                        ; Put
-  call  PutStr                          ;  CrLf
+  call  CnBoot                          ; Print initial boot messages
 
   ; Debug addresses and memory content
   mov   eax,0DEADBEEFh                  ; Dump a
