@@ -40,6 +40,7 @@ IDT2:
 ;--------------------------------------------------------------------------------------------------
 ; Include Major Components
 ;--------------------------------------------------------------------------------------------------
+%include "Console.asm"
 %include "Floppy.asm"
 %include "Keyboard.asm"
 %include "Video.asm"
@@ -71,10 +72,21 @@ FlushCS:
   mov   [ColorFore],al                  ;  color
   call  SetColorAttr                    ; Set color
   call  ClrScr                          ; Clear screen
-  mov   al,10                           ; Set
+  mov   al,1                            ; Set
   mov   [Row],al                        ;  Row,Col
   mov   al,1                            ;  to
   mov   [Col],al                        ;  10,1
+
+  ; Console
+  call  CnInit                          ; Initialize console
+  mov   ebx,CnBannerStr                 ; Put banner
+  call  CnMsg                           ;  message
+  mov   ebx,CrLf                        ; Put
+  call  PutStr                          ;  CrLf
+  mov   ebx,CnBootMsg                   ; Put boot
+  call  CnMsg                           ;  message
+  mov   ebx,CrLf                        ; Put
+  call  PutStr                          ;  CrLf
 
   ; Debug addresses and memory content
   mov   eax,0DEADBEEFh                  ; Dump a
@@ -184,6 +196,8 @@ HexDump1:
 %endmacro
 
 String  Buffer,"XXXXXXXX"               ; General purpose string buffer (8 chars + 2 byte length)
+String  CnBannerStr,"AsmOSx86 Console (Session 0)"
+String  CnBootMsg,"A Hobbyist Operating System in x86 Assembly"
 String  CrLf,0Dh,0Ah                    ; Carriage Return + Line Feed (CrLf)
 
 ; Kernel Context (all mutable "variables" live here)
