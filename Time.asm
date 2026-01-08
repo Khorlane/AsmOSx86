@@ -1,18 +1,115 @@
-;**********************************************************
+;**************************************************************************************************
 ; Time.asm
-;   Time support (RTC + PIT)
-;   - CMOS read for baseline wall clock (HH:MM:SS)
-;   - PIT polled ticks for monotonic elapsed time (no IRQ)
-;   - 386-safe (no 64-bit instructions; uses 32-bit ops + loops)
+;   Time services for AsmOSx86 (RTC + PIT)
 ;
-;   Exported:
-;     TimeInit
-;     TimeReadCmos
-;     TimeSync
-;     TimeNow
-;     TimeFmtHms        ; EBX = dest String (8 chars), fills "HH:MM:SS"
-;     TimePrint
-;**********************************************************
+;   Scope:
+;     - Wall (calendar) time via CMOS/RTC
+;     - Monotonic (uptime) time via PIT polling
+;     - No IRQs required
+;     - 386-safe (no 64-bit instructions; 64-bit values via EDX:EAX)
+;
+;==================================================================================================
+; TIME MODEL — MONOTONIC vs WALL
+;
+; AsmOSx86 treats time as TWO DISTINCT SERVICES.
+; This separation is intentional and MUST NOT be violated.
+;
+;   A) TimeMono — Monotonic / Uptime Time
+;   B) TimeWall — Wall / Calendar Time
+;
+;--------------------------------------------------------------------------------------------------
+; A) TimeMono — Monotonic / Uptime Service
+;
+; Definition
+;   - Represents elapsed time since boot.
+;   - MUST be monotonic (never goes backward).
+;   - MUST NOT jump forward except by natural progression.
+;   - MUST remain valid even if CMOS/RTC is incorrect or unavailable.
+;
+; Backing Source (current implementation)
+;   - PIT channel 0, polled
+;   - Wrap-aware down-counter tracking (Timer.asm)
+;
+; Kernel-Facing Contract
+;   TimerInit
+;     - Initialize the monotonic time source.
+;     - Safe to call multiple times.
+;
+;   TimerNowTicks
+;     - Returns EDX:EAX = monotonic tick count.
+;     - Resolution: PIT input clock (1 / 1,193,182 seconds per tick).
+;     - Returned value MUST be >= any previously returned value.
+;
+;   TimerDelayMs
+;     - Input: EAX = milliseconds
+;     - Busy-wait delay using TimerNowTicks.
+;     - Accuracy is “good enough” for early boot.
+;
+; Rules
+;   - ALL delays, timeouts, scheduling, profiling, and uptime
+;     MUST use TimeMono ONLY.
+;
+;--------------------------------------------------------------------------------------------------
+; B) TimeWall — Wall / Calendar Service
+;
+; Definition
+;   - Human-readable time (HH:MM:SS, later date).
+;   - MAY jump (user-set time, RTC correction, drift adjustment).
+;   - MUST NOT be used for scheduling or delays.
+;
+; Backing Sources
+;   - CMOS/RTC read at synchronization points.
+;   - TimeMono ticks used to advance wall time between syncs.
+;
+; Kernel-Facing Contract
+;   TimeSync
+;     - Reads CMOS/RTC ONCE (UIP-safe).
+;     - Captures wall-time baseline.
+;     - Captures corresponding monotonic tick baseline.
+;     - May be called at boot and later for resynchronization.
+;
+;   TimeNow
+;     - Computes current wall time as:
+;         wall_baseline + (TimerNowTicks - tick_baseline)
+;     - Updates internal TimeHour / TimeMin / TimeSec state.
+;     - MUST NOT read CMOS directly.
+;
+;   TimeFmtHms
+;     - EBX = destination String (8 payload bytes)
+;     - Writes "HH:MM:SS" into [EBX+2 .. EBX+9]
+;     - Formatting only; no I/O.
+;
+;   TimePrint (helper)
+;     - Calls TimeNow
+;     - Calls TimeFmtHms
+;     - Prints via Console (CnPrint)
+;     - MUST NOT read CMOS directly.
+;
+;--------------------------------------------------------------------------------------------------
+; HARD RULES (DESIGN LOCK-IN)
+;
+; 1) Ownership
+;    - ALL timekeeping logic lives in Time.asm.
+;    - Kernel code MUST NOT access CMOS or PIT directly.
+;
+; 2) Separation
+;    - TimeMono is for correctness and stability.
+;    - TimeWall is for presentation only.
+;
+; 3) Forward Compatibility
+;    - Future changes (IRQs, higher-res timers, SMP,
+;      drift correction, different hardware) MUST NOT
+;      require kernel changes.
+;
+;==================================================================================================
+; Exported:
+;   TimeInit
+;   TimeReadCmos        ; internal helper (used by TimeSync only)
+;   TimeSync
+;   TimeNow
+;   TimeFmtHms
+;   TimePrint
+;**************************************************************************************************
 
 [bits 32]
 
