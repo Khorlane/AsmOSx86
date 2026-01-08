@@ -1,121 +1,53 @@
 ;**************************************************************************************************
 ; Time.asm
-;   Time services for AsmOSx86 (RTC + PIT)
+;   Time support (RTC + PIT)
+;   - CMOS read for baseline wall clock (HH:MM:SS)
+;   - PIT polled ticks for monotonic elapsed time (no IRQ)
+;   - 386-safe (no 64-bit instructions; uses EDX:EAX pairs)
+;===================================================================================================
+; TIME CONTRACTS — MONOTONIC (UPTIME) vs WALL (CALENDAR)
 ;
-;   Scope:
-;     - Wall (calendar) time via CMOS/RTC
-;     - Monotonic (uptime) time via PIT polling
-;     - No IRQs required
-;     - 386-safe (no 64-bit instructions; 64-bit values via EDX:EAX)
+; Purpose
+;   AsmOSx86 treats “time” as TWO separate services:
+;     (A) TimeMono  = monotonic uptime time (never goes backward,never jumps)
+;     (B) TimeWall  = wall/calendar time (human-readable; may jump/correct)
 ;
-;==================================================================================================
-; TIME MODEL — MONOTONIC vs WALL
+; Rule of Use
+;   - Use TimeMono (Timer*) for: delays,timeouts,scheduling,profiling,uptime.
+;   - Use TimeWall (Time*)  for: timestamps,logs,human-readable clock display.
 ;
-; AsmOSx86 treats time as TWO DISTINCT SERVICES.
-; This separation is intentional and MUST NOT be violated.
+; Ownership (LOCKED-IN)
+;   - ALL timekeeping logic lives in Time.asm.
+;   - The kernel MUST NOT read CMOS or PIT directly.
+;   - CMOS,PIT,resync,and future IRQ handling are internal details.
 ;
-;   A) TimeMono — Monotonic / Uptime Time
-;   B) TimeWall — Wall / Calendar Time
+; Dependencies
+;   - Requires Timer.asm contract:
+;       TimerInit
+;       TimerNowTicks     ; returns EDX:EAX ticks (PIT input ticks)
+;   - Requires Console.asm contract:
+;       CnPrint           ; EBX=String,prints+CrLf
+;   - Requires Kernel working storage:
+;       String  TimeStr,"XXXXXXXX"   ; payload 8 chars
 ;
-;--------------------------------------------------------------------------------------------------
-; A) TimeMono — Monotonic / Uptime Service
+; Resync Policy (B,locked-in for now)
+;   - TimeNow will resync wall baseline every 60 seconds of monotonic time.
+;   - Resync reads CMOS once and snaps wall baseline (wall may jump).
 ;
-; Definition
-;   - Represents elapsed time since boot.
-;   - MUST be monotonic (never goes backward).
-;   - MUST NOT jump forward except by natural progression.
-;   - MUST remain valid even if CMOS/RTC is incorrect or unavailable.
-;
-; Backing Source (current implementation)
-;   - PIT channel 0, polled
-;   - Wrap-aware down-counter tracking (Timer.asm)
-;
-; Kernel-Facing Contract
-;   TimerInit
-;     - Initialize the monotonic time source.
-;     - Safe to call multiple times.
-;
-;   TimerNowTicks
-;     - Returns EDX:EAX = monotonic tick count.
-;     - Resolution: PIT input clock (1 / 1,193,182 seconds per tick).
-;     - Returned value MUST be >= any previously returned value.
-;
-;   TimerDelayMs
-;     - Input: EAX = milliseconds
-;     - Busy-wait delay using TimerNowTicks.
-;     - Accuracy is “good enough” for early boot.
-;
-; Rules
-;   - ALL delays, timeouts, scheduling, profiling, and uptime
-;     MUST use TimeMono ONLY.
-;
-;--------------------------------------------------------------------------------------------------
-; B) TimeWall — Wall / Calendar Service
-;
-; Definition
-;   - Human-readable time (HH:MM:SS, later date).
-;   - MAY jump (user-set time, RTC correction, drift adjustment).
-;   - MUST NOT be used for scheduling or delays.
-;
-; Backing Sources
-;   - CMOS/RTC read at synchronization points.
-;   - TimeMono ticks used to advance wall time between syncs.
-;
-; Kernel-Facing Contract
-;   TimeSync
-;     - Reads CMOS/RTC ONCE (UIP-safe).
-;     - Captures wall-time baseline.
-;     - Captures corresponding monotonic tick baseline.
-;     - May be called at boot and later for resynchronization.
-;
-;   TimeNow
-;     - Computes current wall time as:
-;         wall_baseline + (TimerNowTicks - tick_baseline)
-;     - Updates internal TimeHour / TimeMin / TimeSec state.
-;     - MUST NOT read CMOS directly.
-;
-;   TimeFmtHms
-;     - EBX = destination String (8 payload bytes)
-;     - Writes "HH:MM:SS" into [EBX+2 .. EBX+9]
-;     - Formatting only; no I/O.
-;
-;   TimePrint (helper)
-;     - Calls TimeNow
-;     - Calls TimeFmtHms
-;     - Prints via Console (CnPrint)
-;     - MUST NOT read CMOS directly.
-;
-;--------------------------------------------------------------------------------------------------
-; HARD RULES (DESIGN LOCK-IN)
-;
-; 1) Ownership
-;    - ALL timekeeping logic lives in Time.asm.
-;    - Kernel code MUST NOT access CMOS or PIT directly.
-;
-; 2) Separation
-;    - TimeMono is for correctness and stability.
-;    - TimeWall is for presentation only.
-;
-; 3) Forward Compatibility
-;    - Future changes (IRQs, higher-res timers, SMP,
-;      drift correction, different hardware) MUST NOT
-;      require kernel changes.
-;
-;==================================================================================================
-; Exported:
+; Exported
 ;   TimeInit
-;   TimeReadCmos        ; internal helper (used by TimeSync only)
 ;   TimeSync
 ;   TimeNow
 ;   TimeFmtHms
 ;   TimePrint
+;   TimeUptimeFmtHms      ; formats uptime "HH:MM:SS" (hours mod 100)
 ;**************************************************************************************************
 
 [bits 32]
 
-;--------------------------------------------------------------------------------------------------
+;---------------------------------------------------------------------------------------------------
 ; CMOS ports
-;--------------------------------------------------------------------------------------------------
+;---------------------------------------------------------------------------------------------------
 CMOS_ADDR       equ 070h
 CMOS_DATA       equ 071h
 CMOS_NMI        equ 080h
@@ -124,170 +56,166 @@ CMOS_NMI        equ 080h
 RTC_SEC         equ 00h
 RTC_MIN         equ 02h
 RTC_HOUR        equ 04h
-RTC_DAY         equ 07h
-RTC_MON         equ 08h
-RTC_YEAR        equ 09h
 RTC_STATUSA     equ 0Ah
 RTC_STATUSB     equ 0Bh
 
 ; StatusA bits
-RTC_UIP         equ 080h                ; Update In Progress
+RTC_UIP         equ 080h
 
 ; StatusB bits
-RTC_BCD         equ 004h                ; 1 = binary, 0 = BCD
-RTC_24H         equ 002h                ; 1 = 24 hour mode, 0 = 12 hour mode
+RTC_BCD         equ 004h                ; 1=binary,0=BCD
+RTC_24H         equ 002h                ; 1=24h,0=12h
 
-; PIT input clock (Hz) (must match Timer.asm contract)
+;---------------------------------------------------------------------------------------------------
+; PIT clock constants
+;---------------------------------------------------------------------------------------------------
 TIME_PIT_HZ     equ 1193182
+TIME_DAY_SEC    equ 86400
+TIME_RSYNC_SEC  equ 60
+
+TIME_RSYNC_TLO  equ (TIME_PIT_HZ*TIME_RSYNC_SEC) & 0FFFFFFFFh
+TIME_RSYNC_THI  equ (TIME_PIT_HZ*TIME_RSYNC_SEC) >> 32
 
 section .data
-;--------------------------------------------------------------------------------------------------
-; RTC snapshot (current wall-clock)
-;--------------------------------------------------------------------------------------------------
+;---------------------------------------------------------------------------------------------------
+; Raw CMOS fields (binary,24h after TimeReadCmos)
+;---------------------------------------------------------------------------------------------------
 TimeSec         db 0
 TimeMin         db 0
 TimeHour        db 0
-TimeDay         db 0
-TimeMon         db 0
-TimeYear        db 0
 TimeStatB       db 0
 
-;--------------------------------------------------------------------------------------------------
-; Baseline for PIT-derived wall-clock
-;--------------------------------------------------------------------------------------------------
-TimeSynced      db 0
-TimeBaseSec     db 0
-TimeBaseMin     db 0
-TimeBaseHour    db 0
-TimeBaseTicksLo dd 0
-TimeBaseTicksHi dd 0
+;---------------------------------------------------------------------------------------------------
+; Wall time state
+;---------------------------------------------------------------------------------------------------
+WallSecDay      dd 0                    ; 0..86399
+WallRemTicks    dd 0                    ; 0..TIME_PIT_HZ-1
+
+WallLastLo      dd 0                    ; last mono tick observed by TimeNow
+WallLastHi      dd 0
+
+WallSyncLo      dd 0                    ; mono tick at last TimeSync
+WallSyncHi      dd 0
+WallSyncValid   db 0
+
+;---------------------------------------------------------------------------------------------------
+; Uptime baseline (boot ticks)
+;---------------------------------------------------------------------------------------------------
+BootLo          dd 0
+BootHi          dd 0
+BootValid       db 0
 
 section .text
 
-;--------------------------------------------------------------------------------------------------
-; TimeInit - placeholder (kept for symmetry)
-;--------------------------------------------------------------------------------------------------
+;---------------------------------------------------------------------------------------------------
+; TimeInit - capture boot baseline for uptime
+;---------------------------------------------------------------------------------------------------
 TimeInit:
   pusha                                 ; Save registers
-  popa                                  ; Restore registers
-  ret                                   ; Return to caller
+  call  TimerInit                       ; Ensure PIT programmed
+  call  TimerNowTicks                   ; EDX:EAX = now
+  mov   [BootLo],eax                    ; Boot tick baseline
+  mov   [BootHi],edx
+  mov   byte[BootValid],1
+  popa
+  ret
 
-;--------------------------------------------------------------------------------------------------
-; TimeCmosReadReg - Read one CMOS register
-;   AL = register index
-;   Returns AL = value
-;--------------------------------------------------------------------------------------------------
+;---------------------------------------------------------------------------------------------------
+; TimeCmosReadReg - AL=register,returns AL=value
+;---------------------------------------------------------------------------------------------------
 TimeCmosReadReg:
-  push  edx                             ; Save edx
-  mov   dx,CMOS_ADDR                    ; CMOS address port
-  or    al,CMOS_NMI                     ; Keep NMI disabled while reading
-  out   dx,al                           ; Select register
-  mov   dx,CMOS_DATA                    ; CMOS data port
-  in    al,dx                           ; Read value
-  pop   edx                             ; Restore edx
-  ret                                   ; Return to caller
+  push  edx
+  mov   dx,CMOS_ADDR
+  or    al,CMOS_NMI                     ; NMI off while reading
+  out   dx,al
+  mov   dx,CMOS_DATA
+  in    al,dx
+  pop   edx
+  ret
 
-;--------------------------------------------------------------------------------------------------
-; TimeWaitNotUip - Wait until UIP clears
-;--------------------------------------------------------------------------------------------------
+;---------------------------------------------------------------------------------------------------
+; TimeWaitNotUip - wait until RTC not updating
+;---------------------------------------------------------------------------------------------------
 TimeWaitNotUip:
-  pusha                                 ; Save registers
-TimeWaitNotUip1:
-  mov   al,RTC_STATUSA                  ; Read status A
-  call  TimeCmosReadReg                 ; AL = StatusA
-  test  al,RTC_UIP                      ; UIP set?
-  jnz   TimeWaitNotUip1                 ;  Yes, keep waiting
-  popa                                  ; Restore registers
-  ret                                   ; Return to caller
+  pusha
+.TimeWait1:
+  mov   al,RTC_STATUSA
+  call  TimeCmosReadReg
+  test  al,RTC_UIP
+  jnz   .TimeWait1
+  popa
+  ret
 
-;--------------------------------------------------------------------------------------------------
-; TimeBcdToBin - Convert BCD in AL to binary in AL
-;--------------------------------------------------------------------------------------------------
+;---------------------------------------------------------------------------------------------------
+; TimeBcdToBin - AL=BCD,returns AL=binary
+;---------------------------------------------------------------------------------------------------
 TimeBcdToBin:
-  push  ebx                             ; Save ebx
-  mov   bl,al                           ; Copy AL
-  and   al,0Fh                          ; AL = low digit
-  shr   bl,4                            ; BL = high digit
-  movzx ebx,bl                          ; EBX = high digit
-  imul  ebx,10                          ; EBX *= 10
-  add   al,bl                           ; AL += (high*10)
-  pop   ebx                             ; Restore ebx
-  ret                                   ; Return to caller
+  push  ebx
+  mov   bl,al
+  and   al,0Fh
+  shr   bl,4
+  movzx ebx,bl
+  imul  ebx,10
+  add   al,bl
+  pop   ebx
+  ret
 
-;--------------------------------------------------------------------------------------------------
-; TimeNormalizeHour - Normalize hour to 24h in AL
-;   Uses TimeStatB to decide 12h vs 24h and BCD vs binary is already handled.
-;   In 12h mode: bit7 of hour is PM flag.
-;--------------------------------------------------------------------------------------------------
+;---------------------------------------------------------------------------------------------------
+; TimeNormalizeHour - AL=hour (maybe PM bit in 12h),returns AL=0..23
+;---------------------------------------------------------------------------------------------------
 TimeNormalizeHour:
-  push  ebx                             ; Save ebx
-  mov   bl,[TimeStatB]                  ; StatusB
-  test  bl,RTC_24H                      ; 24h mode?
-  jnz   TimeNormalizeHour3              ;  Yes, done
-  ; 12h mode: bit7 = PM
-  mov   bl,al                           ; BL = hour raw
-  and   bl,080h                         ; BL = PM flag
-  and   al,07Fh                         ; AL = hour 1..12
-  cmp   al,12                           ; hour == 12?
-  jne   TimeNormalizeHour1              ;  No
-  mov   al,0                            ;  12AM -> 00, 12PM handled below
-TimeNormalizeHour1:
-  cmp   bl,080h                         ; PM?
-  jne   TimeNormalizeHour3              ;  No
-  add   al,12                           ;  Yes, add 12
-TimeNormalizeHour3:
-  pop   ebx                             ; Restore ebx
-  ret                                   ; Return to caller
+  push  ebx
+  mov   bl,[TimeStatB]
+  test  bl,RTC_24H
+  jnz   .Done
+  mov   bl,al
+  and   bl,080h                         ; PM flag
+  and   al,07Fh                         ; 1..12
+  cmp   al,12
+  jne   .ChkPm
+  mov   al,0                            ; 12AM -> 00
+.ChkPm:
+  cmp   bl,080h
+  jne   .Done
+  add   al,12                           ; PM add 12
+.Done:
+  pop   ebx
+  ret
 
-;--------------------------------------------------------------------------------------------------
-; TimeReadCmos - Read RTC into Time* variables (stable read)
-;--------------------------------------------------------------------------------------------------
+;---------------------------------------------------------------------------------------------------
+; TimeReadCmos - reads HH:MM:SS into TimeHour/Min/Sec (binary,24h)
+;---------------------------------------------------------------------------------------------------
 TimeReadCmos:
-  pusha                                 ; Save registers
+  pusha
+.Read1:
+  call  TimeWaitNotUip
 
-TimeReadCmos1:
-  call  TimeWaitNotUip                  ; Wait until not updating
+  mov   al,RTC_STATUSB
+  call  TimeCmosReadReg
+  mov   [TimeStatB],al
 
-  mov   al,RTC_STATUSB                  ; Get StatusB (format flags)
-  call  TimeCmosReadReg                 ; AL = StatusB
-  mov   [TimeStatB],al                  ; Save for conversions
-
-  mov   al,RTC_SEC                      ; Read seconds
+  mov   al,RTC_SEC
   call  TimeCmosReadReg
   mov   [TimeSec],al
 
-  mov   al,RTC_MIN                      ; Read minutes
+  mov   al,RTC_MIN
   call  TimeCmosReadReg
   mov   [TimeMin],al
 
-  mov   al,RTC_HOUR                     ; Read hours
+  mov   al,RTC_HOUR
   call  TimeCmosReadReg
   mov   [TimeHour],al
 
-  mov   al,RTC_DAY                      ; Read day
+  mov   al,RTC_STATUSA
   call  TimeCmosReadReg
-  mov   [TimeDay],al
+  test  al,RTC_UIP
+  jnz   .Read1
 
-  mov   al,RTC_MON                      ; Read month
-  call  TimeCmosReadReg
-  mov   [TimeMon],al
-
-  mov   al,RTC_YEAR                     ; Read year (00-99)
-  call  TimeCmosReadReg
-  mov   [TimeYear],al
-
-  ; Re-check UIP to ensure we didn't cross an update boundary
-  mov   al,RTC_STATUSA                  ; Read StatusA
-  call  TimeCmosReadReg
-  test  al,RTC_UIP                      ; UIP set now?
-  jnz   TimeReadCmos1                   ;  Yes, retry the whole read
-
-  ; Convert BCD -> binary if needed
   mov   al,[TimeStatB]
-  test  al,RTC_BCD                      ; 1=binary, 0=BCD
-  jnz   TimeReadCmos2                   ; Already binary
+  test  al,RTC_BCD
+  jnz   .BcdDone
 
-  mov   al,[TimeSec]                    ; BCD -> bin
+  mov   al,[TimeSec]
   call  TimeBcdToBin
   mov   [TimeSec],al
 
@@ -295,256 +223,249 @@ TimeReadCmos1:
   call  TimeBcdToBin
   mov   [TimeMin],al
 
-  mov   al,[TimeHour]                   ; Keep PM bit if 12h mode
+  mov   al,[TimeHour]
   mov   ah,al
-  and   ah,080h                         ; AH = PM bit
-  and   al,07Fh                         ; AL = BCD hour digits
+  and   ah,080h                         ; PM bit
+  and   al,07Fh
   call  TimeBcdToBin
-  or    al,ah                           ; Restore PM bit
+  or    al,ah
   mov   [TimeHour],al
 
-  mov   al,[TimeDay]
-  call  TimeBcdToBin
-  mov   [TimeDay],al
-
-  mov   al,[TimeMon]
-  call  TimeBcdToBin
-  mov   [TimeMon],al
-
-  mov   al,[TimeYear]
-  call  TimeBcdToBin
-  mov   [TimeYear],al
-
-TimeReadCmos2:
-  ; Normalize hour to 24h in binary
+.BcdDone:
   mov   al,[TimeHour]
   call  TimeNormalizeHour
   mov   [TimeHour],al
 
-  popa                                  ; Restore registers
-  ret                                   ; Return to caller
-
-;--------------------------------------------------------------------------------------------------
-; TimeSync - Read CMOS once; snapshot PIT ticks as baseline
-;   Requires: TimerNowTicks exists (Timer.asm)
-;--------------------------------------------------------------------------------------------------
-TimeSync:
-  pusha                                 ; Save registers
-  call  TimeReadCmos                    ; Update TimeHour/Min/Sec
-  mov   al,[TimeSec]
-  mov   [TimeBaseSec],al
-  mov   al,[TimeMin]
-  mov   [TimeBaseMin],al
-  mov   al,[TimeHour]
-  mov   [TimeBaseHour],al
-  call  TimerNowTicks                   ; EDX:EAX = ticks
-  mov   [TimeBaseTicksLo],eax
-  mov   [TimeBaseTicksHi],edx
-  mov   byte[TimeSynced],1
-  popa                                  ; Restore registers
-  ret                                   ; Return to caller
-
-;--------------------------------------------------------------------------------------------------
-; TimeUDiv64By32 - Unsigned divide (EDX:EAX) / EBX
-;   Returns:
-;     EAX = quotient (32-bit)
-;     EDX = remainder
-;   Notes:
-;     - 386-safe, shift/subtract long division (64 iterations)
-;--------------------------------------------------------------------------------------------------
-TimeUDiv64By32:
-  pusha                                 ; Save registers
-  xor   edi,edi                         ; EDI = quotient (we build 32 bits; upper bits discarded)
-  xor   esi,esi                         ; ESI = remainder (32-bit)
-  mov   ecx,64                          ; 64 bits to process
-
-TimeUDiv1:
-  shl   eax,1                           ; shift dividend left
-  rcl   edx,1
-  rcl   esi,1                           ; remainder <<=1, bring in next bit
-
-  cmp   esi,ebx                         ; remainder >= divisor?
-  jb    TimeUDiv2
-  sub   esi,ebx                         ; remainder -= divisor
-  ; set quotient bit (we only keep low 32 bits: shift in)
-  shl   edi,1
-  or    edi,1
-  jmp   TimeUDiv3
-
-TimeUDiv2:
-  shl   edi,1
-
-TimeUDiv3:
-  loop  TimeUDiv1
-
-  ; Return quotient in EAX, remainder in EDX
-  mov   [TimeYear],cl                   ; dummy write to keep no-op? (not used)
-  mov   eax,edi
-  mov   edx,esi
-  ; Restore regs but keep return values staged
-  mov   [TimeMon],al                    ; stage (harmless)
   popa
-  ; Reload staged return (use locals instead of abusing TimeMon/Year)
-  ; (We avoid staging; instead do a simpler non-POPA version next rev.)
-  ; For now: re-run quickly without POPA clobber: caller uses wrapper below.
   ret
 
-;--------------------------------------------------------------------------------------------------
-; TimeDivTicksToSec - deltaTicks (EDX:EAX) -> seconds in EAX
-;   Uses divisor TIME_PIT_HZ
-;   Returns:
-;     EAX = seconds (quotient)
-;--------------------------------------------------------------------------------------------------
-TimeDivTicksToSec:
-  push  ebx                             ; Save ebx
-  mov   ebx,TIME_PIT_HZ
-  ; We can't use TimeUDiv64By32 as-is safely with PUSHA/POPA staging.
-  ; Implement compact 64/32 division without PUSHA here.
-  xor   edi,edi                         ; quotient
-  xor   esi,esi                         ; remainder
-  mov   ecx,64
+;---------------------------------------------------------------------------------------------------
+; TimeSync - read CMOS once and pin wall baseline to a monotonic tick
+;---------------------------------------------------------------------------------------------------
+TimeSync:
+  pusha
+  call  TimeReadCmos                    ; updates TimeHour/Min/Sec
 
-TimeDiv1:
-  shl   eax,1
-  rcl   edx,1
-  rcl   esi,1
-  cmp   esi,ebx
-  jb    TimeDiv2
-  sub   esi,ebx
-  shl   edi,1
-  or    edi,1
-  jmp   TimeDiv3
-TimeDiv2:
-  shl   edi,1
-TimeDiv3:
-  loop  TimeDiv1
+  xor   eax,eax
+  mov   al,[TimeHour]
+  mov   ebx,3600
+  mul   ebx                             ; EAX = hour*3600
+  mov   ecx,eax
 
-  mov   eax,edi                         ; quotient (seconds)
-  pop   ebx                             ; Restore ebx
-  ret                                   ; Return to caller
+  xor   eax,eax
+  mov   al,[TimeMin]
+  mov   ebx,60
+  mul   ebx                             ; EAX = min*60
+  add   ecx,eax
 
-;--------------------------------------------------------------------------------------------------
-; TimeNow - Update TimeHour/Min/Sec using PIT delta since last TimeSync
-;--------------------------------------------------------------------------------------------------
+  xor   eax,eax
+  mov   al,[TimeSec]
+  add   ecx,eax
+  mov   [WallSecDay],ecx
+
+  call  TimerNowTicks                   ; EDX:EAX = now
+  mov   [WallSyncLo],eax
+  mov   [WallSyncHi],edx
+  mov   [WallLastLo],eax
+  mov   [WallLastHi],edx
+  mov   dword[WallRemTicks],0
+  mov   byte[WallSyncValid],1
+  popa
+  ret
+
+;---------------------------------------------------------------------------------------------------
+; TimeNow - advance wall time using monotonic ticks (policy B resync)
+;---------------------------------------------------------------------------------------------------
 TimeNow:
-  pusha                                 ; Save registers
+  pusha
 
-  cmp   byte[TimeSynced],1
-  je    TimeNow1
+  cmp   byte[WallSyncValid],1
+  je    .HaveSync
   call  TimeSync
-TimeNow1:
-  call  TimerNowTicks                   ; EDX:EAX = now ticks
+  jmp   .UpdateHms
 
-  ; deltaTicks = now - base
-  sub   eax,[TimeBaseTicksLo]
-  sbb   edx,[TimeBaseTicksHi]           ; EDX:EAX = deltaTicks
+.HaveSync:
+  call  TimerNowTicks                   ; EDX:EAX = mono_now
+  mov   esi,eax                         ; now_lo
+  mov   edi,edx                         ; now_hi
 
-  ; deltaSec = deltaTicks / PIT_HZ
-  call  TimeDivTicksToSec               ; EAX = deltaSec (32-bit)
+  ; since_sync = mono_now - WallSync
+  mov   eax,esi
+  mov   edx,edi
+  sub   eax,[WallSyncLo]
+  sbb   edx,[WallSyncHi]
 
-  ; Build current = base + deltaSec (only HH:MM:SS for now)
-  movzx ebx,byte[TimeBaseSec]           ; EBX = base sec
-  movzx ecx,byte[TimeBaseMin]           ; ECX = base min
-  movzx edx,byte[TimeBaseHour]          ; EDX = base hour
+  cmp   edx,TIME_RSYNC_THI
+  jb    .NoResync
+  ja    .DoResync
+  cmp   eax,TIME_RSYNC_TLO
+  jb    .NoResync
 
-  add   ebx,eax                         ; sec += deltaSec
+.DoResync:
+  call  TimeSync
+  jmp   .UpdateHms
 
-  ; carry minutes
-TimeNowSecCarry:
-  cmp   ebx,60
-  jb    TimeNowMin
-  sub   ebx,60
-  inc   ecx
-  jmp   TimeNowSecCarry
+.NoResync:
+  ; delta = mono_now - WallLast
+  mov   eax,esi
+  mov   edx,edi
+  sub   eax,[WallLastLo]
+  sbb   edx,[WallLastHi]
 
-TimeNowMin:
-  ; carry hours
-TimeNowMinCarry:
-  cmp   ecx,60
-  jb    TimeNowHour
-  sub   ecx,60
-  inc   edx
-  jmp   TimeNowMinCarry
+  mov   [WallLastLo],esi
+  mov   [WallLastHi],edi
 
-TimeNowHour:
-  ; wrap hours 0..23
-TimeNowHourWrap:
-  cmp   edx,24
-  jb    TimeNowStore
-  sub   edx,24
-  jmp   TimeNowHourWrap
+  ; total = delta_lo + WallRemTicks
+  add   eax,[WallRemTicks]
+  adc   edx,0
 
-TimeNowStore:
-  mov   al,bl
-  mov   [TimeSec],al
-  mov   al,cl
-  mov   [TimeMin],al
-  mov   al,dl
+  ; seconds_add = total / TIME_PIT_HZ,rem = total % TIME_PIT_HZ
+  mov   ecx,TIME_PIT_HZ
+  div   ecx                             ; EAX=seconds_add,EDX=rem
+  mov   [WallRemTicks],edx
+
+  ; WallSecDay = (WallSecDay + seconds_add) % 86400
+  mov   ebx,[WallSecDay]
+  add   ebx,eax
+  mov   eax,ebx
+  xor   edx,edx
+  mov   ecx,TIME_DAY_SEC
+  div   ecx                             ; EDX=sec_of_day
+  mov   [WallSecDay],edx
+
+.UpdateHms:
+  ; Derive H:M:S from WallSecDay into TimeHour/Min/Sec
+  mov   eax,[WallSecDay]
+  xor   edx,edx
+  mov   ecx,3600
+  div   ecx                             ; EAX=hour,EDX=rem
   mov   [TimeHour],al
 
-  popa                                  ; Restore registers
-  ret                                   ; Return to caller
+  mov   eax,edx
+  xor   edx,edx
+  mov   ecx,60
+  div   ecx                             ; EAX=min,EDX=sec
+  mov   [TimeMin],al
+  mov   [TimeSec],dl
 
-;==================================================================================================
-; Formatting "HH:MM:SS" into existing String buffer (8 chars)
-;==================================================================================================
-
-;--------------------------------------------------------------------------------------------------
-; TimePut2Dec - write two decimal digits
-;   AL  = value 0..99
-;   EDI = dest address
-;--------------------------------------------------------------------------------------------------
-TimePut2Dec:
-  push  eax                             ; Save eax
-  push  ebx                             ; Save ebx
-  xor   ah,ah                           ; AX = value
-  mov   bl,10                           ; Divide by 10
-  div   bl                              ; AL=quotient, AH=remainder
-  add   al,'0'                          ; Tens ASCII
-  mov   [edi],al                        ; Store tens
-  mov   al,ah                           ; Ones value
-  add   al,'0'                          ; Ones ASCII
-  mov   [edi+1],al                      ; Store ones
-  add   edi,2                           ; Advance dest
-  pop   ebx                             ; Restore ebx
-  pop   eax                             ; Restore eax
-  ret                                   ; Return to caller
-
-;--------------------------------------------------------------------------------------------------
-; TimeFmtHms - fill EBX string payload with "HH:MM:SS"
-;   EBX = destination String
-;--------------------------------------------------------------------------------------------------
-TimeFmtHms:
-  pusha                                 ; Save registers
-  mov   edi,ebx                         ; EDI = string base
-  add   edi,2                           ; Skip length word
-
-  mov   al,[TimeHour]                   ; HH
-  call  TimePut2Dec
-
-  mov   al,':'                          ; :
-  mov   [edi],al
-  inc   edi
-
-  mov   al,[TimeMin]                    ; MM
-  call  TimePut2Dec
-
-  mov   al,':'                          ; :
-  mov   [edi],al
-  inc   edi
-
-  mov   al,[TimeSec]                    ; SS
-  call  TimePut2Dec
   popa
   ret
 
-;--------------------------------------------------------------------------------------------------
-; TimePrint - print HH:MM:SS using PIT-derived TimeNow (no CMOS per-print)
-;--------------------------------------------------------------------------------------------------
+;---------------------------------------------------------------------------------------------------
+; TimePut2Dec - AL=0..99,EDI=dest,writes two digits,EDI+=2
+;---------------------------------------------------------------------------------------------------
+TimePut2Dec:
+  push  eax
+  push  ebx
+  xor   ah,ah
+  mov   bl,10
+  div   bl                              ; AL=tens,AH=ones
+  add   al,'0'
+  mov   [edi],al
+  mov   al,ah
+  add   al,'0'
+  mov   [edi+1],al
+  add   edi,2
+  pop   ebx
+  pop   eax
+  ret
+
+;---------------------------------------------------------------------------------------------------
+; TimeFmtHms - EBX=String,formats current TimeHour/Min/Sec as "HH:MM:SS"
+;---------------------------------------------------------------------------------------------------
+TimeFmtHms:
+  pusha
+  mov   edi,ebx
+  add   edi,2
+
+  mov   al,[TimeHour]
+  call  TimePut2Dec
+
+  mov   al,':'
+  mov   [edi],al
+  inc   edi
+
+  mov   al,[TimeMin]
+  call  TimePut2Dec
+
+  mov   al,':'
+  mov   [edi],al
+  inc   edi
+
+  mov   al,[TimeSec]
+  call  TimePut2Dec
+
+  popa
+  ret
+
+;---------------------------------------------------------------------------------------------------
+; TimePrint - prints wall time (HH:MM:SS) via TimeStr + CnPrint
+;---------------------------------------------------------------------------------------------------
 TimePrint:
   call  TimeNow
   mov   ebx,TimeStr
-  call  TimeFmtHms                      ; fills TimeStr payload "HH:MM:SS"
+  call  TimeFmtHms
   mov   ebx,TimeStr
-  call  CnPrint                         ; prints + CrLf (per Console contract)
+  call  CnPrint
+  ret
+
+;---------------------------------------------------------------------------------------------------
+; TimeUptimeFmtHms - EBX=String,formats uptime "HH:MM:SS" (hours mod 100)
+;---------------------------------------------------------------------------------------------------
+TimeUptimeFmtHms:
+  pusha                                 ; Save registers
+  mov   ebp,ebx                         ; Save dest String
+
+  cmp   byte[BootValid],1
+  je    .HaveBoot
+  call  TimeInit
+.HaveBoot:
+  call  TimerNowTicks                   ; EDX:EAX = now
+  sub   eax,[BootLo]
+  sbb   edx,[BootHi]                    ; EDX:EAX = uptime_ticks
+
+  mov   ecx,TIME_PIT_HZ
+  div   ecx                             ; EAX=uptime_seconds,EDX=rem
+
+  xor   edx,edx
+  mov   ecx,3600
+  div   ecx                             ; EAX=hours_total,EDX=rem3600
+  mov   esi,eax                         ; hours_total
+  mov   edi,edx                         ; rem3600
+
+  mov   eax,edi
+  xor   edx,edx
+  mov   ecx,60
+  div   ecx                             ; EAX=minutes,EDX=seconds
+  mov   ebx,eax                         ; minutes
+  mov   ecx,edx                         ; seconds
+
+  mov   eax,esi
+  xor   edx,edx
+  mov   edi,100
+  div   edi                             ; EDX=hours_mod100
+  mov   al,dl                           ; AL=hours (0..99)
+
+  mov   edi,ebp                         ; EDI = String base
+  add   edi,2                           ; Skip length word
+
+  call  TimePut2Dec                     ; HH
+
+  mov   al,':'
+  mov   [edi],al
+  inc   edi
+
+  mov   eax,ebx
+  mov   al,al
+  call  TimePut2Dec                     ; MM
+
+  mov   al,':'
+  mov   [edi],al
+  inc   edi
+
+  mov   eax,ecx
+  mov   al,al
+  call  TimePut2Dec                     ; SS
+
+  popa
   ret
