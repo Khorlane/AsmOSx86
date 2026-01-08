@@ -45,6 +45,7 @@ IDT2:
 %include "Keyboard.asm"
 %include "Time.asm"
 %include "Timer.asm"
+%include "Uptime.asm"
 %include "Video.asm"
 
 ;--------------------------------------------------------------------------------------------------
@@ -67,10 +68,6 @@ FlushCS:
   lea   eax,[IDT2]                      ; Load the IDT
   lidt  [eax]                           ;  register
 
-  ; Initialize components
-  call  TimerInit                       ; Initialize PIT timer
-  call  CnInit                          ; Initialize console
-
   ; Clear screen
   mov   al,Black                        ; Background
   mov   [ColorBack],al                  ;  color
@@ -83,12 +80,19 @@ FlushCS:
   mov   al,1                            ;  to
   mov   [Col],al                        ;  1,1
 
-  ; Console
+  ; Initialize components
+  call  TimerInit                       ; Initialize PIT timer
+  call  CnInit                          ; Initialize console
   call  CnBoot                          ; Print initial boot messages
+  call  UptimeInit                      ; Initialize uptime
+
+  ; Console  
+  call  UptimePrint                     ; Uptime (HH:MM:SS)
   call  TimePrint                       ; Time (HH:MM:SS)
   mov   eax,1000                        ; Delay                 
   call  TimerDelayMs                    ;  1 second
   call  TimePrint                       ; Time (HH:MM:SS) again
+  call  UptimePrint                     ; Uptime (HH:MM:SS)
 
   ; Debug addresses and memory content
   mov   eax,0DEADBEEFh                  ; Dump a
@@ -203,6 +207,7 @@ String  CnBannerStr,"AsmOSx86 Console (Session 0)"
 String  CnBootMsg,"A Hobbyist Operating System in x86 Assembly"
 String  CrLf,0Dh,0Ah                    ; Carriage Return + Line Feed (CrLf)
 String  TimeStr,"HH:MM:SS"              ; Time string buffer
+String  UptimeStr,"UP 00:00:00"         ; Uptime string buffer
 
 ; Kernel Context (all mutable "variables" live here)
 align 4
