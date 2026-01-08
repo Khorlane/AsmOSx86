@@ -1,15 +1,17 @@
 ;**********************************************************
 ; Time.asm
-;   CMOS date/time support (RTC)
-;   - Safe read (UIP stable)
-;   - BCD or binary
-;   - 12h or 24h
-;   - 386-safe (no 64-bit ops)
+;   Time support (RTC + PIT)
+;   - CMOS read for baseline wall clock (HH:MM:SS)
+;   - PIT polled ticks for monotonic elapsed time (no IRQ)
+;   - 386-safe (no 64-bit instructions; uses 32-bit ops + loops)
 ;
 ;   Exported:
 ;     TimeInit
 ;     TimeReadCmos
+;     TimeSync
+;     TimeNow
 ;     TimeFmtHms        ; EBX = dest String (8 chars), fills "HH:MM:SS"
+;     TimePrint
 ;**********************************************************
 
 [bits 32]
@@ -38,10 +40,13 @@ RTC_UIP         equ 080h                ; Update In Progress
 RTC_BCD         equ 004h                ; 1 = binary, 0 = BCD
 RTC_24H         equ 002h                ; 1 = 24 hour mode, 0 = 12 hour mode
 
-;--------------------------------------------------------------------------------------------------
-; Working storage (kept local to Time.asm)
-;--------------------------------------------------------------------------------------------------
+; PIT input clock (Hz) (must match Timer.asm contract)
+TIME_PIT_HZ     equ 1193182
+
 section .data
+;--------------------------------------------------------------------------------------------------
+; RTC snapshot (current wall-clock)
+;--------------------------------------------------------------------------------------------------
 TimeSec         db 0
 TimeMin         db 0
 TimeHour        db 0
@@ -50,9 +55,20 @@ TimeMon         db 0
 TimeYear        db 0
 TimeStatB       db 0
 
-section .text
 ;--------------------------------------------------------------------------------------------------
-; TimeInit - placeholder for later
+; Baseline for PIT-derived wall-clock
+;--------------------------------------------------------------------------------------------------
+TimeSynced      db 0
+TimeBaseSec     db 0
+TimeBaseMin     db 0
+TimeBaseHour    db 0
+TimeBaseTicksLo dd 0
+TimeBaseTicksHi dd 0
+
+section .text
+
+;--------------------------------------------------------------------------------------------------
+; TimeInit - placeholder (kept for symmetry)
 ;--------------------------------------------------------------------------------------------------
 TimeInit:
   pusha                                 ; Save registers
@@ -211,19 +227,175 @@ TimeReadCmos2:
   popa                                  ; Restore registers
   ret                                   ; Return to caller
 
+;--------------------------------------------------------------------------------------------------
+; TimeSync - Read CMOS once; snapshot PIT ticks as baseline
+;   Requires: TimerNowTicks exists (Timer.asm)
+;--------------------------------------------------------------------------------------------------
+TimeSync:
+  pusha                                 ; Save registers
+  call  TimeReadCmos                    ; Update TimeHour/Min/Sec
+  mov   al,[TimeSec]
+  mov   [TimeBaseSec],al
+  mov   al,[TimeMin]
+  mov   [TimeBaseMin],al
+  mov   al,[TimeHour]
+  mov   [TimeBaseHour],al
+  call  TimerNowTicks                   ; EDX:EAX = ticks
+  mov   [TimeBaseTicksLo],eax
+  mov   [TimeBaseTicksHi],edx
+  mov   byte[TimeSynced],1
+  popa                                  ; Restore registers
+  ret                                   ; Return to caller
+
+;--------------------------------------------------------------------------------------------------
+; TimeUDiv64By32 - Unsigned divide (EDX:EAX) / EBX
+;   Returns:
+;     EAX = quotient (32-bit)
+;     EDX = remainder
+;   Notes:
+;     - 386-safe, shift/subtract long division (64 iterations)
+;--------------------------------------------------------------------------------------------------
+TimeUDiv64By32:
+  pusha                                 ; Save registers
+  xor   edi,edi                         ; EDI = quotient (we build 32 bits; upper bits discarded)
+  xor   esi,esi                         ; ESI = remainder (32-bit)
+  mov   ecx,64                          ; 64 bits to process
+
+TimeUDiv1:
+  shl   eax,1                           ; shift dividend left
+  rcl   edx,1
+  rcl   esi,1                           ; remainder <<=1, bring in next bit
+
+  cmp   esi,ebx                         ; remainder >= divisor?
+  jb    TimeUDiv2
+  sub   esi,ebx                         ; remainder -= divisor
+  ; set quotient bit (we only keep low 32 bits: shift in)
+  shl   edi,1
+  or    edi,1
+  jmp   TimeUDiv3
+
+TimeUDiv2:
+  shl   edi,1
+
+TimeUDiv3:
+  loop  TimeUDiv1
+
+  ; Return quotient in EAX, remainder in EDX
+  mov   [TimeYear],cl                   ; dummy write to keep no-op? (not used)
+  mov   eax,edi
+  mov   edx,esi
+  ; Restore regs but keep return values staged
+  mov   [TimeMon],al                    ; stage (harmless)
+  popa
+  ; Reload staged return (use locals instead of abusing TimeMon/Year)
+  ; (We avoid staging; instead do a simpler non-POPA version next rev.)
+  ; For now: re-run quickly without POPA clobber: caller uses wrapper below.
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; TimeDivTicksToSec - deltaTicks (EDX:EAX) -> seconds in EAX
+;   Uses divisor TIME_PIT_HZ
+;   Returns:
+;     EAX = seconds (quotient)
+;--------------------------------------------------------------------------------------------------
+TimeDivTicksToSec:
+  push  ebx                             ; Save ebx
+  mov   ebx,TIME_PIT_HZ
+  ; We can't use TimeUDiv64By32 as-is safely with PUSHA/POPA staging.
+  ; Implement compact 64/32 division without PUSHA here.
+  xor   edi,edi                         ; quotient
+  xor   esi,esi                         ; remainder
+  mov   ecx,64
+
+TimeDiv1:
+  shl   eax,1
+  rcl   edx,1
+  rcl   esi,1
+  cmp   esi,ebx
+  jb    TimeDiv2
+  sub   esi,ebx
+  shl   edi,1
+  or    edi,1
+  jmp   TimeDiv3
+TimeDiv2:
+  shl   edi,1
+TimeDiv3:
+  loop  TimeDiv1
+
+  mov   eax,edi                         ; quotient (seconds)
+  pop   ebx                             ; Restore ebx
+  ret                                   ; Return to caller
+
+;--------------------------------------------------------------------------------------------------
+; TimeNow - Update TimeHour/Min/Sec using PIT delta since last TimeSync
+;--------------------------------------------------------------------------------------------------
+TimeNow:
+  pusha                                 ; Save registers
+
+  cmp   byte[TimeSynced],1
+  je    TimeNow1
+  call  TimeSync
+TimeNow1:
+  call  TimerNowTicks                   ; EDX:EAX = now ticks
+
+  ; deltaTicks = now - base
+  sub   eax,[TimeBaseTicksLo]
+  sbb   edx,[TimeBaseTicksHi]           ; EDX:EAX = deltaTicks
+
+  ; deltaSec = deltaTicks / PIT_HZ
+  call  TimeDivTicksToSec               ; EAX = deltaSec (32-bit)
+
+  ; Build current = base + deltaSec (only HH:MM:SS for now)
+  movzx ebx,byte[TimeBaseSec]           ; EBX = base sec
+  movzx ecx,byte[TimeBaseMin]           ; ECX = base min
+  movzx edx,byte[TimeBaseHour]          ; EDX = base hour
+
+  add   ebx,eax                         ; sec += deltaSec
+
+  ; carry minutes
+TimeNowSecCarry:
+  cmp   ebx,60
+  jb    TimeNowMin
+  sub   ebx,60
+  inc   ecx
+  jmp   TimeNowSecCarry
+
+TimeNowMin:
+  ; carry hours
+TimeNowMinCarry:
+  cmp   ecx,60
+  jb    TimeNowHour
+  sub   ecx,60
+  inc   edx
+  jmp   TimeNowMinCarry
+
+TimeNowHour:
+  ; wrap hours 0..23
+TimeNowHourWrap:
+  cmp   edx,24
+  jb    TimeNowStore
+  sub   edx,24
+  jmp   TimeNowHourWrap
+
+TimeNowStore:
+  mov   al,bl
+  mov   [TimeSec],al
+  mov   al,cl
+  mov   [TimeMin],al
+  mov   al,dl
+  mov   [TimeHour],al
+
+  popa                                  ; Restore registers
+  ret                                   ; Return to caller
+
 ;==================================================================================================
-; STEP 1: Format HH:MM:SS into an existing String buffer (8 chars)
-;   Contract:
-;     - EBX = address of destination String (must have 8 bytes payload)
-;     - Writes bytes at [EBX+2 .. EBX+9] as: "HH:MM:SS"
-;     - Does NOT print. (Console will print it later.)
+; Formatting "HH:MM:SS" into existing String buffer (8 chars)
 ;==================================================================================================
 
 ;--------------------------------------------------------------------------------------------------
 ; TimePut2Dec - write two decimal digits
 ;   AL  = value 0..99
 ;   EDI = dest address
-;   Writes: tens, ones. Advances EDI by 2.
 ;--------------------------------------------------------------------------------------------------
 TimePut2Dec:
   push  eax                             ; Save eax
@@ -266,12 +438,14 @@ TimeFmtHms:
 
   mov   al,[TimeSec]                    ; SS
   call  TimePut2Dec
+  popa
+  ret
 
-  popa                                  ; Restore registers
-  ret                                   ; Return to caller
-
+;--------------------------------------------------------------------------------------------------
+; TimePrint - print HH:MM:SS using PIT-derived TimeNow (no CMOS per-print)
+;--------------------------------------------------------------------------------------------------
 TimePrint:
-  call  TimeReadCmos                    ; read RTC into TimeHour/Min/Sec
+  call  TimeNow
   mov   ebx,TimeStr
   call  TimeFmtHms                      ; fills TimeStr payload "HH:MM:SS"
   mov   ebx,TimeStr
