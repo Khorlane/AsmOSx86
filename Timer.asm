@@ -154,19 +154,31 @@ TimerNowTicksDone:
 ;--------------------------------------------------------------------------------------------------
 ; TimerDelayMs - busy-wait delay using TimerNowTicks
 ;   EAX = milliseconds
+;   Uses: ticks = round(ms*1193182/1000)
+;   Note: clamps very large ms to avoid DIV overflow on 386.
 ;--------------------------------------------------------------------------------------------------
 TimerDelayMs:
   pusha                                 ; Save registers
 
-  ; Convert ms -> PIT input ticks (approx): ticks = ms * 1193
-  ; (Good enough for now; later we can refine to PIT_HZ/1000.)
-  mov   ebx,1193                        ; ticks per ms (approx)
-  mul   ebx                             ; EDX:EAX = ms * 1193
-  mov   esi,eax                         ; Save ticks lo
-  mov   edi,edx                         ; Save ticks hi
+  ; Clamp ms to avoid div overflow (ms <= ~3,598,000 is safe)
+  cmp   eax,3600000                     ; Cap at ~1 hour
+  jbe   TimerDelayMs0                   ;  ok
+  mov   eax,3600000                     ;  clamp
+TimerDelayMs0:
+
+  ; ticks = round(ms*1193182/1000)
+  mov   ebx,1193182                     ; PIT Hz
+  mul   ebx                             ; EDX:EAX=ms*1193182
+  add   eax,500                         ; +500 for rounding
+  adc   edx,0                           ; carry into high
+  mov   ecx,1000                        ; /1000
+  div   ecx                             ; EAX=ticks (32-bit),EDX=remainder
+
+  mov   esi,eax                         ; ticks lo
+  xor   edi,edi                         ; ticks hi = 0
 
   ; start = TimerNowTicks
-  call  TimerNowTicks                   ; EDX:EAX = start
+  call  TimerNowTicks                   ; EDX:EAX=start
   mov   ebx,eax                         ; start lo
   mov   ecx,edx                         ; start hi
 
@@ -175,8 +187,7 @@ TimerDelayMs:
   adc   ecx,edi                         ; deadline hi
 
 TimerDelayMs1:
-  call  TimerNowTicks                   ; EDX:EAX = now
-  ; if now < deadline, keep spinning
+  call  TimerNowTicks                   ; EDX:EAX=now
   cmp   edx,ecx                         ; compare hi
   jb    TimerDelayMs1                   ; now.hi < deadline.hi
   ja    TimerDelayMsDone                ; now.hi > deadline.hi
