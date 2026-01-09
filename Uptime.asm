@@ -2,18 +2,44 @@
 ; Uptime.asm
 ;   Uptime reporting (monotonic / TimeMono)
 ;
-;   Display:
+;   Display Format:
 ;     "UP YY:DDD:HH:MM:SS"
 ;
-;   Kernel-facing contract:
+;   Semantics (LOCKED-IN):
+;     - Uptime measures monotonic time since UptimeInit.
+;     - The uptime baseline is captured exactly when UptimeInit
+;       is called (not at boot by default).
+;     - This allows the kernel to define “uptime start” explicitly.
+;
+;   Initialization Rules:
+;     - Kernel MUST call TimerInit before UptimeInit.
+;     - Kernel SHOULD call UptimeInit during early boot.
+;     - If UptimeNow / UptimePrint is called before UptimeInit,
+;       the uptime subsystem will lazily initialize itself
+;       using the current monotonic tick as the baseline.
+;
+;   Kernel-Facing Contract:
 ;     UptimeInit
-;     UptimeNow          ; returns EAX=uptime seconds
+;       - Captures the monotonic tick baseline.
+;       - Defines the start of uptime measurement.
+;
+;     UptimeNow
+;       - Returns EAX = uptime seconds since UptimeInit.
+;       - Uses monotonic time only (never wall time).
+;
 ;     UptimePrint
+;       - Formats and prints uptime as "UP YY:DDD:HH:MM:SS".
+;       - Always prints via CnPrint (thus always ends with CrLf).
 ;
 ;   Requires:
-;     TimerNowTicks      ; EDX:EAX=monotonic PIT ticks
-;     CnPrint            ; EBX=String,prints+CrLf
+;     TimerNowTicks      ; EDX:EAX = monotonic PIT ticks
+;     CnPrint            ; EBX = String, prints + CrLf
 ;     UptimeStr          ; String  UptimeStr,"UP 00:000:00:00:00"
+;
+;   Design Guarantees:
+;     - Uptime never goes backward.
+;     - Uptime is unaffected by wall-time resync or CMOS changes.
+;     - Formatting limits and rollover policy are local to Uptime.asm.
 ;**********************************************************
 
 [bits 32]

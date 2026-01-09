@@ -82,9 +82,9 @@ FlushCS:
 
   ; Initialize components
   call  TimerInit                       ; Initialize PIT timer
+  call  UptimeInit                      ; Initialize uptime
   call  CnInit                          ; Initialize console
   call  CnBoot                          ; Print initial boot messages
-  call  UptimeInit                      ; Initialize uptime
 
   ; Console  
   call  UptimePrint                     ; Uptime (HH:MM:SS)
