@@ -35,10 +35,10 @@
 ;         ||- Foreground F = White
 ;         |-- Background 3 = Cyan
 
-;------------------------------------------
+;--------------------------------------------------------------------------------------------------
 ; Routine to calculate video memory address
 ;   represented by the given Row,Col
-;------------------------------------------
+;--------------------------------------------------------------------------------------------------
 CalcVideoAddr:
   pusha                                 ; Save registers
   mov   al,[Row]                        ; If Row is
@@ -66,10 +66,10 @@ CalcVideoAddr1:
   popa                                  ; Restore registers
   ret                                   ; Return to caller
 
-;------------------------------
+;--------------------------------------------------------------------------------------------------
 ; Put a character on the screen
 ; EDI = address in video memory
-;------------------------------
+;--------------------------------------------------------------------------------------------------
 PutChar:
   pusha                                 ; Save registers
   mov   edi,[VidAdr]                    ; EDI = Video Address
@@ -79,10 +79,10 @@ PutChar:
   popa                                  ; Restore registers
   ret                                   ; Return to caller
 
-;---------------------------------
+;--------------------------------------------------------------------------------------------------
 ; Print a string to the screen
 ; EBX = address of string to print
-;---------------------------------
+;--------------------------------------------------------------------------------------------------
 PutStr:
   pusha                                 ; Save registers
   call  CalcVideoAddr                   ; Calculate video address
@@ -127,9 +127,9 @@ PutStr5:
   popa                                  ; Restore registers
   ret                                   ; Return to caller
 
-;-----------------------
+;--------------------------------------------------------------------------------------------------
 ; Update hardware cursor
-;-----------------------
+;--------------------------------------------------------------------------------------------------
 MoveCursor:
   pusha                                 ; Save registers
   mov   bh,[Row]                        ; BH = row
@@ -162,9 +162,9 @@ MoveCursor:
   popa                                  ; Restore registers
   ret                                   ; Return to caller
 
-;-------------
+;--------------------------------------------------------------------------------------------------
 ; Clear Screen
-;-------------
+;--------------------------------------------------------------------------------------------------
 ClrScr:
   pusha                                 ; Save registers
   cld                                   ; Clear DF Flag, REP STOSW increments EDI
@@ -180,9 +180,9 @@ ClrScr:
   popa                                  ; Restore registers
   ret                                   ; Return to caller
 
-;-------------------
+;--------------------------------------------------------------------------------------------------
 ; Set Color Attribute
-;-------------------
+;--------------------------------------------------------------------------------------------------
 SetColorAttr:
   pusha                                 ; Save registers
   mov   al,[ColorBack]                  ; Background color (e.g. 3)
@@ -193,9 +193,9 @@ SetColorAttr:
   popa                                  ; Restore registers
   ret                                   ; Return to caller
 
-;-----------------
+;--------------------------------------------------------------------------------------------------
 ; Scroll Screen Up
-;-----------------
+;--------------------------------------------------------------------------------------------------
 ScrollUp:
   pusha
   mov   esi,VidMem + 160                ; start of row 2

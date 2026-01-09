@@ -208,7 +208,6 @@ String  CnBootMsg,"A Hobbyist Operating System in x86 Assembly"
 String  CrLf,0Dh,0Ah                    ; Carriage Return + Line Feed (CrLf)
 String  TimeStr,"HH:MM:SS"              ; Time string buffer
 String  UptimeStr,"UP YY:DDD:HH:MM:SS"  ; Uptime string buffer
-;String  UptimeStr,"UP 00:000:00:00:00"  ; Uptime string buffer
 
 ; Kernel Context (all mutable "variables" live here)
 align 4
