@@ -1,4 +1,4 @@
-;**********************************************************
+;**************************************************************************************************
 ; Floppy.asm
 ;   Minimal floppy driver (FAT12 target, 1.44MB, 82077/NEC FDC compatible)
 ;   PROTECTED MODE, NO BIOS, NO IRQ/DMA — motor control only (for now)
@@ -7,7 +7,7 @@
 ;     FloppySetDrive    ; optional: change selected drive 0..3
 ;     FloppyMotorOn     ; enable motor for selected drive (busy-wait spinup)
 ;     FloppyMotorOff    ; disable motor for selected drive
-;**********************************************************
+;**************************************************************************************************
 
 [bits 32]
 

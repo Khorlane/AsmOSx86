@@ -1,4 +1,4 @@
-;**********************************************************
+;**************************************************************************************************
 ; Console.asm
 ;   Console output (Session 0 / physical terminal)
 ;
@@ -11,7 +11,7 @@
 ;     - Console messages ALWAYS end with CrLf.
 ;     - Mode 0 newline: CR and LF are separate controls with their
 ;       traditional meanings (handled inside PutStr).
-;**********************************************************
+;**************************************************************************************************
 
 ;--------------------------------------------------------------------------------------------------
 ; CnInit - initialize console state (colors, start row/col, etc.)

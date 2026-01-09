@@ -1,4 +1,4 @@
-;**********************************************************
+;**************************************************************************************************
 ; Uptime.asm
 ;   Uptime reporting (monotonic / TimeMono)
 ;
@@ -40,7 +40,7 @@
 ;     - Uptime never goes backward.
 ;     - Uptime is unaffected by wall-time resync or CMOS changes.
 ;     - Formatting limits and rollover policy are local to Uptime.asm.
-;**********************************************************
+;**************************************************************************************************
 
 [bits 32]
 
