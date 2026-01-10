@@ -182,40 +182,31 @@ TimeReadCmos:
   pusha
 .Read1:
   call  TimeWaitNotUip
-
   mov   al,RTC_STATUSB
   call  TimeCmosReadReg
   mov   [TimeStatB],al
-
   mov   al,RTC_SEC
   call  TimeCmosReadReg
   mov   [TimeSec],al
-
   mov   al,RTC_MIN
   call  TimeCmosReadReg
   mov   [TimeMin],al
-
   mov   al,RTC_HOUR
   call  TimeCmosReadReg
   mov   [TimeHour],al
-
   mov   al,RTC_STATUSA
   call  TimeCmosReadReg
   test  al,RTC_UIP
   jnz   .Read1
-
   mov   al,[TimeStatB]
   test  al,RTC_BCD
   jnz   .BcdDone
-
   mov   al,[TimeSec]
   call  TimeBcdToBin
   mov   [TimeSec],al
-
   mov   al,[TimeMin]
   call  TimeBcdToBin
   mov   [TimeMin],al
-
   mov   al,[TimeHour]
   mov   ah,al
   and   ah,080h                         ; PM bit
@@ -223,12 +214,10 @@ TimeReadCmos:
   call  TimeBcdToBin
   or    al,ah
   mov   [TimeHour],al
-
 .BcdDone:
   mov   al,[TimeHour]
   call  TimeNormalizeHour
   mov   [TimeHour],al
-
   popa
   ret
 
@@ -238,24 +227,20 @@ TimeReadCmos:
 TimeSync:
   pusha
   call  TimeReadCmos                    ; updates TimeHour/Min/Sec
-
   xor   eax,eax
   mov   al,[TimeHour]
   mov   ebx,3600
   mul   ebx                             ; EAX = hour*3600
   mov   ecx,eax
-
   xor   eax,eax
   mov   al,[TimeMin]
   mov   ebx,60
   mul   ebx                             ; EAX = min*60
   add   ecx,eax
-
   xor   eax,eax
   mov   al,[TimeSec]
   add   ecx,eax
   mov   [WallSecDay],ecx
-
   call  TimerNowTicks                   ; EDX:EAX = now
   mov   [WallSyncLo],eax
   mov   [WallSyncHi],edx
@@ -271,52 +256,42 @@ TimeSync:
 ;---------------------------------------------------------------------------------------------------
 TimeNow:
   pusha
-
   cmp   byte[WallSyncValid],1
   je    .HaveSync
   call  TimeSync
   jmp   .UpdateHms
-
 .HaveSync:
   call  TimerNowTicks                   ; EDX:EAX = mono_now
   mov   esi,eax                         ; now_lo
   mov   edi,edx                         ; now_hi
-
   ; since_sync = mono_now - WallSync
   mov   eax,esi
   mov   edx,edi
   sub   eax,[WallSyncLo]
   sbb   edx,[WallSyncHi]
-
   cmp   edx,TIME_RSYNC_THI
   jb    .NoResync
   ja    .DoResync
   cmp   eax,TIME_RSYNC_TLO
   jb    .NoResync
-
 .DoResync:
   call  TimeSync
   jmp   .UpdateHms
-
 .NoResync:
   ; delta = mono_now - WallLast
   mov   eax,esi
   mov   edx,edi
   sub   eax,[WallLastLo]
   sbb   edx,[WallLastHi]
-
   mov   [WallLastLo],esi
   mov   [WallLastHi],edi
-
   ; total = delta_lo + WallRemTicks
   add   eax,[WallRemTicks]
   adc   edx,0
-
   ; seconds_add = total / TIME_PIT_HZ,rem = total % TIME_PIT_HZ
   mov   ecx,TIME_PIT_HZ
   div   ecx                             ; EAX=seconds_add,EDX=rem
   mov   [WallRemTicks],edx
-
   ; WallSecDay = (WallSecDay + seconds_add) % 86400
   mov   ebx,[WallSecDay]
   add   ebx,eax
@@ -325,7 +300,6 @@ TimeNow:
   mov   ecx,TIME_DAY_SEC
   div   ecx                             ; EDX=sec_of_day
   mov   [WallSecDay],edx
-
 .UpdateHms:
   ; Derive H:M:S from WallSecDay into TimeHour/Min/Sec
   mov   eax,[WallSecDay]
@@ -333,14 +307,12 @@ TimeNow:
   mov   ecx,3600
   div   ecx                             ; EAX=hour,EDX=rem
   mov   [TimeHour],al
-
   mov   eax,edx
   xor   edx,edx
   mov   ecx,60
   div   ecx                             ; EAX=min,EDX=sec
   mov   [TimeMin],al
   mov   [TimeSec],dl
-
   popa
   ret
 
@@ -370,24 +342,18 @@ TimeFmtHms:
   pusha
   mov   edi,ebx
   add   edi,2
-
   mov   al,[TimeHour]
   call  TimePut2Dec
-
   mov   al,':'
   mov   [edi],al
   inc   edi
-
   mov   al,[TimeMin]
   call  TimePut2Dec
-
   mov   al,':'
   mov   [edi],al
   inc   edi
-
   mov   al,[TimeSec]
   call  TimePut2Dec
-
   popa
   ret
 
@@ -408,7 +374,6 @@ TimePrint:
 TimeUptimeFmtHms:
   pusha                                 ; Save registers
   mov   ebp,ebx                         ; Save dest String
-
   cmp   byte[BootValid],1
   je    .HaveBoot
   call  TimeInit
@@ -416,49 +381,38 @@ TimeUptimeFmtHms:
   call  TimerNowTicks                   ; EDX:EAX = now
   sub   eax,[BootLo]
   sbb   edx,[BootHi]                    ; EDX:EAX = uptime_ticks
-
   mov   ecx,TIME_PIT_HZ
   div   ecx                             ; EAX=uptime_seconds,EDX=rem
-
   xor   edx,edx
   mov   ecx,3600
   div   ecx                             ; EAX=hours_total,EDX=rem3600
   mov   esi,eax                         ; hours_total
   mov   edi,edx                         ; rem3600
-
   mov   eax,edi
   xor   edx,edx
   mov   ecx,60
   div   ecx                             ; EAX=minutes,EDX=seconds
   mov   ebx,eax                         ; minutes
   mov   ecx,edx                         ; seconds
-
   mov   eax,esi
   xor   edx,edx
   mov   edi,100
   div   edi                             ; EDX=hours_mod100
   mov   al,dl                           ; AL=hours (0..99)
-
   mov   edi,ebp                         ; EDI = String base
   add   edi,2                           ; Skip length word
-
   call  TimePut2Dec                     ; HH
-
   mov   al,':'
   mov   [edi],al
   inc   edi
-
   mov   eax,ebx
   mov   al,al
   call  TimePut2Dec                     ; MM
-
   mov   al,':'
   mov   [edi],al
   inc   edi
-
   mov   eax,ecx
   mov   al,al
   call  TimePut2Dec                     ; SS
-
   popa
   ret
