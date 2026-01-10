@@ -180,7 +180,7 @@ TimeNormalizeHour1:
 ;---------------------------------------------------------------------------------------------------
 TimeReadCmos:
   pusha
-.Read1:
+TimeReadCmos1:
   call  TimeWaitNotUip
   mov   al,RTC_STATUSB
   call  TimeCmosReadReg
@@ -197,10 +197,10 @@ TimeReadCmos:
   mov   al,RTC_STATUSA
   call  TimeCmosReadReg
   test  al,RTC_UIP
-  jnz   .Read1
+  jnz   TimeReadCmos1
   mov   al,[TimeStatB]
   test  al,RTC_BCD
-  jnz   .BcdDone
+  jnz   TimeReadCmos2
   mov   al,[TimeSec]
   call  TimeBcdToBin
   mov   [TimeSec],al
@@ -214,7 +214,7 @@ TimeReadCmos:
   call  TimeBcdToBin
   or    al,ah
   mov   [TimeHour],al
-.BcdDone:
+TimeReadCmos2:
   mov   al,[TimeHour]
   call  TimeNormalizeHour
   mov   [TimeHour],al
@@ -257,10 +257,10 @@ TimeSync:
 TimeNow:
   pusha
   cmp   byte[WallSyncValid],1
-  je    .HaveSync
+  je    TimeNow1
   call  TimeSync
-  jmp   .UpdateHms
-.HaveSync:
+  jmp   TimeNow4
+TimeNow1:
   call  TimerNowTicks                   ; EDX:EAX = mono_now
   mov   esi,eax                         ; now_lo
   mov   edi,edx                         ; now_hi
@@ -270,14 +270,14 @@ TimeNow:
   sub   eax,[WallSyncLo]
   sbb   edx,[WallSyncHi]
   cmp   edx,TIME_RSYNC_THI
-  jb    .NoResync
-  ja    .DoResync
+  jb    TimeNow3
+  ja    TimeNow2
   cmp   eax,TIME_RSYNC_TLO
-  jb    .NoResync
-.DoResync:
+  jb    TimeNow3
+TimeNow2:
   call  TimeSync
-  jmp   .UpdateHms
-.NoResync:
+  jmp   TimeNow4
+TimeNow3:
   ; delta = mono_now - WallLast
   mov   eax,esi
   mov   edx,edi
@@ -300,7 +300,7 @@ TimeNow:
   mov   ecx,TIME_DAY_SEC
   div   ecx                             ; EDX=sec_of_day
   mov   [WallSecDay],edx
-.UpdateHms:
+TimeNow4:
   ; Derive H:M:S from WallSecDay into TimeHour/Min/Sec
   mov   eax,[WallSecDay]
   xor   edx,edx
@@ -375,9 +375,9 @@ TimeUptimeFmtHms:
   pusha                                 ; Save registers
   mov   ebp,ebx                         ; Save dest String
   cmp   byte[BootValid],1
-  je    .HaveBoot
+  je    TimeUptimeFmtHms1
   call  TimeInit
-.HaveBoot:
+TimeUptimeFmtHms1:
   call  TimerNowTicks                   ; EDX:EAX = now
   sub   eax,[BootLo]
   sbb   edx,[BootHi]                    ; EDX:EAX = uptime_ticks

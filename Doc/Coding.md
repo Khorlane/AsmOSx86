@@ -66,7 +66,7 @@ These rules are enforced across the entire codebase.
 | Vid | Video |
 | Xlate | Translate |
 
-### Label Naming Standard
+### Label Naming Standard (lns)
 
 All labels local to a routine must be named using the following pattern:
 
@@ -74,8 +74,18 @@ All labels local to a routine must be named using the following pattern:
 
 - This ensures clarity, uniqueness, and logical flow within the routine.
 - Labels should never be generic (e.g., `loop`, `done`, `retry`), but always tied to their parent routine.
-- The numbering should reflect the order of appearance or logical steps in the routine.
-- If additional clarity is needed, a short descriptive suffix may be appended (e.g., `TimerDelayMs2_Compare`).
+- The numbering should reflect the order of appearance only. Do not move labels around.
+- Do **not** add descriptive suffixes; use only sequential numbers.
+- If a routine is refactored, renumber labels to maintain sequential clarity.
+- Entry-point labels (routine names) do not require a number.
+- Labels used in macros or for global jumps should not use this pattern.
+
+**When applying the Label Naming Standard (lns):**
+- **Change ONLY label names.**
+- Do NOT modify, add, or delete any code, comments, or formatting.
+- The sole change is to rename existing labels to follow the lns pattern.
+- Do NOT add new labels, remove labels, or move labels.
+- If a routine has no internal labels, do not add any.
 
 **Example:**
 ```
