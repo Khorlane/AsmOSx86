@@ -10,52 +10,50 @@
 ;--------------------------------------------------------------------------------------------------
 KbRead:
   mov   ecx,2FFFFh                      ; Set count for loop
-KbWait:
+KbRead1:
   in    al,064h                         ; Read 8042 Status Register (bit 1 is input buffer status (0=empty, 1=full)
   test  al,1                            ; If bit 1
-  jnz   KbGetIt                         ;  go get scancode
-  loop  KbWait                          ; Keep looping
+  jnz   KbRead2                         ; go get scancode
+  loop  KbRead1                         ; Keep looping
   mov   al,0FFh                         ; No scan
-  mov   [KbChar],al                     ;  code received
+  mov   [KbChar],al                     ; code received
   ret                                   ; All done!
-KbGetIt:
+KbRead2:
   in    al,060h                         ; Obtain scancode from
-  mov   [KbChar],al                     ;  Keyboard I/O Port
+  mov   [KbChar],al                     ; Keyboard I/O Port
   ret                                   ; All done!
 
  ;--------------------------------------------------------------------------------------------------
 ; Translate scancode to ASCII character
 ;--------------------------------------------------------------------------------------------------
 KbXlate:
-  ; Check ignore list first
   xor   eax,eax
   xor   esi,esi
   mov   ecx,IgnoreSz
   mov   al,[KbChar]
-KbIgnoreLoop:
+KbXlate1:
   cmp   al,[IgnoreCode+esi]
-  je    KbIgnoreHit
+  je    KbXlate2
   inc   esi
-  loop  KbIgnoreLoop
-  jmp   KbXlateCheck
-KbIgnoreHit:
+  loop  KbXlate1
+  jmp   KbXlate3
+KbXlate2:
   mov   al,'?'
-  jmp   KbXlateDone
-KbXlateCheck:
-  ; Now check translation table
+  jmp   KbXlate6
+KbXlate3:
   xor   eax,eax
   xor   esi,esi
   mov   ecx,ScancodeSz
-  mov   al,[KbChar]                   ; Put scancode in AL
-KbXlateLoop:
-  cmp   al,[Scancode+esi]             ; Compare to Scancode
-  je    KbXlateFound                  ; Match!
-  inc   esi                           ; Bump ESI
-  loop  KbXlateLoop                   ; Check next
-  mov   al,'?'                        ; Not found defaults to ? for now
-  jmp   KbXlateDone                   ; Jump to done
-KbXlateFound:
-  mov   al,[CharCode+esi]             ; Put ASCII character matching the Scancode in AL
-KbXlateDone:
-  mov   [KbChar],al                   ; Put translated char in KbChar
+  mov   al,[KbChar]
+KbXlate4:
+  cmp   al,[Scancode+esi]
+  je    KbXlate5
+  inc   esi
+  loop  KbXlate4
+  mov   al,'?'
+  jmp   KbXlate6
+KbXlate5:
+  mov   al,[CharCode+esi]
+KbXlate6:
+  mov   [KbChar],al
   ret
