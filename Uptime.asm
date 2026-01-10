@@ -60,7 +60,6 @@ UptimeInitDone  db 0
 UptimeRetSec    dd 0                    ; staged return (seconds)
 
 section .text
-
 ;--------------------------------------------------------------------------------------------------
 ; UptimeInit - capture baseline ticks (uptime starts here)
 ;--------------------------------------------------------------------------------------------------
@@ -82,9 +81,9 @@ UptimeInit:
 UptimeNow:
   pusha                                 ; Save registers
   cmp   byte[UptimeInitDone],1
-  je    .HaveInit
+  je    UptimeNow1
   call  UptimeInit
-.HaveInit:
+UptimeNow1:
   call  TimerNowTicks                   ; EDX:EAX=now ticks
   sub   eax,[UptimeBaseLo]
   sbb   edx,[UptimeBaseHi]              ; EDX:EAX=delta ticks
@@ -125,14 +124,12 @@ UptimePut3Dec:
   push  eax                             ; Save eax
   push  ebx                             ; Save ebx
   push  edx                             ; Save edx
-
   xor   edx,edx
   mov   ebx,100
   div   ebx                             ; EAX=hundreds,EDX=rem
   add   al,'0'
   mov   [edi],al
   inc   edi
-
   mov   eax,edx
   xor   edx,edx
   mov   ebx,10
@@ -143,7 +140,6 @@ UptimePut3Dec:
   add   al,'0'
   mov   [edi+1],al
   add   edi,2
-
   pop   edx
   pop   ebx
   pop   eax
@@ -156,81 +152,64 @@ UptimePut3Dec:
 ;--------------------------------------------------------------------------------------------------
 UptimeFmtYdhms:
   pusha                                 ; Save registers
-
   mov   esi,eax                         ; ESI=total seconds
-
   mov   eax,esi
   xor   edx,edx
   mov   ebx,UP_SEC_YEAR
   div   ebx                             ; EAX=years_total,EDX=rem_year
   mov   ebp,eax                         ; EBP=years_total
   mov   esi,edx                         ; ESI=rem_year
-
   mov   eax,ebp
   xor   edx,edx
   mov   ebx,100
   div   ebx                             ; EDX=YY
   mov   ebp,edx                         ; EBP=YY (0..99)
-
   mov   eax,esi
   xor   edx,edx
   mov   ebx,UP_SEC_DAY
   div   ebx                             ; EAX=DDD,EDX=rem_day
   mov   ecx,eax                         ; ECX=DDD
   mov   esi,edx                         ; ESI=rem_day
-
   mov   eax,esi
   xor   edx,edx
   mov   ebx,UP_SEC_HOUR
   div   ebx                             ; EAX=HH,EDX=rem_hour
   mov   esi,eax                         ; ESI=HH
   mov   edi,edx                         ; EDI=rem_hour
-
   mov   eax,edi
   xor   edx,edx
   mov   ebx,UP_SEC_MIN
   div   ebx                             ; EAX=MM,EDX=SS
   mov   ebx,eax                         ; EBX=MM
   ; EDX=SS
-
   mov   edi,UptimeStr
   add   edi,5                           ; Payload+3 ("UP ")
-
   mov   eax,ebp                         ; YY
   mov   al,al
   call  UptimePut2Dec
-
   mov   al,':'
   mov   [edi],al
   inc   edi
-
   mov   eax,ecx                         ; DDD
   call  UptimePut3Dec
-
   mov   al,':'
   mov   [edi],al
   inc   edi
-
   mov   eax,esi                         ; HH
   mov   al,al
   call  UptimePut2Dec
-
   mov   al,':'
   mov   [edi],al
   inc   edi
-
   mov   eax,ebx                         ; MM
   mov   al,al
   call  UptimePut2Dec
-
   mov   al,':'
   mov   [edi],al
   inc   edi
-
   mov   eax,edx                         ; SS
   mov   al,al
   call  UptimePut2Dec
-
   popa
   ret
 

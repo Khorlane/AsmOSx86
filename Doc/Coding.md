@@ -66,6 +66,31 @@ These rules are enforced across the entire codebase.
 | Vid | Video |
 | Xlate | Translate |
 
+### Label Naming Standard
+
+All labels local to a routine must be named using the following pattern:
+
+**RoutineName + SequentialNumber (starting at 1)**
+
+- This ensures clarity, uniqueness, and logical flow within the routine.
+- Labels should never be generic (e.g., `loop`, `done`, `retry`), but always tied to their parent routine.
+- The numbering should reflect the order of appearance or logical steps in the routine.
+- If additional clarity is needed, a short descriptive suffix may be appended (e.g., `TimerDelayMs2_Compare`).
+
+**Example:**
+```
+TimerDelayMs1:
+  ; First step after entry
+
+TimerDelayMs2:
+  ; Main polling loop
+
+TimerDelayMs3:
+  ; Exit/return point
+```
+
+This standard prevents naming collisions, improves code navigation, and makes control flow explicit.
+
 ---
 
 ## 4. Prefix Usage

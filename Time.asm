@@ -51,17 +51,14 @@
 CMOS_ADDR       equ 070h
 CMOS_DATA       equ 071h
 CMOS_NMI        equ 080h
-
 ; CMOS registers
 RTC_SEC         equ 00h
 RTC_MIN         equ 02h
 RTC_HOUR        equ 04h
 RTC_STATUSA     equ 0Ah
 RTC_STATUSB     equ 0Bh
-
 ; StatusA bits
 RTC_UIP         equ 080h
-
 ; StatusB bits
 RTC_BCD         equ 004h                ; 1=binary,0=BCD
 RTC_24H         equ 002h                ; 1=24h,0=12h
@@ -72,7 +69,6 @@ RTC_24H         equ 002h                ; 1=24h,0=12h
 TIME_PIT_HZ     equ 1193182
 TIME_DAY_SEC    equ 86400
 TIME_RSYNC_SEC  equ 60
-
 TIME_RSYNC_TLO  equ (TIME_PIT_HZ*TIME_RSYNC_SEC) & 0FFFFFFFFh
 TIME_RSYNC_THI  equ (TIME_PIT_HZ*TIME_RSYNC_SEC) >> 32
 
@@ -90,10 +86,8 @@ TimeStatB       db 0
 ;---------------------------------------------------------------------------------------------------
 WallSecDay      dd 0                    ; 0..86399
 WallRemTicks    dd 0                    ; 0..TIME_PIT_HZ-1
-
 WallLastLo      dd 0                    ; last mono tick observed by TimeNow
 WallLastHi      dd 0
-
 WallSyncLo      dd 0                    ; mono tick at last TimeSync
 WallSyncHi      dd 0
 WallSyncValid   db 0
@@ -106,7 +100,6 @@ BootHi          dd 0
 BootValid       db 0
 
 section .text
-
 ;---------------------------------------------------------------------------------------------------
 ; TimeInit - capture boot baseline for uptime
 ;---------------------------------------------------------------------------------------------------
@@ -138,11 +131,11 @@ TimeCmosReadReg:
 ;---------------------------------------------------------------------------------------------------
 TimeWaitNotUip:
   pusha
-.TimeWait1:
+TimeWaitNotUip1:
   mov   al,RTC_STATUSA
   call  TimeCmosReadReg
   test  al,RTC_UIP
-  jnz   .TimeWait1
+  jnz   TimeWaitNotUip1
   popa
   ret
 
@@ -167,18 +160,18 @@ TimeNormalizeHour:
   push  ebx
   mov   bl,[TimeStatB]
   test  bl,RTC_24H
-  jnz   .Done
+  jnz   TimeNormalizeHour1
   mov   bl,al
   and   bl,080h                         ; PM flag
   and   al,07Fh                         ; 1..12
   cmp   al,12
-  jne   .ChkPm
+  jne   TimeNormalizeHour2
   mov   al,0                            ; 12AM -> 00
-.ChkPm:
+TimeNormalizeHour2:
   cmp   bl,080h
-  jne   .Done
+  jne   TimeNormalizeHour1
   add   al,12                           ; PM add 12
-.Done:
+TimeNormalizeHour1:
   pop   ebx
   ret
 
