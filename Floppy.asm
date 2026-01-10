@@ -58,7 +58,6 @@ FlpDorShadow    db 0                    ; we keep a shadow of last DOR write (DO
 FlpDrive        db 0                    ; selected drive (0=A, 1=B, 2=C, 3=D)
 
 section .text
-
 ;--------------------------------------------------------------------------------------------------
 ; FloppyInit — select A:, enable controller (out of reset), disable all motors
 ;--------------------------------------------------------------------------------------------------
@@ -115,9 +114,9 @@ FloppyMotorOn:
   mov   dx,FDC_DOR
   out   dx,al
   mov   ecx,FLOPPY_SPINUP_TICKS
-.spin:
+FloppyMotorOn1:
   call  FlpDelay1ms
-  loop  .spin
+  loop  FloppyMotorOn1
   popa
   ret
 
@@ -147,8 +146,8 @@ FloppyMotorOff:
 FlpDelay1ms:
   push  ecx
   mov   ecx,4000                      ; tweak per machine/emulator to ~1ms
-.del1:
+FlpDelay1ms1:
   in    al,80h                        ; tiny I/O delay tick
-  loop  .del1
+  loop  FlpDelay1ms1
   pop   ecx
   ret
