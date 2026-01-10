@@ -94,24 +94,20 @@ TimerNowTicks:
   cmp   byte[TimerInitDone],1           ; Init done?
   je    TimerNowTicks1                  ;  Yes
   call  TimerInit                       ;  No, init now
-
 TimerNowTicks1:
   call  TimerLatchCount0                ; AX = current count
   mov   bx,ax                           ; BX = curr
-
   cmp   byte[TimerFirstRead],1          ; First read?
   jne   TimerNowTicks2                  ;  No
   mov   [TimerLastCnt],bx               ;  Yes: seed last count
   mov   byte[TimerFirstRead],0          ;  Clear flag
   jmp   TimerNowTicksDone               ;  Return 0 ticks so far
-
 TimerNowTicks2:
   ; Compute delta = (last - curr) with wrap handling on down-counter.
   mov   ax,[TimerLastCnt]               ; AX = last
   mov   [TimerLastCnt],bx               ; Save curr as new last
   cmp   ax,bx                           ; last >= curr ?
   jae   TimerNowTicks3                  ;  Yes (no wrap)
-
   ; Wrap case: delta = last + reload - curr
   ; reload = 65536 if TimerReload == 0
   movzx ecx,word[TimerReload]           ; ECX = reload (0..65535)
@@ -124,13 +120,11 @@ TimerNowTicks2a:
   movzx eax,bx                          ; EAX = curr
   sub   edx,eax                         ; EDX = delta (wrap)
   jmp   TimerNowTicks4                  ; Accumulate
-
 TimerNowTicks3:
   ; No wrap: delta = last - curr
   movzx edx,ax                          ; EDX = last
   movzx eax,bx                          ; EAX = curr
   sub   edx,eax                         ; EDX = delta
-
 TimerNowTicks4:
   ; Accumulate delta into 64-bit ticks
   mov   eax,[TimerTicksLo]              ; EAX = lo
@@ -139,7 +133,6 @@ TimerNowTicks4:
   mov   eax,[TimerTicksHi]              ; EAX = hi
   adc   eax,0                           ; hi += carry
   mov   [TimerTicksHi],eax              ; store hi
-
 TimerNowTicksDone:
   ; Stage return so POPA can't clobber it
   mov   eax,[TimerTicksLo]              ; lo
@@ -159,13 +152,11 @@ TimerNowTicksDone:
 ;--------------------------------------------------------------------------------------------------
 TimerDelayMs:
   pusha                                 ; Save registers
-
   ; Clamp ms to avoid div overflow (ms <= ~3,598,000 is safe)
   cmp   eax,3600000                     ; Cap at ~1 hour
   jbe   TimerDelayMs0                   ;  ok
   mov   eax,3600000                     ;  clamp
 TimerDelayMs0:
-
   ; ticks = round(ms*1193182/1000)
   mov   ebx,1193182                     ; PIT Hz
   mul   ebx                             ; EDX:EAX=ms*1193182
@@ -173,19 +164,15 @@ TimerDelayMs0:
   adc   edx,0                           ; carry into high
   mov   ecx,1000                        ; /1000
   div   ecx                             ; EAX=ticks (32-bit),EDX=remainder
-
   mov   esi,eax                         ; ticks lo
   xor   edi,edi                         ; ticks hi = 0
-
   ; start = TimerNowTicks
   call  TimerNowTicks                   ; EDX:EAX=start
   mov   ebx,eax                         ; start lo
   mov   ecx,edx                         ; start hi
-
   ; deadline = start + ticks
   add   ebx,esi                         ; deadline lo
   adc   ecx,edi                         ; deadline hi
-
 TimerDelayMs1:
   call  TimerNowTicks                   ; EDX:EAX=now
   cmp   edx,ecx                         ; compare hi
@@ -193,7 +180,6 @@ TimerDelayMs1:
   ja    TimerDelayMsDone                ; now.hi > deadline.hi
   cmp   eax,ebx                         ; hi equal: compare lo
   jb    TimerDelayMs1                   ; now.lo < deadline.lo
-
 TimerDelayMsDone:
   popa                                  ; Restore registers
   ret                                   ; Return to caller

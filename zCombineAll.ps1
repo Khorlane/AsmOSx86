@@ -2,6 +2,7 @@
 # Combines .asm files and README.md into one file.
 # Optionally includes .ps1 files when -IncludePs1 is specified.
 # Excludes Boot1.asm and Boot2.asm.
+# Now also includes *.md files in the Doc folder.
 
 param (
     [switch]$IncludePs1,
@@ -39,7 +40,8 @@ Get-ChildItem -Recurse -File |
         (
             $_.Extension -eq ".asm" -or
             ($IncludePs1 -and $_.Extension -eq ".ps1") -or
-            $_.Name -ieq "README.md"
+            $_.Name -ieq "README.md" -or
+            ($_.Extension -eq ".md" -and $_.DirectoryName -match "\\Doc($|\\)")
         ) -and
         $_.Name -inotmatch '^Boot[12]\.asm$'
     } |
