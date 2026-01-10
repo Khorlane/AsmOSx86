@@ -198,7 +198,7 @@ SetColorAttr:
 ;--------------------------------------------------------------------------------------------------
 ScrollUp:
   pusha
-  mov   esi,VidMem + 160                ; start of row 2
+  mov   esi,VidMem+160                  ; start of row 2
   mov   edi,VidMem                      ; start of row 1
   mov   ecx,24*80                       ; 24 rows × 80 columns
   rep   movsw                           ; copy each word (char+attr)

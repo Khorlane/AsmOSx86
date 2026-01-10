@@ -98,17 +98,17 @@ FloppySetDrive:
 ;--------------------------------------------------------------------------------------------------
 FloppyMotorOn:
   pusha
-  mov   al, [FlpDrive]                  ; 0..3
-  mov   bl, 1
-  shl   bl, 4                           ; BL = 0x10 (A:)
-  mov   cl, al                          ; shift count must be in cl
-  shl   bl, cl                          ; BL = 0x10 << drive (motor bit)
+  mov   al,[FlpDrive]                   ; 0..3
+  mov   bl,1
+  shl   bl,4                            ; BL = 0x10 (A:)
+  mov   cl,al                           ; shift count must be in cl
+  shl   bl,cl                           ; BL = 0x10 << drive (motor bit)
   mov   bh,bl                           ; Save motor bit in BH
   mov   al,[FlpDorShadow]
   or    al,DOR_RESET | DOR_DMAIRQ
   mov   bl,DOR_SEL_MASK
   not   bl
-  and   al, bl
+  and   al,bl
   or    al,[FlpDrive]
   or    al,bh                           ; Add motor bit from BH
   mov   [FlpDorShadow],al
@@ -129,11 +129,11 @@ FloppyMotorOff:
   mov   al,[FlpDrive]                 ; 0..3
   mov   bl,1
   shl   bl,4                          ; BL = 0x10
-  mov   cl, al                        ; shift count must be in cl
-  shl   bl, cl                        ; BL = 0x10 << drive
+  mov   cl,al                         ; shift count must be in cl
+  shl   bl,cl                         ; BL = 0x10 << drive
   mov   al,[FlpDorShadow]
   not   bl                            ; clear that motor bit only
-  and   al, bl
+  and   al,bl
   mov   [FlpDorShadow],al
   mov   dx,FDC_DOR
   out   dx,al
