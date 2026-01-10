@@ -135,14 +135,12 @@ MoveCursor:
   mov   bh,[Row]                        ; BH = row
   mov   bl,[Col]                        ; BL = col
   dec   bh                              ; BH-- (Make row zero based)
-
   xor   eax,eax                         ; Clear EAX
   mov   ecx,TotCol                      ; ECX = TotCol
   mov   al,bh                           ; Row
   mul   ecx                             ;  * TotCol
   add   al,bl                           ;  + Col
   mov   ebx,eax                         ; Save result in EBX (BL,BH in particular)
-
   xor   eax,eax                         ; Clear EAX
   mov   dx,03D4h                        ; Set VGA port to  03D4h (Video controller register select)
   mov   al,0Fh                          ; Set VGA port-index 0Fh (cursor location low byte)
@@ -150,7 +148,6 @@ MoveCursor:
   mov   dx,03D5h                        ; Set VGA port to  03D5h (Video controller data)
   mov   al,bl                           ; Set low byte of calculated cursor position from above
   out   dx,al                           ; Write to the VGA port
-
   xor   eax,eax                         ; Clear EAX
   mov   dx,03D4h                        ; Set VGA port to  03D4h (Video controller register select)
   mov   al,0Eh                          ; Set VGA port-index 0Fh (cursor location high byte)
@@ -158,7 +155,6 @@ MoveCursor:
   mov   dx,03D5h                        ; Set VGA port to  03D5h (Video controller data)
   mov   al,bh                           ; Set high byte of calculated cursor position from above
   out   dx,al                           ; Write to the VGA port
-
   popa                                  ; Restore registers
   ret                                   ; Return to caller
 
