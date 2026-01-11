@@ -93,6 +93,7 @@ FlushCS:
   call  TimerDelayMs                    ;  1 second
   call  TimePrint                       ; Time (HH:MM:SS) again
   call  UptimePrint                     ; Uptime (HH:MM:SS)
+  call  FloppyTest                      ; Floppy motor test
 
   ; Debug addresses and memory content
   mov   eax,0DEADBEEFh                  ; Dump a
@@ -112,18 +113,6 @@ FlushCS:
   mov   [Byte4],eax                     ;  at address
   call  DebugIt                         ;  1mb (100000h)
 
-  ;-----------------------------------------
-  ; Floppy motor test (temporary)
-  ;-----------------------------------------
-  call  FloppyInit                      ; controller enabled, drive A:, motors off
-  call  FloppyMotorOn                   ; motor on + internal spin-up wait
-  ; keep it on ~1 second (1000 x ~1ms)
-  mov   ecx,1000
-FloppyWait1:
-  call  FlpDelay1ms                     ; helper in Floppy.asm
-  loop  FloppyWait1
-  call  FloppyMotorOff                  ; motor off
-
 KbPollLoop:
   call  KbRead                          ; Read keyboard
   mov   al,[KbChar]                     ; If nothing
@@ -136,8 +125,21 @@ KbPollLoop:
   call  KbXlate                         ; Translate scancode to ASCII
   call  KbPrintChar                     ; Print it
   jmp   KbPollLoop                      ; Repeat
-
   hlt
+
+  ;-----------------------------------------
+  ; Floppy motor test (temporary)
+  ;-----------------------------------------
+FloppyTest:  
+  call  FloppyInit                      ; controller enabled, drive A:, motors off
+  call  FloppyMotorOn                   ; motor on + internal spin-up wait
+  ; keep it on ~1 second (1000 x ~1ms)
+  mov   ecx,1000
+FloppyTest1:
+  call  FlpDelay1ms                     ; helper in Floppy.asm
+  loop  FloppyTest1
+  call  FloppyMotorOff                  ; motor off
+  ret
 
 ;--------------------------------------------------------------------------------------------------
 ; DebugIt — Dumps EAX as hex
