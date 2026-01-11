@@ -87,6 +87,11 @@ All labels local to a routine must be named using the following pattern:
 - Do NOT add new labels, remove labels, or move labels.
 - If a routine has no internal labels, do not add any.
 
+**Exclusions to Label Naming Standard (lns):**
+- Stage3
+- FlushCS
+- KbPollLoop
+
 **Example:**
 ```
 TimerDelayMs1:
