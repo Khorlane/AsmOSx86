@@ -29,48 +29,12 @@ kernel with a clear, minimal, and educational design.
 
 ---
 
-## 📚 Project Wiki  
-Explore detailed tutorials and documentation in the [AsmOSx86 Wiki](https://github.com/Khorlane/AsmOSx86/wiki).  
-The Wiki needs updating to reflect the move from DOS-based tooling to PowerShell tooling. The underlying concepts remain consistent.
+## 📚 Project Documentation
+Project documentation lives in the Doc folder and provides the context needed to
+understand the design and structure of AsmOSx86.
+
+The code itself is heavily commented; taken together, the source and the documentation
+should give you everything required to understand how the system works and to modify
+it into whatever you want it to become.
 
 ---
-
-## 🏷️ Naming & Abbreviations
-
-AsmOSx86 favors **clarity and consistency over brevity**. Names are generally spelled out in full unless a word is used frequently enough that a standard abbreviation improves readability.
-
-### General conventions
-- Prefer full words where practical.
-- If a word is abbreviated, it is abbreviated **consistently everywhere**.
-- Avoid mixing abbreviated and non-abbreviated forms of the same word.
-- Function names may use abbreviations more freely than variable names.
-- Pointer variables are prefixed with `p` and are used **only** for variables that store an address.
-
-### Common abbreviations
-
-| Abbreviation | Meaning |
-|-------------|---------|
-| Addr | Address |
-| Attr | Attribute |
-| Calc | Calculate |
-| Char | Character |
-| Col | Column |
-| Desc | Descriptor (e.g., GDT/IDT descriptor) |
-| Dir | Directory (filesystem context only) |
-| Fore | Foreground |
-| Hex | Hexadecimal |
-| Mem | Memory |
-| Msg | Message |
-| Ofs | Offset |
-| Str | String |
-| Sz | Size |
-| Tot | Total |
-| Vid | Video |
-| Xlate | Translate |
-
-### Prefix usage
-- Subsystem prefixes are used when there is a clear owner (e.g., `Kb*`, `Tv*`, `Cn*`, `Mm*`, `Ts*`).
-- Kernel-wide primitives intended for general use may be unprefixed.
-- In ambiguous cases, naming defaults to the **highest-level abstraction**.
-
-These conventions are intended to keep the codebase readable, searchable, and maintainable as the system evolves.
