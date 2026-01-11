@@ -37,4 +37,6 @@ The code itself is heavily commented; taken together, the source and the documen
 should give you everything required to understand how the system works and to modify
 it into whatever you want it to become.
 
+The Tutorial is a work in progress...
+
 ---
