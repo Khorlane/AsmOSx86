@@ -361,11 +361,13 @@ TimeFmtHms:
 ; TimePrint - prints wall time (HH:MM:SS) via TimeStr + CnPrint
 ;---------------------------------------------------------------------------------------------------
 TimePrint:
+  pusha
   call  TimeNow
   mov   ebx,TimeStr
   call  TimeFmtHms
   mov   ebx,TimeStr
   call  CnPrint
+  popa
   ret
 
 ;---------------------------------------------------------------------------------------------------

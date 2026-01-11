@@ -224,8 +224,8 @@ ScrollUp:
   mov   ah,[ColorAttr]                  ; current color
   mov   edi,VidMem + 24*160             ; start of row 25
   mov   ecx,80
-ScrollClr:
+ScrollUp1:
   stosw
-  loop  ScrollClr
+  loop  ScrollUp1
   popa
   ret
