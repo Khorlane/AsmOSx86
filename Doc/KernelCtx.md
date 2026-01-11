@@ -42,7 +42,7 @@ Defined in: `Kernel.asm` String section.
 - `TimeStr`     : "HH:MM:SS" buffer
 - `UptimeStr`   : "UP YY:DDD:HH:MM:SS" buffer
 
-String format is defined in `Doc/ABI.md`.
+String format is defined in `Doc/Abi.md`.
 
 ---
 

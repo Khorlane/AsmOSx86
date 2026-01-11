@@ -119,9 +119,9 @@ FlushCS:
   call  FloppyMotorOn                   ; motor on + internal spin-up wait
   ; keep it on ~1 second (1000 x ~1ms)
   mov   ecx,1000
-.FloppyWait:
+FloppyWait1:
   call  FlpDelay1ms                     ; helper in Floppy.asm
-  loop  .FloppyWait
+  loop  FloppyWait1
   call  FloppyMotorOff                  ; motor off
 
 KbPollLoop:
