@@ -17,7 +17,7 @@
 ;   - Use TimeWall (Time*)  for: timestamps,logs,human-readable clock display.
 ;
 ; Ownership (LOCKED-IN)
-;   - ALL timekeeping logic lives in Time.asm.
+;   - All wall time logic lives in Time.asm; monotonic lives in Timer/Uptime” (or similar).
 ;   - The kernel MUST NOT read CMOS or PIT directly.
 ;   - CMOS,PIT,resync,and future IRQ handling are internal details.
 ;
