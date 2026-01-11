@@ -1,5 +1,5 @@
 ---
-◀️ [Tutorial02](Tutorial02)  [🏠 Tutorial](Tutorial)  [Tutorial04 ▶️](Tutorial04)
+◀️ [Tutorial02](Tutorial02.md)  [🏠 Tutorial](Tutorial.md)  [Tutorial04 ▶️](Tutorial04.md)
 
 ---
 
@@ -22,6 +22,6 @@ Now you have an imaginary floppy disk with nothing on it. It is not even formatt
 ## Format Floppy
 
 ---
-◀️ [Tutorial02](Tutorial02)  [🏠 Tutorial](Tutorial)  [Tutorial04 ▶️](Tutorial04)
+◀️ [Tutorial02](Tutorial02.md)  [🏠 Tutorial](Tutorial.md)  [Tutorial04 ▶️](Tutorial04.md)
 
 ---

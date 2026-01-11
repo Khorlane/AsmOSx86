@@ -1,5 +1,5 @@
 ---
-[◀️ Tutorial00](Tutorial00)  [🏠 Tutorial](Tutorial)  [Tutorial00 ▶️](Tutorial00)
+[◀️ Tutorial00](Tutorial00.md)  [🏠 Tutorial](Tutorial.md)  [Tutorial00 ▶️](Tutorial00.md)
 
 ---
 
@@ -17,6 +17,6 @@ The goal of this tutorial is to present functional examples of foundational OS c
 What follows is a series of tutorials that walk you through each stage of building AsmOSx86 from the ground up. Staying true to the bare-metal philosophy, we begin where memory begins — at address zero — with [[Tutorial00]].
 
 ---
-[◀️ Tutorial00](Tutorial00)  [🏠 Tutorial](Tutorial)  [Tutorial00 ▶️](Tutorial00)
+[◀️ Tutorial00](Tutorial00.md)  [🏠 Tutorial](Tutorial.md)  [Tutorial00 ▶️](Tutorial00.md)
 
 ---

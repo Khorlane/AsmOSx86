@@ -1,5 +1,5 @@
 ---
-[◀️ Tutorial00](Tutorial00)  [🏠 Tutorial](Tutorial)  [Tutorial02 ▶️](Tutorial02)
+[◀️ Tutorial00](Tutorial00.md)  [🏠 Tutorial](Tutorial.md)  [Tutorial02 ▶️](Tutorial02.md)
 
 ---
 
@@ -79,6 +79,6 @@ Format-Hex .\Boot1.bin
 ```
 
 ---
-[◀️ Tutorial00](Tutorial00)  [🏠 Tutorial](Tutorial)  [Tutorial02 ▶️](Tutorial02)
+[◀️ Tutorial00](Tutorial00.md)  [🏠 Tutorial](Tutorial.md)  [Tutorial02 ▶️](Tutorial02.md)
 
 ---

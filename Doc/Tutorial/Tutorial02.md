@@ -1,5 +1,5 @@
 ---
-◀️ [Tutorial01](Tutorial01)  [🏠 Tutorial](Tutorial)  [Tutorial03 ▶️](Tutorial03)
+◀️ [Tutorial01](Tutorial01.md)  [🏠 Tutorial](Tutorial.md)  [Tutorial03 ▶️](Tutorial03.md)
 
 ---
 
@@ -26,6 +26,6 @@ Now that Boot2.bin is in memory, we print a message, wait for a keypress, and ju
 Stage 2 will load our kernel, but before we jump into Stage 2, let's actually see Stage 1 working. The next section will walk you through the steps to get Stage 1 fired up using the Bochs emulator. You will be rewarded with two messages: **AsmOSx86 v0.0.1 Stage 1** and **MISSING BOOT2.BIN**. 🎉🎉🎉
 
 ---
-◀️ [Tutorial01](Tutorial01)  [🏠 Tutorial](Tutorial)  [Tutorial03 ▶️](Tutorial03)
+◀️ [Tutorial01](Tutorial01.md)  [🏠 Tutorial](Tutorial.md)  [Tutorial03 ▶️](Tutorial03.md)
 
 ---

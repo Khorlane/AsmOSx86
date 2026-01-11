@@ -1,5 +1,5 @@
 ---
-[◀️ Tutorial00](Tutorial00)  [🏠 Tutorial](Tutorial)  [Tutorial01 ▶️](Tutorial01)
+[◀️ Tutorial00](Tutorial00.md)  [🏠 Tutorial](Tutorial.md)  [Tutorial01 ▶️](Tutorial01.md)
 
 ---
 
@@ -34,6 +34,6 @@ So how does `boot1` get started? When a PC is powered on, the BIOS (Basic Input/
 We'll dive deep into the Boot Sector program in the next two sections of the tutorial.
 
 ---
-[◀️ Tutorial00](Tutorial00)  [🏠 Tutorial](Tutorial)  [Tutorial01 ▶️](Tutorial01)
+[◀️ Tutorial00](Tutorial00.md)  [🏠 Tutorial](Tutorial.md)  [Tutorial01 ▶️](Tutorial01.md)
 
 ---
