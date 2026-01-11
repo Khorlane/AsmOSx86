@@ -6,11 +6,24 @@
 ;   It is the machine console used for boot/status/debug output and
 ;   operator-only commands (later).
 ;
-;   Contract (current):
-;     - Console writes strings ONLY (PutStr).
-;     - Console messages ALWAYS end with CrLf.
-;     - Mode 0 newline: CR and LF are separate controls with their
-;       traditional meanings (handled inside PutStr).
+; Console Contract (Session 0 / physical terminal)
+;
+; Exported:
+;   CnInit
+;   CnCrLf
+;   CnPrint            ; EBX=String, prints + CrLf
+;   CnBanner
+;   CnBoot
+;
+; Requires:
+;   PutStr             ; EBX=String (Video.asm)
+;   CrLf               ; String in Kernel.asm
+;   CnBannerStr        ; String in Kernel.asm
+;   CnBootMsg          ; String in Kernel.asm
+;
+; Notes (LOCKED-IN):
+;   - Console prints strings only.
+;   - Console messages always end with CrLf.
 ;**************************************************************************************************
 
 ;--------------------------------------------------------------------------------------------------

@@ -1,8 +1,24 @@
 ;**************************************************************************************************
 ; Keyboard.asm
-;   Keyboard routines for kernel
-;   Provides basic keyboard input functions
-;   such as reading scancodes and handling key events.
+;   Keyboard input (polled, no IRQ)
+;
+;   Exported:
+;     KbRead            ; reads scancode into KbChar (0FFh if none)
+;     KbXlate           ; translates KbChar scancode -> ASCII (or '?' / ignored)
+;
+;   Requires (Kernel-owned globals):
+;     KbChar            ; db in KernelCtx
+;
+;   Requires (Kernel-owned tables in Kernel.asm):
+;     Scancode,ScancodeSz
+;     CharCode,CharCodeSz
+;     IgnoreCode,IgnoreSz
+;
+;   Register Discipline:
+;     - Routines preserve registers unless explicitly documented otherwise.
+;
+;   Notes:
+;     - KbRead polls 8042 status port 064h and reads data port 060h.
 ;**************************************************************************************************
 
 ;--------------------------------------------------------------------------------------------------

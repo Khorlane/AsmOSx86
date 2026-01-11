@@ -7,6 +7,22 @@
 ;     FloppySetDrive    ; optional: change selected drive 0..3
 ;     FloppyMotorOn     ; enable motor for selected drive (busy-wait spinup)
 ;     FloppyMotorOff    ; disable motor for selected drive
+;
+; Floppy Contract (current: motor control only)
+;
+; Exported:
+;   FloppyInit
+;   FloppySetDrive     ; Input: EAX=drive 0..3 (uses caller EAX via [esp+28] after pusha)
+;   FloppyMotorOn
+;   FloppyMotorOff
+;
+; Requires:
+;   No BIOS, no IRQ, no DMA
+;
+; Register Discipline:
+;   - Routines preserve registers unless explicitly documented.
+;   - FloppySetDrive reads the caller's original EAX from the pusha frame.
+;     See Doc/ABI.md (pusha layout).
 ;**************************************************************************************************
 
 [bits 32]

@@ -4,7 +4,7 @@
 ;   - CMOS read for baseline wall clock (HH:MM:SS)
 ;   - PIT polled ticks for monotonic elapsed time (no IRQ)
 ;   - 386-safe (no 64-bit instructions; uses EDX:EAX pairs)
-;===================================================================================================
+;
 ; TIME CONTRACTS — MONOTONIC (UPTIME) vs WALL (CALENDAR)
 ;
 ; Purpose

@@ -4,6 +4,27 @@
 ;   Provides basic video output functions
 ;   such as printing characters and strings to the screen
 ;   and updating the hardware cursor.
+;
+; Video Contract (Kernel-facing)
+;
+; Exported:
+;   CalcVideoAddr       ; uses Row/Col, updates VidAdr
+;   PutChar             ; uses Char/ColorAttr and VidAdr
+;   PutStr              ; EBX=String, interprets CR/LF, updates Row/Col and cursor
+;   MoveCursor
+;   ClrScr
+;   SetColorAttr
+;   ScrollUp
+;
+; Requires (KernelCtx globals in Kernel.asm):
+;   Row,Col,VidAdr,TvRowOfs
+;   Char,ColorAttr,ColorBack,ColorFore
+;
+; Requires:
+;   Doc/Abi.md String format (length-prefixed word + payload)
+;
+; Notes (LOCKED-IN):
+;   - PutStr is responsible for CR/LF semantics for console output.
 ;**************************************************************************************************
 
 ;--------------------------------------------------------------------------------------------------
