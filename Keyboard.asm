@@ -21,10 +21,13 @@
 ;     - KbRead polls 8042 status port 064h and reads data port 060h.
 ;**************************************************************************************************
 
+[bits 32]
+section .text
 ;--------------------------------------------------------------------------------------------------
 ; Read a scancode from the keyboard
 ;--------------------------------------------------------------------------------------------------
 KbRead:
+  pusha
   mov   ecx,2FFFFh                      ; Set count for loop
 KbRead1:
   in    al,064h                         ; Read 8042 Status Register (bit 1 is input buffer status (0=empty, 1=full)
@@ -33,16 +36,19 @@ KbRead1:
   loop  KbRead1                         ; Keep looping
   mov   al,0FFh                         ; No scan
   mov   [KbChar],al                     ; code received
+  popa
   ret                                   ; All done!
 KbRead2:
   in    al,060h                         ; Obtain scancode from
   mov   [KbChar],al                     ; Keyboard I/O Port
+  popa
   ret                                   ; All done!
 
  ;--------------------------------------------------------------------------------------------------
 ; Translate scancode to ASCII character
 ;--------------------------------------------------------------------------------------------------
 KbXlate:
+  pusha
   xor   eax,eax
   xor   esi,esi
   mov   ecx,IgnoreSz
@@ -72,4 +78,5 @@ KbXlate5:
   mov   al,[CharCode+esi]
 KbXlate6:
   mov   [KbChar],al
+  popa
   ret

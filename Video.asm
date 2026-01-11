@@ -56,6 +56,8 @@
 ;         ||- Foreground F = White
 ;         |-- Background 3 = Cyan
 
+[bits 32]
+section .text
 ;--------------------------------------------------------------------------------------------------
 ; Routine to calculate video memory address
 ;   represented by the given Row,Col
