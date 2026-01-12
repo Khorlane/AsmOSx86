@@ -85,11 +85,8 @@ FlushCS:
   call  UptimeInit                      ; Initialize uptime
   call  TimeSync                        ; Sync time from CMOS
   call  CnInit                          ; Initialize console
-  call  CnBoot                          ; Print initial boot messages
-  mov   ebx,InitMsg                     ; Put Initialization message
-  call  CnLog                           ; Timestamped log line
 
-  ; Console  
+  ; Debug prints to show time and uptime
   call  UptimePrint                     ; Uptime
   call  TimePrint                       ; Print Time
   mov   eax,1000                        ; Delay                 
@@ -207,15 +204,16 @@ HexDump1:
 %%EndStr:
 %endmacro
 ; Strings
-String  Buffer,"XXXXXXXX"               ; General purpose string buffer (8 chars + 2 byte length)
-String  CnBannerStr,"AsmOSx86 Console (Session 0)"
-String  CnBootMsg,"A Hobbyist Operating System in x86 Assembly"
-String  CrLf,0Dh,0Ah                    ; Carriage Return + Line Feed (CrLf)
-String  TimeStr,"HH:MM:SS"              ; Time string buffer
-String  UptimeStr,"UP YY:DDD:HH:MM:SS"  ; Uptime string buffer
+String  Buffer,"XXXXXXXX"
+String  CnStartMsg1,"AsmOSx86 Console (Session 0)"
+String  CnStartMsg2,"AsmOSx86 - A Hobbyist Operating System in x86 Assembly"
+String  CnStartMsg3,"AsmOSx86 Initialization started"
+String  CrLf,0Dh,0Ah
 String  LogStampStr,"YYYY-MM-DD HH:MM:SS"
 String  LogSepStr," "
-String  InitMsg,"AsmOSx86 Initialization started"
+String  TimeStr,"HH:MM:SS"
+String  UptimeStr,"UP YY:DDD:HH:MM:SS"
+
 
 ; Kernel Context (all mutable "variables" live here)
 align 4

@@ -19,8 +19,8 @@
 ; Requires:
 ;   PutStr             ; EBX=String (Video.asm)
 ;   CrLf               ; String in Kernel.asm
-;   CnBannerStr        ; String in Kernel.asm
-;   CnBootMsg          ; String in Kernel.asm
+;   CnStartMsg1        ; String in Kernel.asm
+;   CnStartMsg2        ; String in Kernel.asm
 ;   TimeNow            ; advance wall time using monotonic ticks (Time.asm)
 ;   TimeFmtYmdHms      ; formats current date/time as "YYYY-MM-DD HH:MM:SS" (Time.asm)
 ;   LogStampStr        ; timestamp string buffer (Kernel.asm)
@@ -36,8 +36,12 @@
 ;--------------------------------------------------------------------------------------------------
 CnInit:
   pusha                                 ; Save registers
-  ; NOTE: Kernel currently sets Row/Col and colors before entering loop.
-  ;       This routine exists so Console can own that setup later.
+  mov   ebx,CnStartMsg1                 ; Print console session banner
+  call  CnLog                           ;  string (+ CrLf)
+  mov   ebx,CnStartMsg2                 ; Print Announcement message
+  call  CnLog                           ;  message (+ CrLf)
+  mov   ebx,CnStartMsg3                 ; Print Initialization message
+  call  CnLog                           ;  message (+ CrLf)
   popa                                  ; Restore registers
   ret                                   ; Return to caller
 
@@ -59,27 +63,6 @@ CnPrint:
   pusha                                 ; Save registers
   call  PutStr                          ; Print the string
   call  CnCrLf                          ;  followed by CrLf
-  popa                                  ; Restore registers
-  ret                                   ; Return to caller
-
-;--------------------------------------------------------------------------------------------------
-; CnBanner - Print console banner (string) + CrLf
-;--------------------------------------------------------------------------------------------------
-CnBanner:
-  pusha                                 ; Save registers
-  mov   ebx,CnBannerStr                 ; Put banner
-  call  CnPrint                         ;  string (+ CrLf)
-  popa                                  ; Restore registers
-  ret                                   ; Return to caller
-
-;--------------------------------------------------------------------------------------------------
-; CnBoot - Print boot-time console output
-;--------------------------------------------------------------------------------------------------
-CnBoot:
-  pusha                                 ; Save registers
-  call  CnBanner                        ; Print banner (+ CrLf)
-  mov   ebx,CnBootMsg                   ; Put boot
-  call  CnPrint                         ;  message (+ CrLf)
   popa                                  ; Restore registers
   ret                                   ; Return to caller
 

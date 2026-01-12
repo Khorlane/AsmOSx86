@@ -37,8 +37,9 @@ Defined in: `Kernel.asm` String section.
 
 - `Buffer`      : general purpose 8-char payload string
 - `CrLf`        : 0Dh,0Ah
-- `CnBannerStr` : console banner
-- `CnBootMsg`   : boot message
+- `CnStartMsg1` : console session banner
+- `CnStartMsg2` : announcement message
+- `CnStartMsg3` : initialization message
 - `TimeStr`     : "HH:MM:SS" buffer
 - `UptimeStr`   : "UP YY:DDD:HH:MM:SS" buffer
 
