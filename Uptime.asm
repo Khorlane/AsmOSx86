@@ -56,7 +56,6 @@ UP_SEC_YEAR     equ 31536000
 section .data
 UptimeBaseLo    dd 0
 UptimeBaseHi    dd 0
-UptimeInitDone  db 0
 UptimeRetSec    dd 0                    ; staged return (seconds)
 
 section .text
@@ -69,7 +68,6 @@ UptimeInit:
   call  TimerNowTicks                   ; Stable read
   mov   [UptimeBaseLo],eax              ; Save baseline ticks
   mov   [UptimeBaseHi],edx
-  mov   byte[UptimeInitDone],1
   popa                                  ; Restore registers
   ret
 
@@ -80,10 +78,6 @@ UptimeInit:
 ;--------------------------------------------------------------------------------------------------
 UptimeNow:
   pusha                                 ; Save registers
-  cmp   byte[UptimeInitDone],1
-  je    UptimeNow1
-  call  UptimeInit
-UptimeNow1:
   call  TimerNowTicks                   ; EDX:EAX=now ticks
   sub   eax,[UptimeBaseLo]
   sbb   edx,[UptimeBaseHi]              ; EDX:EAX=delta ticks

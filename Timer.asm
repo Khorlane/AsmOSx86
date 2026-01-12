@@ -35,7 +35,6 @@ section .data
 ;--------------------------------------------------------------------------------------------------
 TimerReload     dw 0                     ; PIT divisor (0 means 65536)
 TimerLastCnt    dw 0                     ; last latched counter value
-TimerInitDone   db 0                     ; 0=not initialized,1=initialized
 TimerFirstRead  db 1                     ; first TimerNowTicks read after init
 TimerTicksLo    dd 0                     ; 64-bit accumulated ticks (low)
 TimerTicksHi    dd 0                     ; 64-bit accumulated ticks (high)
@@ -57,7 +56,6 @@ TimerInit:
   out   dx,al                           ; Low byte
   out   dx,al                           ; High byte
   mov   word[TimerReload],0             ; Store divisor (0=65536)
-  mov   byte[TimerInitDone],1           ; Mark init done
   mov   byte[TimerFirstRead],1          ; Force first-read behavior
   xor   eax,eax                         ; Clear accumulator
   mov   [TimerTicksLo],eax              ;  low
@@ -89,19 +87,14 @@ TimerLatchCount0:
 ;--------------------------------------------------------------------------------------------------
 TimerNowTicks:
   pusha                                 ; Save registers
-  ; Ensure initialized (safe no-op if caller forgot)
-  cmp   byte[TimerInitDone],1           ; Init done?
-  je    TimerNowTicks1                  ;  Yes
-  call  TimerInit                       ;  No, init now
-TimerNowTicks1:
   call  TimerLatchCount0                ; AX = current count
   mov   bx,ax                           ; BX = curr
   cmp   byte[TimerFirstRead],1          ; First read?
-  jne   TimerNowTicks2                  ;  No
+  jne   TimerNowTicks1                  ;  No
   mov   [TimerLastCnt],bx               ;  Yes: seed last count
   mov   byte[TimerFirstRead],0          ;  Clear flag
-  jmp   TimerNowTicks6                  ;  Return 0 ticks so far
-TimerNowTicks2:
+  jmp   TimerNowTicks5                  ;  Return 0 ticks so far
+TimerNowTicks1:
   ; Compute delta = (last - curr) with wrap handling on down-counter.
   mov   ax,[TimerLastCnt]               ; AX = last
   mov   [TimerLastCnt],bx               ; Save curr as new last
@@ -111,20 +104,20 @@ TimerNowTicks2:
   ; reload = 65536 if TimerReload == 0
   movzx ecx,word[TimerReload]           ; ECX = reload (0..65535)
   test  ecx,ecx                         ; reload==0?
-  jne   TimerNowTicks4                  ;  No
+  jne   TimerNowTicks2                  ;  No
   mov   ecx,65536                       ;  Yes: treat as 65536
-TimerNowTicks4:
+TimerNowTicks2:
   movzx edx,ax                          ; EDX = last
   add   edx,ecx                         ; EDX = last + reload
   movzx eax,bx                          ; EAX = curr
   sub   edx,eax                         ; EDX = delta (wrap)
-  jmp   TimerNowTicks5                  ; Accumulate
+  jmp   TimerNowTicks4                  ; Accumulate
 TimerNowTicks3:
   ; No wrap: delta = last - curr
   movzx edx,ax                          ; EDX = last
   movzx eax,bx                          ; EAX = curr
   sub   edx,eax                         ; EDX = delta
-TimerNowTicks5:
+TimerNowTicks4:
   ; Accumulate delta into 64-bit ticks
   mov   eax,[TimerTicksLo]              ; EAX = lo
   add   eax,edx                         ; lo += delta
@@ -132,7 +125,7 @@ TimerNowTicks5:
   mov   eax,[TimerTicksHi]              ; EAX = hi
   adc   eax,0                           ; hi += carry
   mov   [TimerTicksHi],eax              ; store hi
-TimerNowTicks6:
+TimerNowTicks5:
   ; Stage return so POPA can't clobber it
   mov   eax,[TimerTicksLo]              ; lo
   mov   edx,[TimerTicksHi]              ; hi

@@ -119,7 +119,6 @@ Examples:
 - Wall time may jump
 
 ### Exported Interface
-- `TimeInit`
 - `TimeSync`
 - `TimeNow`
 - `TimeFmtHms`

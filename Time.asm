@@ -35,7 +35,6 @@
 ;   - Resync reads CMOS once and snaps wall baseline (wall may jump).
 ;
 ; Exported
-;   TimeInit
 ;   TimeSync
 ;   TimeNow
 ;   TimeFmtHms
@@ -112,19 +111,6 @@ BootHi          dd 0
 BootValid       db 0
 
 section .text
-;---------------------------------------------------------------------------------------------------
-; TimeInit - capture boot baseline for uptime
-;---------------------------------------------------------------------------------------------------
-TimeInit:
-  pusha                                 ; Save registers
-  call  TimerInit                       ; Ensure PIT programmed
-  call  TimerNowTicks                   ; EDX:EAX = now
-  mov   [BootLo],eax                    ; Boot tick baseline
-  mov   [BootHi],edx
-  mov   byte[BootValid],1
-  popa
-  ret
-
 ;---------------------------------------------------------------------------------------------------
 ; TimeCmosReadReg - AL=register,returns AL=value
 ;---------------------------------------------------------------------------------------------------
@@ -474,7 +460,6 @@ TimeUptimeFmtHms:
   mov   ebp,ebx                         ; Save dest String
   cmp   byte[BootValid],1
   je    TimeUptimeFmtHms1
-  call  TimeInit
 TimeUptimeFmtHms1:
   call  TimerNowTicks                   ; EDX:EAX = now
   sub   eax,[BootLo]

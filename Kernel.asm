@@ -81,8 +81,9 @@ FlushCS:
   mov   [Col],al                        ;  1,1
 
   ; Initialize components
-  call  TimerInit                       ; Initialize PIT timer
+  call  TimerInit                       ; Initialize PIT / monotonic ticks
   call  UptimeInit                      ; Initialize uptime
+  call  TimeSync                        ; Sync time from CMOS
   call  CnInit                          ; Initialize console
   call  CnBoot                          ; Print initial boot messages
   mov   ebx,InitMsg                     ; Put Initialization message

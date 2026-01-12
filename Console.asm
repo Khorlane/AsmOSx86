@@ -90,7 +90,7 @@ CnBoot:
 CnLog:
   pusha                                 ; Save registers
   push  ebx                             ; Save message ptr
-  call  TimeReadCmos                    ; Snapshot wall date/time from RTC
+  call  TimeNow                         ; Update wall time from baseline + monotonic ticks
   mov   ebx,LogStampStr                 ; Format target
   call  TimeFmtYmdHms                   ; Fill "YYYY-MM-DD HH:MM:SS"
   mov   ebx,LogStampStr                 ; Put timestamp
