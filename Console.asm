@@ -21,10 +21,10 @@
 ;   CrLf               ; String in Kernel.asm
 ;   CnBannerStr        ; String in Kernel.asm
 ;   CnBootMsg          ; String in Kernel.asm
-;   TimeReadCmos (Time.asm)
-;   TimeFmtYmdHms (Time.asm)
-;   LogStampStr (Kernel.asm)
-;   LogSepStr (Kernel.asm)
+;   TimeNow            ; advance wall time using monotonic ticks (Time.asm)
+;   TimeFmtYmdHms      ; formats current date/time as "YYYY-MM-DD HH:MM:SS" (Time.asm)
+;   LogStampStr        ; timestamp string buffer (Kernel.asm)
+;   LogSepStr          ; separator string (Kernel.asm)
 ;
 ; Notes (LOCKED-IN):
 ;   - Console prints strings only.
