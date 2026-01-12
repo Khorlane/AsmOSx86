@@ -189,57 +189,44 @@ TimeReadCmos:
   pusha                                 ; Save registers
 TimeReadCmos1:
   call  TimeWaitNotUip                  ; Wait until RTC not updating (UIP=0)
-
   mov   al,RTC_STATUSB                  ; Read Status B (format flags)
   call  TimeCmosReadReg
   mov   [TimeStatB],al
-
   mov   al,RTC_SEC                      ; Read seconds
   call  TimeCmosReadReg
   mov   [TimeSec],al
-
   mov   al,RTC_MIN                      ; Read minutes
   call  TimeCmosReadReg
   mov   [TimeMin],al
-
   mov   al,RTC_HOUR                     ; Read hours (may include PM bit in 12h mode)
   call  TimeCmosReadReg
   mov   [TimeHour],al
-
   mov   al,RTC_DAY                      ; Read day of month
   call  TimeCmosReadReg
   mov   [TimeDay],al
-
   mov   al,RTC_MON                      ; Read month
   call  TimeCmosReadReg
   mov   [TimeMon],al
-
   mov   al,RTC_YEAR                     ; Read year (00..99)
   call  TimeCmosReadReg
   mov   [TimeCent],al                   ; Temporarily stash YY in TimeCent (byte)
-
   mov   al,RTC_CENTURY                  ; Read century (e.g. 20)
   call  TimeCmosReadReg
   mov   [TimeTmp],al                    ; TEMP byte storage (see note below)
-
   mov   al,RTC_STATUSA                  ; Verify UIP didn't flip during reads
   call  TimeCmosReadReg
   test  al,RTC_UIP
   jnz   TimeReadCmos1                   ; If updating started, retry
-
   ; If RTC provides BCD (RTC_BCD bit == 0), convert fields BCD->binary.
   mov   al,[TimeStatB]
   test  al,RTC_BCD
   jnz   TimeReadCmos2                   ; If RTC_BCD=1 => already binary
-
   mov   al,[TimeSec]                    ; SEC
   call  TimeBcdToBin
   mov   [TimeSec],al
-
   mov   al,[TimeMin]                    ; MIN
   call  TimeBcdToBin
   mov   [TimeMin],al
-
   mov   al,[TimeHour]                   ; HOUR (preserve PM bit if present)
   mov   ah,al
   and   ah,080h                         ; PM bit
@@ -247,29 +234,23 @@ TimeReadCmos1:
   call  TimeBcdToBin
   or    al,ah
   mov   [TimeHour],al
-
   mov   al,[TimeDay]                    ; DAY
   call  TimeBcdToBin
   mov   [TimeDay],al
-
   mov   al,[TimeMon]                    ; MON
   call  TimeBcdToBin
   mov   [TimeMon],al
-
   mov   al,[TimeCent]                   ; YY (stored in TimeCent temporarily)
   call  TimeBcdToBin
   mov   [TimeCent],al                   ; TimeCent now holds YY in binary
-
   mov   al,[TimeTmp]                     ; CENTURY
   call  TimeBcdToBin
   mov   [TimeTmp],al                     ; temp now holds CC in binary
-
 TimeReadCmos2:
   ; Normalize hour to 24h if needed
   mov   al,[TimeHour]
   call  TimeNormalizeHour
   mov   [TimeHour],al
-
 ; Build full year: TimeYear = (CC*100 + YY) if CC present, else 19/20 pivot + YY
   xor   eax,eax
   mov   al,[TimeCent]                   ; AL = YY (0..99)
@@ -283,7 +264,6 @@ TimeReadCmos2:
   add   eax,ebx                         ; EAX = CC*100 + YY
   mov   [TimeYear],ax                   ; store full year
   jmp   TimeReadCmos5
-
 TimeReadCmos3:
   ; No century register: pick 19xx vs 20xx using YY pivot
   ; Pivot policy: YY >= 80 => 19YY, else 20YY
@@ -293,12 +273,10 @@ TimeReadCmos3:
   add   eax,ebx                         ; 1900 + YY
   mov   [TimeYear],ax
   jmp   TimeReadCmos5
-
 TimeReadCmos4:
   mov   eax,2000
   add   eax,ebx                         ; 2000 + YY
   mov   [TimeYear],ax
-
 TimeReadCmos5:
   popa
   ret
@@ -507,7 +485,6 @@ TimePut4Dec:
   push  eax
   push  ebx
   push  edx
-
   movzx eax,ax                          ; IMPORTANT: use only AX (clear upper bits)
   xor   edx,edx
   mov   ebx,1000
@@ -515,7 +492,6 @@ TimePut4Dec:
   add   al,'0'
   mov   [edi],al
   inc   edi
-
   mov   eax,edx
   xor   edx,edx
   mov   ebx,100
@@ -523,7 +499,6 @@ TimePut4Dec:
   add   al,'0'
   mov   [edi],al
   inc   edi
-
   mov   eax,edx
   xor   edx,edx
   mov   bl,10
@@ -534,7 +509,6 @@ TimePut4Dec:
   add   al,'0'
   mov   [edi+1],al
   add   edi,2
-
   pop   edx
   pop   ebx
   pop   eax
