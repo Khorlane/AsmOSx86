@@ -14,12 +14,17 @@
 ;   CnPrint            ; EBX=String, prints + CrLf
 ;   CnBanner
 ;   CnBoot
+;   CnLog              ; EBX=String, prints timestamp + space + String + CrLf
 ;
 ; Requires:
 ;   PutStr             ; EBX=String (Video.asm)
 ;   CrLf               ; String in Kernel.asm
 ;   CnBannerStr        ; String in Kernel.asm
 ;   CnBootMsg          ; String in Kernel.asm
+;   TimeReadCmos (Time.asm)
+;   TimeFmtYmdHms (Time.asm)
+;   LogStampStr (Kernel.asm)
+;   LogSepStr (Kernel.asm)
 ;
 ; Notes (LOCKED-IN):
 ;   - Console prints strings only.
@@ -77,3 +82,23 @@ CnBoot:
   call  CnPrint                         ;  message (+ CrLf)
   popa                                  ; Restore registers
   ret                                   ; Return to caller
+
+;--------------------------------------------------------------------------------------------------
+; CnLog - Print timestamp + space + message + CrLf
+;   EBX = Address of message String
+;--------------------------------------------------------------------------------------------------
+CnLog:
+  pusha                                 ; Save registers
+  push  ebx                             ; Save message ptr
+  call  TimeReadCmos                    ; Snapshot wall date/time from RTC
+  mov   ebx,LogStampStr                 ; Format target
+  call  TimeFmtYmdHms                   ; Fill "YYYY-MM-DD HH:MM:SS"
+  mov   ebx,LogStampStr                 ; Put timestamp
+  call  PutStr                          ;  (no CrLf yet)
+  mov   ebx,LogSepStr                   ; Put space
+  call  PutStr                          ;  (no CrLf yet)
+  pop   ebx                             ; Restore message ptr
+  call  PutStr                          ; Put message
+  call  CnCrLf                          ; End line
+  popa                                  ; Restore registers
+  ret

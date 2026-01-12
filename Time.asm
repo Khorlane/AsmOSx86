@@ -1,7 +1,7 @@
 ;**************************************************************************************************
 ; Time.asm
 ;   Time support (RTC + PIT)
-;   - CMOS read for baseline wall clock (HH:MM:SS)
+;   - CMOS read for baseline wall clock (YYYY-MM-DD HH:MM:SS)
 ;   - PIT polled ticks for monotonic elapsed time (no IRQ)
 ;   - 386-safe (no 64-bit instructions; uses EDX:EAX pairs)
 ;
@@ -41,6 +41,7 @@
 ;   TimeFmtHms
 ;   TimePrint
 ;   TimeUptimeFmtHms      ; formats uptime "HH:MM:SS" (hours mod 100)
+;   TimeFmtYmdHms         ; formats wall time "YYYY-MM-DD HH:MM:SS"
 ;**************************************************************************************************
 
 [bits 32]
@@ -55,6 +56,10 @@ CMOS_NMI        equ 080h
 RTC_SEC         equ 00h
 RTC_MIN         equ 02h
 RTC_HOUR        equ 04h
+RTC_DAY         equ 07h
+RTC_MON         equ 08h
+RTC_YEAR        equ 09h
+RTC_CENTURY     equ 32h                 ; If present (common in emulators/BIOS)
 RTC_STATUSA     equ 0Ah
 RTC_STATUSB     equ 0Bh
 ; StatusA bits
@@ -76,10 +81,17 @@ section .data
 ;---------------------------------------------------------------------------------------------------
 ; Raw CMOS fields (binary,24h after TimeReadCmos)
 ;---------------------------------------------------------------------------------------------------
+; TimeYear is stored as a full year (e.g. 2026).
+; TimeDay/TimeMon are day-of-month and month.
 TimeSec         db 0
 TimeMin         db 0
 TimeHour        db 0
+TimeDay         db 0
+TimeMon         db 0
+TimeYear        dw 0                    ; full year (e.g., 2026)
+TimeCent        db 0
 TimeStatB       db 0
+TimeTmp         db 0                    ; temp byte for CMOS reads (century, etc.)
 
 ;---------------------------------------------------------------------------------------------------
 ; Wall time state
@@ -176,48 +188,122 @@ TimeNormalizeHour1:
   ret
 
 ;---------------------------------------------------------------------------------------------------
-; TimeReadCmos - reads HH:MM:SS into TimeHour/Min/Sec (binary,24h)
+; TimeReadCmos - reads RTC date/time into Time* fields (binary,24h)
+;   Output (after return):
+;     TimeHour/Min/Sec  = 0..23 / 0..59 / 0..59
+;     TimeDay           = 1..31
+;     TimeMon           = 1..12
+;     TimeYear          = full year (e.g. 2026)
+;   Notes:
+;     - Handles BCD or binary RTC based on RTC_STATUSB (RTC_BCD bit).
+;     - Handles 12h vs 24h using TimeNormalizeHour (RTC_24H bit).
+;     - Reads CMOS twice-stable: waits for UIP=0, reads fields, verifies UIP still 0.
 ;---------------------------------------------------------------------------------------------------
 TimeReadCmos:
-  pusha
+  pusha                                 ; Save registers
 TimeReadCmos1:
-  call  TimeWaitNotUip
-  mov   al,RTC_STATUSB
+  call  TimeWaitNotUip                  ; Wait until RTC not updating (UIP=0)
+
+  mov   al,RTC_STATUSB                  ; Read Status B (format flags)
   call  TimeCmosReadReg
   mov   [TimeStatB],al
-  mov   al,RTC_SEC
+
+  mov   al,RTC_SEC                      ; Read seconds
   call  TimeCmosReadReg
   mov   [TimeSec],al
-  mov   al,RTC_MIN
+
+  mov   al,RTC_MIN                      ; Read minutes
   call  TimeCmosReadReg
   mov   [TimeMin],al
-  mov   al,RTC_HOUR
+
+  mov   al,RTC_HOUR                     ; Read hours (may include PM bit in 12h mode)
   call  TimeCmosReadReg
   mov   [TimeHour],al
-  mov   al,RTC_STATUSA
+
+  mov   al,RTC_DAY                      ; Read day of month
+  call  TimeCmosReadReg
+  mov   [TimeDay],al
+
+  mov   al,RTC_MON                      ; Read month
+  call  TimeCmosReadReg
+  mov   [TimeMon],al
+
+  mov   al,RTC_YEAR                     ; Read year (00..99)
+  call  TimeCmosReadReg
+  mov   [TimeCent],al                   ; Temporarily stash YY in TimeCent (byte)
+
+  mov   al,RTC_CENTURY                  ; Read century (e.g. 20)
+  call  TimeCmosReadReg
+  mov   [TimeTmp],al                    ; TEMP byte storage (see note below)
+
+  mov   al,RTC_STATUSA                  ; Verify UIP didn't flip during reads
   call  TimeCmosReadReg
   test  al,RTC_UIP
-  jnz   TimeReadCmos1
+  jnz   TimeReadCmos1                   ; If updating started, retry
+
+  ; If RTC provides BCD (RTC_BCD bit == 0), convert fields BCD->binary.
   mov   al,[TimeStatB]
   test  al,RTC_BCD
-  jnz   TimeReadCmos2
-  mov   al,[TimeSec]
+  jnz   TimeReadCmos2                   ; If RTC_BCD=1 => already binary
+
+  mov   al,[TimeSec]                    ; SEC
   call  TimeBcdToBin
   mov   [TimeSec],al
-  mov   al,[TimeMin]
+
+  mov   al,[TimeMin]                    ; MIN
   call  TimeBcdToBin
   mov   [TimeMin],al
-  mov   al,[TimeHour]
+
+  mov   al,[TimeHour]                   ; HOUR (preserve PM bit if present)
   mov   ah,al
   and   ah,080h                         ; PM bit
   and   al,07Fh
   call  TimeBcdToBin
   or    al,ah
   mov   [TimeHour],al
+
+  mov   al,[TimeDay]                    ; DAY
+  call  TimeBcdToBin
+  mov   [TimeDay],al
+
+  mov   al,[TimeMon]                    ; MON
+  call  TimeBcdToBin
+  mov   [TimeMon],al
+
+  mov   al,[TimeCent]                   ; YY (stored in TimeCent temporarily)
+  call  TimeBcdToBin
+  mov   [TimeCent],al                   ; TimeCent now holds YY in binary
+
+  mov   al,[TimeTmp]                     ; CENTURY
+  call  TimeBcdToBin
+  mov   [TimeTmp],al                     ; temp now holds CC in binary
+
 TimeReadCmos2:
+  ; Normalize hour to 24h if needed
   mov   al,[TimeHour]
   call  TimeNormalizeHour
   mov   [TimeHour],al
+
+  ; Build full year: TimeYear = (CC*100 + YY) if CC present, else 2000 + YY
+  xor   eax,eax
+  mov   al,[TimeCent]                   ; AL = YY (0..99)
+  movzx ebx,al                          ; EBX = YY
+  xor   eax,eax
+  mov   al,[TimeTmp]                    ; AL = CC (0 if not present / unreadable)
+  test  al,al
+  jz    TimeReadCmos3                   ; No century => assume 2000+
+  movzx eax,al                          ; EAX = CC
+  imul  eax,100                         ; EAX = CC*100
+  add   eax,ebx                         ; EAX = CC*100 + YY
+  mov   [TimeYear],ax                   ; store full year
+  jmp   TimeReadCmos4
+
+TimeReadCmos3:
+  mov   eax,2000
+  add   eax,ebx                         ; 2000 + YY
+  mov   [TimeYear],ax
+
+TimeReadCmos4:
   popa
   ret
 
@@ -416,5 +502,82 @@ TimeUptimeFmtHms1:
   mov   eax,ecx
   mov   al,al
   call  TimePut2Dec                     ; SS
+  popa
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; TimePut4Dec - AX=0..9999,EDI=dest,writes four digits,EDI+=4
+;--------------------------------------------------------------------------------------------------
+TimePut4Dec:
+  push  eax
+  push  ebx
+  push  edx
+
+  movzx eax,ax                          ; IMPORTANT: use only AX (clear upper bits)
+  xor   edx,edx
+  mov   ebx,1000
+  div   ebx                             ; EAX=thousands,EDX=rem
+  add   al,'0'
+  mov   [edi],al
+  inc   edi
+
+  mov   eax,edx
+  xor   edx,edx
+  mov   ebx,100
+  div   ebx                             ; EAX=hundreds,EDX=rem
+  add   al,'0'
+  mov   [edi],al
+  inc   edi
+
+  mov   eax,edx
+  xor   edx,edx
+  mov   bl,10
+  div   bl                              ; AL=tens,AH=ones
+  add   al,'0'
+  mov   [edi],al
+  mov   al,ah
+  add   al,'0'
+  mov   [edi+1],al
+  add   edi,2
+
+  pop   edx
+  pop   ebx
+  pop   eax
+  ret
+  
+;--------------------------------------------------------------------------------------------------
+; TimeFmtYmdHms - EBX=String,formats current date/time as "YYYY-MM-DD HH:MM:SS"
+;--------------------------------------------------------------------------------------------------
+TimeFmtYmdHms:
+  pusha
+  mov   edi,ebx
+  add   edi,2                           ; Skip length word
+  mov   ax,[TimeYear]                   ; YYYY
+  call  TimePut4Dec
+  mov   al,'-'
+  mov   [edi],al
+  inc   edi
+  mov   al,[TimeMon]                    ; MM
+  call  TimePut2Dec
+  mov   al,'-'
+  mov   [edi],al
+  inc   edi
+  mov   al,[TimeDay]                    ; DD
+  call  TimePut2Dec
+  mov   al,' '
+  mov   [edi],al
+  inc   edi
+  mov   al,[TimeHour]                   ; HH
+  call  TimePut2Dec
+  mov   al,':'
+  mov   [edi],al
+  inc   edi
+  mov   al,[TimeMin]                    ; MM
+  call  TimePut2Dec
+  mov   al,':'
+  mov   [edi],al
+  inc   edi
+  mov   al,[TimeSec]                    ; SS
+  call  TimePut2Dec
   popa
   ret

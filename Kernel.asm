@@ -85,6 +85,8 @@ FlushCS:
   call  UptimeInit                      ; Initialize uptime
   call  CnInit                          ; Initialize console
   call  CnBoot                          ; Print initial boot messages
+  mov   ebx,InitMsg                     ; Put Initialization message
+  call  CnLog                           ; Timestamped log line
 
   ; Console  
   call  UptimePrint                     ; Uptime (HH:MM:SS)
@@ -210,6 +212,9 @@ String  CnBootMsg,"A Hobbyist Operating System in x86 Assembly"
 String  CrLf,0Dh,0Ah                    ; Carriage Return + Line Feed (CrLf)
 String  TimeStr,"HH:MM:SS"              ; Time string buffer
 String  UptimeStr,"UP YY:DDD:HH:MM:SS"  ; Uptime string buffer
+String  LogStampStr,"YYYY-MM-DD HH:MM:SS"
+String  LogSepStr," "
+String  InitMsg,"AsmOSx86 Initialization started"
 
 ; Kernel Context (all mutable "variables" live here)
 align 4
