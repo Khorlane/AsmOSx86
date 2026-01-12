@@ -243,14 +243,3 @@ KernelCtxSz  equ KernelCtxEnd - KernelCtx
 
 HexDigits   db  "0123456789ABCDEF"      ; Hex digits for conversion
 Zero        equ 00000000h               ; Constant zero
-
-;--------------------------------------------------------------------------------------------------
-; Video
-;--------------------------------------------------------------------------------------------------
-; Equates
-VidMem      equ 0B8000h                 ; Video Memory (Starting Address)
-TotCol      equ 80                      ; width and height of screen
-Black       equ 00h                     ; Black
-Cyan        equ 03h                     ; Cyan
-Purple      equ 05h                     ; Purple
-White       equ 0Fh                     ; White

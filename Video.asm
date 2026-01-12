@@ -27,10 +27,6 @@
 ;   - PutStr is responsible for CR/LF semantics for console output.
 ;**************************************************************************************************
 
-;--------------------------------------------------------------------------------------------------
-; Video Routines
-;--------------------------------------------------------------------------------------------------
-
 ;---------------
 ;- Color Codes -
 ;---------------
@@ -57,6 +53,14 @@
 ;         |-- Background 3 = Cyan
 
 [bits 32]
+section .data
+VidMem      equ 0B8000h                 ; Video Memory (Starting Address)
+TotCol      equ 80                      ; width and height of screen
+Black       equ 00h                     ; Black
+Cyan        equ 03h                     ; Cyan
+Purple      equ 05h                     ; Purple
+White       equ 0Fh                     ; White
+
 section .text
 ;--------------------------------------------------------------------------------------------------
 ; Routine to calculate video memory address
