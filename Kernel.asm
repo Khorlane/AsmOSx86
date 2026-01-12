@@ -89,12 +89,12 @@ FlushCS:
   call  CnLog                           ; Timestamped log line
 
   ; Console  
-  call  UptimePrint                     ; Uptime (HH:MM:SS)
-  call  TimePrint                       ; Time (HH:MM:SS)
+  call  UptimePrint                     ; Uptime
+  call  TimePrint                       ; Print Time
   mov   eax,1000                        ; Delay                 
   call  TimerDelayMs                    ;  1 second
-  call  TimePrint                       ; Time (HH:MM:SS) again
-  call  UptimePrint                     ; Uptime (HH:MM:SS)
+  call  TimePrint                       ; Print Time
+  call  UptimePrint                     ; Print Uptime
   call  FloppyTest                      ; Floppy motor test
 
   ; Debug addresses and memory content
