@@ -22,6 +22,29 @@
 ;**************************************************************************************************
 
 [bits 32]
+section .data
+;--------------------------------------------------------------------------------------------------
+; Keyboard Scancode/Character Tables
+;--------------------------------------------------------------------------------------------------
+; Make scancodes
+Scancode    db 01Eh, 030h, 02Eh, 020h, 012h, 021h, 022h, 023h, 017h, 024h, 025h, 026h     ; Make Scancodes
+            db 032h, 031h, 018h, 019h, 010h, 013h, 01Fh, 014h, 016h, 02Fh, 011h, 02Dh     ;  a-z keys
+            db 015h, 02Ch, 00Bh, 002h, 003h, 004h, 005h, 006h, 007h, 008h, 009h, 00Ah     ;  and 0-9 keys
+ScancodeEnd:
+ScancodeSz  equ ScancodeEnd - Scancode                                                    ; Size of Scancode table
+; Corresponding ASCII characters
+CharCode    db 061h, 062h, 063h, 064h, 065h, 066h, 067h, 068h, 069h, 06Ah, 06Bh, 06Ch     ; ASCII characters
+            db 06Dh, 06Eh, 06Fh, 070h, 071h, 072h, 073h, 074h, 075h, 076h, 077h, 078h     ;  a-z
+            db 079h, 07Ah, 030h, 031h, 032h, 033h, 034h, 035h, 036h, 037h, 038h, 039h     ;  and 0-9
+CharCodeEnd:
+CharCodeSz  equ CharCodeEnd - CharCode                                                    ; Size of CharCode table
+; Break scancodes to ignore
+IgnoreCode  db 09Eh, 0B0h, 0AEh, 0A0h, 092h, 0A1h, 0A2h, 0A3h, 097h, 0A4h, 0A5h, 0A6h     ; Break Scancodes
+            db 0B2h, 0B1h, 098h, 099h, 090h, 093h, 09Fh, 094h, 096h, 0BFh, 091h, 0ADh     ;  a-z
+            db 095h, 0ACh, 08Bh, 082h, 083h, 084h, 085h, 086h, 087h, 088h, 089h, 08Ah     ;  and 0-9
+IgnoreEnd:
+IgnoreSz    equ IgnoreEnd - IgnoreCode                                                    ; Size of IgnoreCode table
+
 section .text
 ;--------------------------------------------------------------------------------------------------
 ; KbRead - poll 8042 for a pending scancode
