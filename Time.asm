@@ -284,26 +284,36 @@ TimeReadCmos2:
   call  TimeNormalizeHour
   mov   [TimeHour],al
 
-  ; Build full year: TimeYear = (CC*100 + YY) if CC present, else 2000 + YY
+; Build full year: TimeYear = (CC*100 + YY) if CC present, else 19/20 pivot + YY
   xor   eax,eax
   mov   al,[TimeCent]                   ; AL = YY (0..99)
   movzx ebx,al                          ; EBX = YY
   xor   eax,eax
   mov   al,[TimeTmp]                    ; AL = CC (0 if not present / unreadable)
   test  al,al
-  jz    TimeReadCmos3                   ; No century => assume 2000+
+  jz    TimeReadCmos3                   ; No century => use pivot
   movzx eax,al                          ; EAX = CC
   imul  eax,100                         ; EAX = CC*100
   add   eax,ebx                         ; EAX = CC*100 + YY
   mov   [TimeYear],ax                   ; store full year
-  jmp   TimeReadCmos4
+  jmp   TimeReadCmos5
 
 TimeReadCmos3:
+  ; No century register: pick 19xx vs 20xx using YY pivot
+  ; Pivot policy: YY >= 80 => 19YY, else 20YY
+  cmp   bl,80                           ; YY >= 80 ?
+  jb    TimeReadCmos4                   ;  No -> 20YY
+  mov   eax,1900
+  add   eax,ebx                         ; 1900 + YY
+  mov   [TimeYear],ax
+  jmp   TimeReadCmos5
+
+TimeReadCmos4:
   mov   eax,2000
   add   eax,ebx                         ; 2000 + YY
   mov   [TimeYear],ax
 
-TimeReadCmos4:
+TimeReadCmos5:
   popa
   ret
 
