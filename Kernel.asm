@@ -214,7 +214,6 @@ String  LogSepStr," "
 String  TimeStr,"HH:MM:SS"
 String  UptimeStr,"UP YY:DDD:HH:MM:SS"
 
-
 ; Kernel Context (all mutable "variables" live here)
 align 4
 KernelCtx:
@@ -242,4 +241,3 @@ KernelCtxSz  equ KernelCtxEnd - KernelCtx
 %endif
 
 HexDigits   db  "0123456789ABCDEF"      ; Hex digits for conversion
-Zero        equ 00000000h               ; Constant zero
