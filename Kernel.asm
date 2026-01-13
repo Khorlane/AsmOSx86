@@ -2,9 +2,9 @@
 ; Kernel.asm
 ;   A basic 32 bit binary kernel
 ;
-;   Test goal:
-;     - Echo ASCII keys from Keyboard.asm ring buffer
-;     - Example: press unshifted 'A' => see 'a'
+; Test goal (updated)
+;   - Exercise KbReadLine (editable line input) from Keyboard.asm
+;   - Show a prompt, accept a line, then print: "You typed: <line>"
 ;
 ; nasm -f bin Kernel.asm -o Kernel.bin -l Kernel.lst
 ;**************************************************************************************************
@@ -40,6 +40,10 @@ IDT1: times 256 dq 0
 IDT2:
   dw 2047
   dd IDT1
+;--------------------------------------------------------------------------------------------------
+; Include Macro Definitions
+;--------------------------------------------------------------------------------------------------
+%include "Macros.asm"
 
 ;--------------------------------------------------------------------------------------------------
 ; Include Major Components
@@ -117,17 +121,29 @@ FlushCS:
   mov   [Byte4],eax                     ;  at address
   call  DebugIt                         ;  1mb (100000h)
 
-;--------------------------------------------------------------------------------------------------
-; Keyboard Echo Loop (NEW)
-;   - KbWaitChar blocks until a character is available
-;   - Store it into KernelCtx Char, then print that one-char string
-;--------------------------------------------------------------------------------------------------
-KbEchoLoop:
-  call  KbWaitChar                      ; AL = ASCII (non-zero)
-  mov   [Char],al                       ; save to KernelCtx (used for printing)
-  call  KbPrintChar                     ; prints Char then CRLF
-  jmp   KbEchoLoop
+;------------------------------------------------------------------------------------------------
+; Line-input test harness
+;   - Print prompt
+;   - Read line into LineBuf (editable)
+;   - Print "You typed: " + the line + CRLF
+;------------------------------------------------------------------------------------------------
+ShellLoop:
+  mov   ebx,PromptStr                   ; prompt => "> "
+  call  PutStr
 
+  mov   ebx,LineBuf                     ; EBX = destination buffer
+  mov   ecx,LINE_MAX                    ; ECX = max chars (excluding 0 terminator)
+  call  KbReadLine                      ; blocks until Enter, buffer becomes 0-terminated
+
+  mov   ebx,TypedStr                    ; "You typed: "
+  call  PutStr
+
+  mov   ebx,LineBuf
+  call  PutZStr                         ; print 0-terminated line
+  mov   ebx,CrLf
+  call  PutStr
+
+  jmp   ShellLoop
   hlt
 
 ;-----------------------------------------
@@ -145,24 +161,42 @@ FloppyTest1:
   ret
 
 ;--------------------------------------------------------------------------------------------------
-; KbPrintChar — Put Char into Buffer and print it
-;   Notes:
-;     - Uses KernelCtx variable [Char] (not KbChar anymore)
+; PutZStr — print a 0-terminated string using Console.PutStr by chunking into Buffer
+;
+; Big picture
+;   - Console.PutStr expects a length-prefixed string.
+;   - This helper converts a C-style 0-terminated string into repeated PutStr calls.
+;   - For simplicity in early stage, we print one char at a time.
+;
+; Input
+;   EBX = pointer to 0-terminated string
 ;--------------------------------------------------------------------------------------------------
-KbPrintChar:
-  mov   al,[Char]                       ; Get character to print
-  mov   [Buffer+2],al                   ; First byte of string (skip length word)
-  mov   ecx,7                           ; Fill remaining 7 bytes
-  mov   ebx,Buffer+3                    ; Start at second character
-  mov   al,' '
-KbPrintChar1:
-  mov   [ebx],al
-  inc   ebx
-  loop  KbPrintChar1
-  mov   ebx,Buffer
+PutZStr:
+  push  eax
+  push  ebx
+  push  ecx
+  push  edx
+  push  esi
+
+  mov   esi,ebx                         ; ESI walks the input string
+PutZStr1:
+  mov   al,[esi]
+  test  al,al
+  jz    PutZStrDone
+
+  mov   [ZBuf+2],al                     ; put char into 1-char length-prefixed string
+  mov   ebx,ZBuf
   call  PutStr
-  mov   ebx,CrLf
-  call  PutStr
+
+  inc   esi
+  jmp   PutZStr1
+
+PutZStrDone:
+  pop   esi
+  pop   edx
+  pop   ecx
+  pop   ebx
+  pop   eax
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -197,20 +231,13 @@ HexDump1:
 ;--------------------------------------------------------------------------------------------------
 ; Working Storage
 ;--------------------------------------------------------------------------------------------------
-; String Macro - Define a string with length prefix
-%macro String 2+
-%1          dw  %%EndStr-%1
-            db  %2
-%rotate 1
-%rep %0-2
-            db  %2
-%rotate 1
-%endrep
-%%EndStr:
-%endmacro
 
 ; Strings
 String  Buffer,"XXXXXXXX"
+String  PromptStr,">"," "
+String  TypedStr,"You typed:"," "
+String  ZBuf,"X"
+
 String  CnStartMsg1,"AsmOSx86 Console (Session 0)"
 String  CnStartMsg2,"AsmOSx86 - A Hobbyist Operating System in x86 Assembly"
 String  CnStartMsg3,"AsmOSx86 Initialization started"
@@ -219,6 +246,11 @@ String  LogStampStr,"YYYY-MM-DD HH:MM:SS"
 String  LogSepStr," "
 String  TimeStr,"HH:MM:SS"
 String  UptimeStr,"UP YY:DDD:HH:MM:SS"
+
+; Line input buffer (0-terminated)
+LINE_MAX    equ 64
+align 4
+LineBuf     times (LINE_MAX+1) db 0     ; +1 for 0 terminator
 
 ; Kernel Context (all mutable "variables" live here)
 align 4
