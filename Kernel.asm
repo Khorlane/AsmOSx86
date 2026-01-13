@@ -93,6 +93,7 @@ FlushCS:
   call  UptimeInit                      ; Initialize uptime
   call  TimeSync                        ; Sync time from CMOS
   call  CnInit                          ; Initialize console
+  call  KbInit                          ; Initialize keyboard
 
   ; Debug prints to show time and uptime
   call  UptimePrint                     ; Uptime
