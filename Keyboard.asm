@@ -34,7 +34,7 @@ section .data
 ;   - backspace
 ;--------------------------------------------------------------------------------------------------
 
-; a-z + 0-9 (existing)
+; a-z + 0-9
 Scancode    db 01Eh, 030h, 02Eh, 020h, 012h, 021h, 022h, 023h, 017h, 024h, 025h, 026h
             db 032h, 031h, 018h, 019h, 010h, 013h, 01Fh, 014h, 016h, 02Fh, 011h, 02Dh
             db 015h, 02Ch, 00Bh, 002h, 003h, 004h, 005h, 006h, 007h, 008h, 009h, 00Ah
@@ -65,20 +65,16 @@ IgnoreSz    equ IgnoreEnd - IgnoreCode
 ;   - Size 32 bytes (power of 2)
 ;   - Overflow overwrites oldest: advance Tail before writing when full
 ;--------------------------------------------------------------------------------------------------
-KB_BUF_SZ   equ 32
-
-KbBuf       times KB_BUF_SZ db 0
-KbHead      db 0
-KbTail      db 0
-KbCount     db 0
-
-; ABI return staging (POPA restores EAX, so we stage AL here)
-KbRetChar   db 0
-
+KB_BUF_SZ   equ 32                      ; ASCII ring buffer size (bytes)
+KbBuf       times KB_BUF_SZ db 0        ; ASCII ring buffer
+KbHead      db 0                        ; next write index
+KbTail      db 0                        ; next read index
+KbCount     db 0                        ; current count
+KbRetChar   db 0                        ; ABI return staging (POPA restores EAX, so we stage AL here)
 ; KbReadLine state
-KbLinePtr   dd 0        ; caller buffer pointer
-KbLineMax   dd 0        ; max chars (excluding terminator)
-KbLineLen   dd 0        ; current length
+KbLinePtr   dd 0                        ; caller buffer pointer
+KbLineMax   dd 0                        ; max chars (excluding terminator)
+KbLineLen   dd 0                        ; current length
 
 ;--------------------------------------------------------------------------------------------------
 ; Private strings for echo helpers (length-prefixed, Console.PutStr-compatible)
@@ -99,8 +95,8 @@ KbInit:
   mov   byte[KbCount],0                 ; buffer empty
   mov   byte[KbRetChar],0               ; staged return = 0
   mov   dword[KbLinePtr],0              ; clear line state
-  mov   dword[KbLineMax],0
-  mov   dword[KbLineLen],0
+  mov   dword[KbLineMax],0              ; clear line max
+  mov   dword[KbLineLen],0              ; clear line len
   popa
   ret
 
@@ -113,7 +109,6 @@ KbPoll:
   in    al,064h                         ; 8042 status port
   test  al,1                            ; bit0=1 => data ready at 060h
   jz    KbPollDone                      ; nothing waiting => return now
-
   in    al,060h                         ; read one scancode byte
   call  KbScancodeToAscii               ; map scancode -> ASCII (AL) or 0 (drop)
   test  al,al
@@ -175,66 +170,51 @@ KbReadLine:
   mov   [KbLinePtr],ebx                 ; remember caller buffer
   mov   [KbLineMax],ecx                 ; remember max chars
   mov   dword[KbLineLen],0              ; start empty
-
 KbReadLineLoop:
   call  KbWaitChar                      ; AL = next ASCII key
-
   cmp   al,0Dh                          ; Enter?
   je    KbReadLineEnter
-
   cmp   al,08h                          ; Backspace?
   je    KbReadLineBackspace
-
   ; Accept only printable ASCII range (space already maps to 0x20)
   cmp   al,020h
   jb    KbReadLineLoop                  ; control => ignore
   cmp   al,07Eh
   ja    KbReadLineLoop                  ; non-ASCII => ignore
-
   ; If line is full, ignore extra printable chars
   mov   edx,[KbLineLen]
   mov   ecx,[KbLineMax]
   cmp   edx,ecx
   jae   KbReadLineLoop
-
   ; Append char into caller buffer at [ptr + len]
   mov   esi,[KbLinePtr]
   mov   [esi+edx],al
-
   ; Echo typed character
   call  KbEchoChar
-
   ; len++
   inc   dword[KbLineLen]
   jmp   KbReadLineLoop
-
 KbReadLineBackspace:
   ; If empty, nothing to delete
   mov   edx,[KbLineLen]
   test  edx,edx
   jz    KbReadLineLoop
-
   ; len--
   dec   dword[KbLineLen]
-
   ; Optional: clear byte in buffer (not required, but keeps things tidy)
   mov   edx,[KbLineLen]
   mov   esi,[KbLinePtr]
   mov   byte[esi+edx],0
-
   ; Erase last char visually: BS, space, BS
   call  KbEchoBackspace
   jmp   KbReadLineLoop
-
 KbReadLineEnter:
   ; Terminate buffer with 0 at [ptr + len]
   mov   edx,[KbLineLen]
   mov   esi,[KbLinePtr]
   mov   byte[esi+edx],0
-
   ; Echo newline (CRLF)
   call  KbEchoCrlf
-
   ; Return AL=1 (success), staged across POPA
   mov   byte[KbRetChar],1
   popa
@@ -250,7 +230,6 @@ KbReadLineEnter:
 KbScancodeToAscii:
   push  ecx
   push  esi
-
   ; First, filter out break/release scancodes (never produce ASCII)
   xor   esi,esi
   mov   ecx,IgnoreSz
@@ -259,7 +238,6 @@ KbScancodeToAsciiIgnore:
   je    KbScancodeToAsciiDrop
   inc   esi
   loop  KbScancodeToAsciiIgnore
-
   ; Next, map make scancodes to ASCII via index-aligned tables
   xor   esi,esi
   mov   ecx,ScancodeSz
@@ -269,14 +247,11 @@ KbScancodeToAsciiScan:
   inc   esi
   loop  KbScancodeToAsciiScan
   jmp   KbScancodeToAsciiDrop
-
 KbScancodeToAsciiHit:
   mov   al,[CharCode+esi]               ; return mapped ASCII
   jmp   KbScancodeToAsciiDone
-
 KbScancodeToAsciiDrop:
   xor   eax,eax                         ; return 0 (drop)
-
 KbScancodeToAsciiDone:
   pop   esi
   pop   ecx
@@ -290,29 +265,24 @@ KbScancodeToAsciiDone:
 KbEnqueueAscii:
   push  ebx
   push  edx
-
   mov   bl,[KbCount]
   cmp   bl,KB_BUF_SZ
   jne   KbEnqueueNotFull
-
   ; Buffer full: advance Tail (discard oldest) before writing new byte
   mov   dl,[KbTail]
   inc   dl
   and   dl,(KB_BUF_SZ-1)
   mov   [KbTail],dl
   jmp   KbEnqueueWrite
-
 KbEnqueueNotFull:
   inc   bl
   mov   [KbCount],bl
-
 KbEnqueueWrite:
   mov   dl,[KbHead]                     ; write at Head
   mov   [KbBuf+edx],al
   inc   dl
   and   dl,(KB_BUF_SZ-1)
   mov   [KbHead],dl
-
   pop   edx
   pop   ebx
   ret
@@ -325,14 +295,11 @@ KbEnqueueWrite:
 KbDequeueAscii:
   push  ebx
   push  edx
-
   mov   bl,[KbCount]
   test  bl,bl
   jnz   KbDequeueHasData
-
   xor   eax,eax                         ; empty => AL=0
   jmp   KbDequeueDone
-
 KbDequeueHasData:
   mov   dl,[KbTail]                     ; read at Tail
   mov   al,[KbBuf+edx]
@@ -341,7 +308,6 @@ KbDequeueHasData:
   mov   [KbTail],dl
   dec   bl
   mov   [KbCount],bl
-
 KbDequeueDone:
   pop   edx
   pop   ebx
@@ -355,11 +321,9 @@ KbDequeueDone:
 KbEchoChar:
   push  eax
   push  ebx
-
   mov   [KbEchoBuf+2],al                ; put char into 1-char length-prefixed string
   mov   ebx,KbEchoBuf
   call  PutStr
-
   pop   ebx
   pop   eax
   ret
