@@ -129,22 +129,19 @@ FlushCS:
 ;   - Print "You typed: " + the line + CRLF
 ;------------------------------------------------------------------------------------------------
 ShellLoop:
-  mov   ebx,PromptStr                   ; prompt => "> "
-  call  PutStr
-
+  mov   ebx,PromptStr                   ; Print prompt
+  call  PutStr                          ;  "> "
   mov   ebx,LineBuf                     ; EBX = destination buffer
   mov   ecx,LINE_MAX                    ; ECX = max chars (excluding 0 terminator)
-  call  KbReadLine                      ; blocks until Enter, buffer becomes 0-terminated
-
-  mov   ebx,TypedStr                    ; "You typed: "
-  call  PutStr
-
-  mov   ebx,LineBuf
-  call  PutZStr                         ; print 0-terminated line
-  mov   ebx,CrLf
-  call  PutStr
-
+  call  KbReadLine                      ; Blocks until Enter, buffer becomes 0-terminated string
+  mov   ebx,TypedStr                    ; Echo input
+  call  PutStr                          ;  with
+  mov   ebx,LineBuf                     ;  "You typed: "
+  call  PutZStr                         ;  followed
+  mov   ebx,CrLf                        ;  by the
+  call  PutStr                          ;  input
   jmp   ShellLoop
+
   hlt
 
 ;-----------------------------------------
@@ -178,20 +175,16 @@ PutZStr:
   push  ecx
   push  edx
   push  esi
-
   mov   esi,ebx                         ; ESI walks the input string
 PutZStr1:
   mov   al,[esi]
   test  al,al
   jz    PutZStrDone
-
   mov   [ZBuf+2],al                     ; put char into 1-char length-prefixed string
   mov   ebx,ZBuf
   call  PutStr
-
   inc   esi
   jmp   PutZStr1
-
 PutZStrDone:
   pop   esi
   pop   edx
@@ -205,10 +198,10 @@ PutZStrDone:
 ;--------------------------------------------------------------------------------------------------
 DebugIt:
   call  HexDump                         ; Convert BYTE4 to hex string in Buffer
-  mov   ebx,Buffer
-  call  PutStr
-  mov   ebx,CrLf
-  call  PutStr
+  mov   ebx,Buffer                      ; Print 
+  call  PutStr                          ;  the
+  mov   ebx,CrLf                        ;  hex
+  call  PutStr                          ;  string
   ret
 
 ;--------------------------------------------------------------------------------------------------
