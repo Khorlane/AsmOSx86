@@ -80,6 +80,13 @@ KbLinePtr   dd 0        ; caller buffer pointer
 KbLineMax   dd 0        ; max chars (excluding terminator)
 KbLineLen   dd 0        ; current length
 
+;--------------------------------------------------------------------------------------------------
+; Private strings for echo helpers (length-prefixed, Console.PutStr-compatible)
+;--------------------------------------------------------------------------------------------------
+String  KbEchoBuf,"X"
+String  KbEchoCrLf,0Dh,0Ah
+String  KbEchoBsSeq,08h,020h,08h
+
 section .text
 ;--------------------------------------------------------------------------------------------------
 ; Exported: KbInit
@@ -378,10 +385,3 @@ KbEchoBackspace:
   call  PutStr
   pop   ebx
   ret
-
-;--------------------------------------------------------------------------------------------------
-; Private strings for echo helpers (length-prefixed, Console.PutStr-compatible)
-;--------------------------------------------------------------------------------------------------
-String  KbEchoBuf,"X"
-String  KbEchoCrLf,0Dh,0Ah
-String  KbEchoBsSeq,08h,020h,08h
