@@ -54,6 +54,7 @@ IDT2:
 %include "Time.asm"
 %include "Timer.asm"
 %include "Uptime.asm"
+%include "Utility.asm"
 %include "Video.asm"
 
 ;--------------------------------------------------------------------------------------------------
@@ -129,17 +130,24 @@ FlushCS:
 ;   - Print "You typed: " + the line + CRLF
 ;------------------------------------------------------------------------------------------------
 ShellLoop:
-  mov   ebx,PromptStr                   ; Print prompt
-  call  PutStr                          ;  "> "
-  mov   ebx,LineBuf                     ; EBX = destination buffer
-  mov   ecx,LINE_MAX                    ; ECX = max chars (excluding 0 terminator)
-  call  KbReadLine                      ; Blocks until Enter, buffer becomes 0-terminated string
-  mov   ebx,TypedStr                    ; Echo input
-  call  PutStr                          ;  with
-  mov   ebx,LineBuf                     ;  "You typed: "
-  call  PutZStr                         ;  followed
-  mov   ebx,CrLf                        ;  by the
-  call  PutStr                          ;  input
+  ; Show prompt (LStr)
+  mov   ebx,PromptStr                   ; EBX = LStr "> "
+  call  PutStr                          ; print prompt
+  ; Read a full line into LineBuf as C string (NUL-terminated)
+  mov   ebx,LineBuf                     ; EBX = CStr destination buffer
+  mov   ecx,LINE_MAX                    ; max chars (excluding NUL)
+  call  KbReadLine                      ; blocks until Enter; LineBuf becomes NUL-terminated
+  ; Convert CStr(LineBuf) -> LStr(LineLStr) so we can print with PutStr
+  mov   esi,LineBuf                     ; ESI = CStr source
+  mov   edi,LineLStr                    ; EDI = LStr destination
+  call  CStrToLStr                      ; updates [LineLStr] length + payload
+  ; Echo: "You typed: " + line + CRLF
+  mov   ebx,TypedPrefixStr              ; EBX = LStr "You typed: "
+  call  PutStr                          ; print prefix
+  mov   ebx,LineLStr                    ; EBX = LStr version of the input line
+  call  PutStr                          ; print the line
+  mov   ebx,CrLf                        ; EBX = LStr CRLF
+  call  PutStr                          ; newline
   jmp   ShellLoop
 
   hlt
@@ -156,41 +164,6 @@ FloppyTest1:
   call  FlpDelay1ms                     ; helper in Floppy.asm
   loop  FloppyTest1
   call  FloppyMotorOff                  ; motor off
-  ret
-
-;--------------------------------------------------------------------------------------------------
-; PutZStr — print a 0-terminated string using Console.PutStr by chunking into Buffer
-;
-; Big picture
-;   - Console.PutStr expects a length-prefixed string.
-;   - This helper converts a C-style 0-terminated string into repeated PutStr calls.
-;   - For simplicity in early stage, we print one char at a time.
-;
-; Input
-;   EBX = pointer to 0-terminated string
-;--------------------------------------------------------------------------------------------------
-PutZStr:
-  push  eax
-  push  ebx
-  push  ecx
-  push  edx
-  push  esi
-  mov   esi,ebx                         ; ESI walks the input string
-PutZStr1:
-  mov   al,[esi]
-  test  al,al
-  jz    PutZStrDone
-  mov   [ZBuf+2],al                     ; put char into 1-char length-prefixed string
-  mov   ebx,ZBuf
-  call  PutStr
-  inc   esi
-  jmp   PutZStr1
-PutZStrDone:
-  pop   esi
-  pop   edx
-  pop   ecx
-  pop   ebx
-  pop   eax
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -229,7 +202,7 @@ HexDump1:
 ; Strings
 String  Buffer,"XXXXXXXX"
 String  PromptStr,">"," "
-String  TypedStr,"You typed:"," "
+String  TypedStr,"You typed:"
 String  ZBuf,"X"
 
 String  CnStartMsg1,"AsmOSx86 Console (Session 0)"
@@ -240,11 +213,17 @@ String  LogStampStr,"YYYY-MM-DD HH:MM:SS"
 String  LogSepStr," "
 String  TimeStr,"HH:MM:SS"
 String  UptimeStr,"UP YY:DDD:HH:MM:SS"
+String  TypedPrefixStr,"You typed: "
+
 
 ; Line input buffer (0-terminated)
 LINE_MAX    equ 64
 align 4
 LineBuf     times (LINE_MAX+1) db 0     ; +1 for 0 terminator
+; Line input LStr buffer
+LSTR_MAX    equ  80
+LineLStr:  dw 0
+          times LSTR_MAX db 0
 
 ; Kernel Context (all mutable "variables" live here)
 align 4
