@@ -2,6 +2,10 @@
 ; Kernel.asm
 ;   A basic 32 bit binary kernel
 ;
+;   Test goal:
+;     - Echo ASCII keys from Keyboard.asm ring buffer
+;     - Example: press unshifted 'A' => see 'a'
+;
 ; nasm -f bin Kernel.asm -o Kernel.bin -l Kernel.lst
 ;**************************************************************************************************
 
@@ -113,24 +117,23 @@ FlushCS:
   mov   [Byte4],eax                     ;  at address
   call  DebugIt                         ;  1mb (100000h)
 
-KbPollLoop:
-  call  KbRead                          ; Read keyboard
-  mov   al,[KbChar]                     ; If nothing
-  cmp   al,0FFh                         ;  read (KbChar == 0xFF)
-  je    KbPollLoop                      ;  keep polling until a key is pressed
-  xor   eax,eax                         ; Print
-  mov   al,[KbChar]                     ;  the
-  mov   [Byte4],eax                     ;  scancode
-  call  DebugIt                         ;  as hex
-  call  KbXlate                         ; Translate scancode to ASCII
-  call  KbPrintChar                     ; Print it
-  jmp   KbPollLoop                      ; Repeat
+;--------------------------------------------------------------------------------------------------
+; Keyboard Echo Loop (NEW)
+;   - KbWaitChar blocks until a character is available
+;   - Store it into KernelCtx Char, then print that one-char string
+;--------------------------------------------------------------------------------------------------
+KbEchoLoop:
+  call  KbWaitChar                      ; AL = ASCII (non-zero)
+  mov   [Char],al                       ; save to KernelCtx (used for printing)
+  call  KbPrintChar                     ; prints Char then CRLF
+  jmp   KbEchoLoop
+
   hlt
 
-  ;-----------------------------------------
-  ; Floppy motor test (temporary)
-  ;-----------------------------------------
-FloppyTest:  
+;-----------------------------------------
+; Floppy motor test (temporary)
+;-----------------------------------------
+FloppyTest:
   call  FloppyInit                      ; controller enabled, drive A:, motors off
   call  FloppyMotorOn                   ; motor on + internal spin-up wait
   ; keep it on ~1 second (1000 x ~1ms)
@@ -142,33 +145,35 @@ FloppyTest1:
   ret
 
 ;--------------------------------------------------------------------------------------------------
-; DebugIt — Dumps EAX as hex
-;--------------------------------------------------------------------------------------------------
-DebugIt:
-  call  HexDump                         ; Convert BYTE4 to hex string in Buffer
-  mov   ebx,Buffer                      ; Put
-  call  PutStr                          ;  string
-  mov   ebx,CrLf                        ; Put
-  call  PutStr                          ;  CrLf
-  ret
-
-;--------------------------------------------------------------------------------------------------
-; KbPrintChar — Put KbChar into Buffer and print it
+; KbPrintChar — Put Char into Buffer and print it
+;   Notes:
+;     - Uses KernelCtx variable [Char] (not KbChar anymore)
 ;--------------------------------------------------------------------------------------------------
 KbPrintChar:
-  mov   al,[KbChar]                     ; Get translated character
+  mov   al,[Char]                       ; Get character to print
   mov   [Buffer+2],al                   ; First byte of string (skip length word)
   mov   ecx,7                           ; Fill remaining 7 bytes
   mov   ebx,Buffer+3                    ; Start at second character
-  mov   al,' '                          ; Space character
+  mov   al,' '
 KbPrintChar1:
-  mov   [ebx],al                        ; Fill
-  inc   ebx                             ;  with
-  loop  KbPrintChar1                    ;  spaces
-  mov   ebx,Buffer                      ; Put
-  call  PutStr                          ;  string
-  mov   ebx,CrLf                        ; Put
-  call  PutStr                          ;  CrLf
+  mov   [ebx],al
+  inc   ebx
+  loop  KbPrintChar1
+  mov   ebx,Buffer
+  call  PutStr
+  mov   ebx,CrLf
+  call  PutStr
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; DebugIt — Dumps EAX as hex (unchanged, retained)
+;--------------------------------------------------------------------------------------------------
+DebugIt:
+  call  HexDump                         ; Convert BYTE4 to hex string in Buffer
+  mov   ebx,Buffer
+  call  PutStr
+  mov   ebx,CrLf
+  call  PutStr
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -203,6 +208,7 @@ HexDump1:
 %endrep
 %%EndStr:
 %endmacro
+
 ; Strings
 String  Buffer,"XXXXXXXX"
 String  CnStartMsg1,"AsmOSx86 Console (Session 0)"
@@ -217,9 +223,9 @@ String  UptimeStr,"UP YY:DDD:HH:MM:SS"
 ; Kernel Context (all mutable "variables" live here)
 align 4
 KernelCtx:
-Char        db  0                       ; ASCII character
+Char        db  0                       ; ASCII character (used by KbPrintChar)
 Byte1       db  0                       ; 1-byte variable (al, ah)
-KbChar      db  0                       ; Keyboard character
+KbChar      db  0                       ; Legacy keyboard scratch (unused by new driver)
 ColorBack   db  0                       ; Background color (00h - 0Fh)
 ColorFore   db  0                       ; Foreground color (00h - 0Fh)
 ColorAttr   db  0                       ; Combination of background and foreground color (e.g. 3Fh 3=cyan background,F=white text)
