@@ -1,3 +1,28 @@
+;**************************************************************************************************
+; Utility.asm
+;   Kernel utility routines (subsystem-agnostic helpers)
+;
+; Purpose
+;   Provide small, reusable helper routines that:
+;     - Are not tied to a specific hardware device
+;     - Are not part of a single kernel subsystem
+;     - Are safe to call from early boot and core kernel code
+;
+; Contains
+;   - Data conversion helpers (e.g. CStr → LStr)
+;   - Generic formatting or manipulation routines
+;   - Pure helper logic with no side effects beyond documented outputs
+;
+; Does NOT contain
+;   - Hardware access code
+;   - Policy decisions or global configuration constants
+;   - Subsystem-specific logic
+;
+; Notes (LOCKED-IN)
+;   - All routines are ABI-compliant and preserve registers unless stated.
+;   - Callers must supply valid pointers and buffers per each routine’s contract.
+;**************************************************************************************************
+
 section .data
 HexDigits   db  "0123456789ABCDEF"      ; Hex digits for conversion
 
