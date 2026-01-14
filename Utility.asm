@@ -67,3 +67,46 @@ CStrToLStr2:
   mov   [edi],bx                        ; store LStr length prefix
   popa
   ret
+
+;-----------------------------------------
+; Floppy motor test (temporary)
+;-----------------------------------------
+FloppyTest:
+  call  FloppyInit                      ; controller enabled, drive A:, motors off
+  call  FloppyMotorOn                   ; motor on + internal spin-up wait
+  ; keep it on ~1 second (1000 x ~1ms)
+  mov   ecx,1000
+FloppyTest1:
+  call  FlpDelay1ms                     ; helper in Floppy.asm
+  loop  FloppyTest1
+  call  FloppyMotorOff                  ; motor off
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; DebugIt — Dumps EAX as hex (unchanged, retained)
+;--------------------------------------------------------------------------------------------------
+DebugIt:
+  call  HexDump                         ; Convert BYTE4 to hex string in Buffer
+  mov   ebx,Buffer                      ; Print 
+  call  PutStr                          ;  the
+  mov   ebx,CrLf                        ;  hex
+  call  PutStr                          ;  string
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; HexDump - Convert BYTE4 to hex string in Buffer
+;--------------------------------------------------------------------------------------------------
+HexDump:
+  mov   eax,[Byte4]                     ; Load the value to be converted
+  mov   ecx,8                           ; We want 8 hex digits
+  mov   ebx,Buffer+2                    ; Skip string length, point to first byte of string
+HexDump1:
+  mov   edx,eax                         ; Copy eax to edx
+  shr   edx,28                          ; Shift top nibble into lowest 4 bits
+  and   edx,0Fh                         ; Mask to isolate nibble
+  mov   dl,[HexDigits+edx]              ; Look up ASCII character
+  mov   [ebx],dl                        ; Store in Buffer
+  inc   ebx                             ; Point to next character
+  shl   eax,4                           ; Shift next nibble into position
+  loop  HexDump1
+  ret
