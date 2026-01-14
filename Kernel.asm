@@ -124,32 +124,7 @@ FlushCS:
   mov   [Byte4],eax                     ;  at address
   call  DebugIt                         ;  1mb (100000h)
 
-;------------------------------------------------------------------------------------------------
-; Line-input test harness
-;   - Print prompt
-;   - Read line into LineBuf (editable)
-;   - Print "You typed: " + the line + CRLF
-;------------------------------------------------------------------------------------------------
-ShellLoop:
-  ; Show prompt (LStr)
-  mov   ebx,PromptStr                   ; EBX = LStr "> "
-  call  PutStr                          ; print prompt
-  ; Read a full line into LineBuf as C string (NUL-terminated)
-  mov   ebx,LineBuf                     ; EBX = CStr destination buffer
-  mov   ecx,LINE_MAX                    ; max chars (excluding NUL)
-  call  KbReadLine                      ; blocks until Enter; LineBuf becomes NUL-terminated
-  ; Convert CStr(LineBuf) -> LStr(LineLStr) so we can print with PutStr
-  mov   esi,LineBuf                     ; ESI = CStr source
-  mov   edi,LineLStr                    ; EDI = LStr destination
-  call  CStrToLStr                      ; updates [LineLStr] length + payload
-  ; Echo: "You typed: " + line + CRLF
-  mov   ebx,TypedPrefixStr              ; EBX = LStr "You typed: "
-  call  PutStr                          ; print prefix
-  mov   ebx,LineLStr                    ; EBX = LStr version of the input line
-  call  PutStr                          ; print the line
-  mov   ebx,CrLf                        ; EBX = LStr CRLF
-  call  PutStr                          ; newline
-  jmp   ShellLoop
+  call ConsoleLoop                      ; Enter console loop
 
   hlt
 
