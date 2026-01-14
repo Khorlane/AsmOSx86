@@ -38,6 +38,15 @@ String  CnStartMsg2,"AsmOSx86 - A Hobbyist Operating System in x86 Assembly"
 String  CnStartMsg3,"AsmOSx86 Initialization started"
 String  LogStampStr,"YYYY-MM-DD HH:MM:SS"
 String  LogSepStr," "
+String  PromptStr,">"," "
+String  TypedPrefixStr,"You typed: "
+
+; Line input buffer (0-terminated)
+align 4
+LineBuf     times (LINE_MAX+1) db 0     ; +1 for 0 terminator
+; Line input LStr buffer
+LineLStr:  dw 0
+          times LSTR_MAX db 0
 
 section .text
 ;------------------------------------------------------------------------------------------------

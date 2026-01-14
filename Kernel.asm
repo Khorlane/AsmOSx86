@@ -132,17 +132,6 @@ FlushCS:
 ; Working Storage
 ;--------------------------------------------------------------------------------------------------
 
-; Strings
-String  PromptStr,">"," "
-String  TypedPrefixStr,"You typed: "
-
-; Line input buffer (0-terminated)
-align 4
-LineBuf     times (LINE_MAX+1) db 0     ; +1 for 0 terminator
-; Line input LStr buffer
-LineLStr:  dw 0
-          times LSTR_MAX db 0
-
 ; Kernel Context (all mutable "variables" live here)
 align 4
 KernelCtx:
