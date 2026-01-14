@@ -30,6 +30,8 @@
 ;   - Console prints strings only.
 ;   - Console messages always end with CrLf.
 ;   - All Cn* routines take LStr
+;   - Owns “row 25 is command line”
+;   - All console printing preserves/repaints row 25 after output
 ;**************************************************************************************************
 
 section .data

@@ -25,6 +25,8 @@
 ;
 ; Notes (LOCKED-IN):
 ;   - PutStr is responsible for CR/LF semantics for console output.
+;   - Supports VidScrollTop / VidScrollBot
+;   - ScrollUp respects those bounds
 ;**************************************************************************************************
 
 ;---------------

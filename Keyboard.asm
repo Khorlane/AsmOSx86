@@ -19,6 +19,7 @@
 ;   - Break/release scancodes are ignored
 ;   - Exported routines preserve all general registers (pusha/popa).
 ;     Any return value in AL/EAX must be staged and restored after popa.
+;   - Provides key events / line-edit primitives, but does not own screen policy
 ;**************************************************************************************************
 
 [bits 32]
