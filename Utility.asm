@@ -1,3 +1,7 @@
+section .data
+HexDigits   db  "0123456789ABCDEF"      ; Hex digits for conversion
+
+section .text
 ;--------------------------------------------------------------------------------------------------
 ; CStrToLStr
 ;   Purpose:

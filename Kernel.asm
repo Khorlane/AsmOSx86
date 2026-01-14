@@ -48,6 +48,7 @@ IDT2:
 ;--------------------------------------------------------------------------------------------------
 ; Include Major Components
 ;--------------------------------------------------------------------------------------------------
+%include "Config.asm"
 %include "Console.asm"
 %include "Floppy.asm"
 %include "Keyboard.asm"
@@ -217,11 +218,9 @@ String  TypedPrefixStr,"You typed: "
 
 
 ; Line input buffer (0-terminated)
-LINE_MAX    equ 64
 align 4
 LineBuf     times (LINE_MAX+1) db 0     ; +1 for 0 terminator
 ; Line input LStr buffer
-LSTR_MAX    equ  80                     ; maximum payload length in bytes (excludes the 2-byte length)
 LineLStr:  dw 0
           times LSTR_MAX db 0
 
@@ -250,5 +249,3 @@ KernelCtxSz  equ KernelCtxEnd - KernelCtx
 %if (KernelCtxSz % 4) != 0
   %error "KernelCtxSz is not dword aligned"
 %endif
-
-HexDigits   db  "0123456789ABCDEF"      ; Hex digits for conversion
