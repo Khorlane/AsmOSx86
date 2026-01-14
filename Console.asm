@@ -11,10 +11,10 @@
 ; Exported:
 ;   CnInit
 ;   CnCrLf
-;   CnPrint            ; EBX=String, prints + CrLf
+;   CnPrint            ; EBX=String to EBX=LStr
 ;   CnBanner
 ;   CnBoot
-;   CnLog              ; EBX=String, prints timestamp + space + String + CrLf
+;   CnLog              ; EBX=String to EBX=LStr
 ;
 ; Requires:
 ;   PutStr             ; EBX=String (Video.asm)
