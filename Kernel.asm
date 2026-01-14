@@ -201,21 +201,8 @@ HexDump1:
 ;--------------------------------------------------------------------------------------------------
 
 ; Strings
-String  Buffer,"XXXXXXXX"
 String  PromptStr,">"," "
-String  TypedStr,"You typed:"
-String  ZBuf,"X"
-
-String  CnStartMsg1,"AsmOSx86 Console (Session 0)"
-String  CnStartMsg2,"AsmOSx86 - A Hobbyist Operating System in x86 Assembly"
-String  CnStartMsg3,"AsmOSx86 Initialization started"
-String  CrLf,0Dh,0Ah
-String  LogStampStr,"YYYY-MM-DD HH:MM:SS"
-String  LogSepStr," "
-String  TimeStr,"HH:MM:SS"
-String  UptimeStr,"UP YY:DDD:HH:MM:SS"
 String  TypedPrefixStr,"You typed: "
-
 
 ; Line input buffer (0-terminated)
 align 4

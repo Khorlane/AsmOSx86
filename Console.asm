@@ -32,6 +32,14 @@
 ;   - All Cn* routines take LStr
 ;**************************************************************************************************
 
+section .data
+String  CnStartMsg1,"AsmOSx86 Console (Session 0)"
+String  CnStartMsg2,"AsmOSx86 - A Hobbyist Operating System in x86 Assembly"
+String  CnStartMsg3,"AsmOSx86 Initialization started"
+String  LogStampStr,"YYYY-MM-DD HH:MM:SS"
+String  LogSepStr," "
+
+section .text
 ;--------------------------------------------------------------------------------------------------
 ; CnInit - initialize console state (colors, start row/col, etc.)
 ;--------------------------------------------------------------------------------------------------

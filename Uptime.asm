@@ -54,6 +54,7 @@ UP_SEC_DAY      equ 86400
 UP_SEC_YEAR     equ 31536000
 
 section .data
+String  UptimeStr,"UP YY:DDD:HH:MM:SS"
 UptimeBaseLo    dd 0
 UptimeBaseHi    dd 0
 UptimeRetSec    dd 0                    ; staged return (seconds)

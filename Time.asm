@@ -77,6 +77,7 @@ TIME_RSYNC_TLO  equ (TIME_PIT_HZ*TIME_RSYNC_SEC) & 0FFFFFFFFh
 TIME_RSYNC_THI  equ (TIME_PIT_HZ*TIME_RSYNC_SEC) >> 32
 
 section .data
+String  TimeStr,"HH:MM:SS"
 ;---------------------------------------------------------------------------------------------------
 ; Raw CMOS fields (binary,24h after TimeReadCmos)
 ;---------------------------------------------------------------------------------------------------

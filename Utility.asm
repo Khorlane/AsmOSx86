@@ -24,6 +24,7 @@
 ;**************************************************************************************************
 
 section .data
+String  Buffer,"XXXXXXXX"
 HexDigits   db  "0123456789ABCDEF"      ; Hex digits for conversion
 
 section .text
