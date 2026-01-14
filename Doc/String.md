@@ -99,7 +99,7 @@ Convert a CStr (NUL-terminated) into an LStr (length-prefixed).
   - Consumers must trust the length
 
 ### Capacity convention
-`LSTR_MAX` is the **payload capacity** (bytes after the 2-byte length).
+`LSTR_MAX` is the **maximum payload length** (bytes after the 2-byte length).
 
 ---
 
@@ -121,7 +121,7 @@ Convert a CStr (NUL-terminated) into an LStr (length-prefixed).
 
 - **CStr**: NUL-terminated string
 - **LStr**: length-prefixed OS-native string (length includes the 2-byte prefix)
-- **LSTR_MAX**: payload capacity (excludes the 2-byte length word)
+- **LSTR_MAX**: maximum payload length (excludes the 2-byte length word)
 
 ---
 

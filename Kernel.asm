@@ -221,7 +221,7 @@ LINE_MAX    equ 64
 align 4
 LineBuf     times (LINE_MAX+1) db 0     ; +1 for 0 terminator
 ; Line input LStr buffer
-LSTR_MAX    equ  80
+LSTR_MAX    equ  80                     ; maximum payload length in bytes (excludes the 2-byte length)
 LineLStr:  dw 0
           times LSTR_MAX db 0
 

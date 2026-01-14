@@ -16,14 +16,14 @@
 ;     - Truncates at LSTR_CAP.
 ;     - Preserves all GPRs (ABI-compliant).
 ;   Requires:
-;     LSTR_MAX equ <value>              ; payload capacity in bytes (excludes the 2-byte length)
+;     LSTR_MAX equ <value>              ; maximum payload length in bytes (excludes the 2-byte length)
 ;--------------------------------------------------------------------------------------------------
 CStrToLStr:
   pusha
-  mov   ecx,LSTR_MAX                    ; enforce standard LStr payload capacity locally
+  mov   ecx,LSTR_MAX                    ; enforce standard LStr maximum payload length locally
   xor   ebx,ebx                         ; EBX = count copied so far (final length)
 CStrToLStr1:
-  cmp   ebx,ecx                         ; reached payload capacity?
+  cmp   ebx,ecx                         ; reached maximum payload length?
   jae   CStrToLStr2                     ; yes -> stop (truncate)
   mov   al,[esi]                        ; read next source byte
   test  al,al                           ; NUL terminator ends the CStr
