@@ -9,8 +9,10 @@
 ;
 ; Exported:
 ;   CalcVideoAddr       ; uses Row/Col, updates VidAdr
+;   CalcVideoAddrRaw    ; use for fixed UI areas
 ;   PutChar             ; uses Char/ColorAttr and VidAdr
 ;   PutStr              ; EBX=String, interprets CR/LF, updates Row/Col and cursor
+;   PutStrRaw           ; Print an LStr without scrolling/clamping (Fixed UI areas)
 ;   MoveCursor
 ;   ClrScr
 ;   SetColorAttr
@@ -70,12 +72,12 @@ section .text
 ;--------------------------------------------------------------------------------------------------
 CalcVideoAddr:
   pusha                                 ; Save registers
-  mov   al,[Row]                        ; If Row is
-  cmp   al,25                           ;  is less than 25
-  jl    CalcVideoAddr1                  ;  go to CalcVideoAddr1
-  mov   al,24                           ; Set row to 24
-  mov   [Row],al                        ;  save it
-  call  ScrollUp                        ;  and scroll up the screen
+  mov   al,[Row]
+  cmp   al,25                           ; rows 1..24 are valid for main output
+  jl    CalcVideoAddr1
+  mov   al,24
+  mov   [Row],al
+  call  ScrollUpMain                    ; keep row 25 untouched
 CalcVideoAddr1:
   xor   eax,eax                         ; Row calculation
   mov   al,[Row]                        ;  row
@@ -94,6 +96,43 @@ CalcVideoAddr1:
   mov   [VidAdr],eax                    ; Save in VidAdr
   popa                                  ; Restore registers
   ret                                   ; Return to caller
+
+;--------------------------------------------------------------------------------------------------
+; CalcVideoAddrRaw
+;   Like CalcVideoAddr, but NEVER scrolls.
+;   Intended for fixed UI areas (e.g., bottom command line at Row=25).
+;--------------------------------------------------------------------------------------------------
+CalcVideoAddrRaw:
+  pusha
+  mov   al,[Row]
+  cmp   al,1
+  jge   CalcVideoAddrRaw1
+  mov   al,1
+  mov   [Row],al
+CalcVideoAddrRaw1:
+  cmp   al,25
+  jle   CalcVideoAddrRaw2
+  mov   al,25
+  mov   [Row],al
+CalcVideoAddrRaw2:
+  ; Same address math as CalcVideoAddr
+  xor   eax,eax
+  mov   al,[Row]
+  dec   eax
+  mov   edx,160
+  mul   edx
+  mov   [TvRowOfs],eax
+  xor   eax,eax
+  mov   al,[Col]
+  mov   edx,2
+  mul   edx
+  sub   eax,2
+  mov   edx,[TvRowOfs]
+  add   eax,edx
+  add   eax,VidMem
+  mov   [VidAdr],eax
+  popa
+  ret
 
 ;--------------------------------------------------------------------------------------------------
 ; Put a character on the screen
@@ -118,9 +157,10 @@ PutStr:
   xor   ecx,ecx                         ; Clear ECX
   push  ebx                             ; Copy the string address in EBX
   pop   esi                             ;  into ESI
-  mov   cx,[esi]                        ; Grab string length using ESI, stuff it into CX
-  sub   cx,2                            ; Subtract out 2 bytes for the length field
-  add   esi,2                           ; Bump past the length field to the beginning of string
+  mov   cx,[esi]
+  sub   cx,2
+  add   esi,2
+  jcxz  PutStrDone
 PutStr1:
   mov   bl,[esi]                        ; Get next character
   cmp   bl,0Dh                          ; CR?
@@ -134,8 +174,16 @@ PutStr2:
   cmp   bl,0Ah                          ; LF?
   jne   PutStr3                         ;  No
   xor   eax,eax                         ;  Yes
-  mov   al,[Row]                        ;   bump row
-  inc   al                              ;   by 1
+  mov   al,[Row]                        ;   if Row == 24, scroll (keep cmd line at 25 untouched)
+  cmp   al,24
+  jne   PutStr2a
+  call  ScrollUpMain                    ;   (we'll tweak ScrollUp next to preserve row 25)
+  mov   al,24
+  mov   [Row],al                        ;   stay on last output row
+  call  CalcVideoAddr
+  jmp   PutStr5
+PutStr2a:
+  inc   al
   mov   [Row],al                        ;   (do not change Col)
   call  CalcVideoAddr                   ;   and update address
   jmp   PutStr5                         ; Continue
@@ -152,9 +200,67 @@ PutStr3:
 PutStr5:
   inc   esi                             ; Bump ESI to next character in our string
   loop  PutStr1                         ; Loop (Decrement CX each time until CX is zero)
+PutStrDone:
   call  MoveCursor                      ; Update cursor (do this once after displaying the string, more efficient)
   popa                                  ; Restore registers
   ret                                   ; Return to caller
+
+;--------------------------------------------------------------------------------------------------
+; PutStrRaw
+;   Print an LStr without scrolling/clamping (for fixed UI areas).
+;   EBX = address of LStr to print
+;--------------------------------------------------------------------------------------------------
+PutStrRaw:
+  pusha
+  call  CalcVideoAddrRaw
+  xor   ecx,ecx
+  push  ebx
+  pop   esi
+  mov   cx,[esi]
+  sub   cx,2
+  add   esi,2
+  jcxz  PutStrRawDone
+PutStrRaw1:
+  mov   bl,[esi]
+  ; Backspace? move cursor left (do not print a glyph)
+  cmp   bl,08h
+  jne   PutStrRaw1_CR
+  mov   al,[Col]
+  cmp   al,1
+  jbe   PutStrRaw5                      ; already at col 1 => nothing
+  dec   al
+  mov   [Col],al
+  call  CalcVideoAddrRaw
+  jmp   PutStrRaw5
+PutStrRaw1_CR:
+  cmp   bl,0Dh
+  jne   PutStrRaw2
+PutStrRaw2:
+  cmp   bl,0Ah
+  jne   PutStrRaw3
+  xor   eax,eax
+  mov   al,[Row]
+  inc   al
+  mov   [Row],al
+  call  CalcVideoAddrRaw
+  jmp   PutStrRaw5
+PutStrRaw3:
+  mov   [Char],bl
+  call  PutChar
+  mov   eax,[VidAdr]
+  add   eax,2
+  mov   [VidAdr],eax
+  xor   eax,eax
+  mov   al,[Col]
+  add   al,1
+  mov   [Col],al
+PutStrRaw5:
+  inc   esi
+  loop  PutStrRaw1
+PutStrRawDone:
+  call  MoveCursor
+  popa
+  ret
 
 ;--------------------------------------------------------------------------------------------------
 ; Update hardware cursor
@@ -225,15 +331,37 @@ ScrollUp:
   pusha
   mov   esi,VidMem+160                  ; start of row 2
   mov   edi,VidMem                      ; start of row 1
-  mov   ecx,24*80                       ; 24 rows × 80 columns
+  mov   ecx,23*80                       ; Console 23 rows (later for shell 24 rows) × 80 columns)
   rep   movsw                           ; copy each word (char+attr)
   ; Clear bottom row
   mov   ax,' '                          ; space character
   mov   ah,[ColorAttr]                  ; current color
-  mov   edi,VidMem + 24*160             ; start of row 25
+  mov   edi,VidMem + 23*160             ; start of row 24 for console (25 for shell)
   mov   ecx,80
 ScrollUp1:
   stosw
   loop  ScrollUp1
   popa
   ret
+
+;--------------------------------------------------------------------------------------------------
+; ScrollUpMain — scroll rows 1..24 up by 1, keep row 25 untouched (reserved for console cmd line)
+;--------------------------------------------------------------------------------------------------
+ScrollUpMain:
+  pusha
+  mov   esi,VidMem+160                  ; source: start of row 2
+  mov   edi,VidMem                      ; dest:   start of row 1
+  mov   ecx,23*80                       ; copy 23 rows × 80 columns (rows 2..24 -> 1..23)
+  rep   movsw                           ; copy each word (char+attr)
+
+  ; Clear row 24 only (row 25 remains untouched)
+  mov   ax,' '                          ; space character
+  mov   ah,[ColorAttr]                  ; current color
+  mov   edi,VidMem + 23*160             ; start of row 24
+  mov   ecx,80
+ScrollUpMain1:
+  stosw
+  loop  ScrollUpMain1
+  popa
+  ret
+

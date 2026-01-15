@@ -15,6 +15,7 @@
 ;   CnBanner
 ;   CnBoot
 ;   CnLog              ; EBX=String to EBX=LStr
+;   CnReadLine         ; EBX=CStr destination buffer, ECX=max length
 ;
 ; Requires:
 ;   PutStr             ; EBX=String (Video.asm)
@@ -42,40 +43,53 @@ String  LogStampStr,"YYYY-MM-DD HH:MM:SS"
 String  LogSepStr," "
 String  PromptStr,">"," "
 String  TypedPrefixStr,"You typed: "
+String  CmdLineClearStr,"                                                                                "
+String  CnBsSeqStr,08h,020h,08h         ; BS, space, BS
 
-; Line input buffer (0-terminated)
 align 4
-LineBuf     times (LINE_MAX+1) db 0     ; +1 for 0 terminator
 ; Line input LStr buffer
 LineLStr:  dw 0
           times LSTR_MAX db 0
+CnMainRow    db 1                        ; main output cursor row (1..24)
+CnMainCol    db 1                        ; main output cursor col (1..80)
+CnCmdRow     db 0                        ; saved command-line cursor row
+CnCmdCol     db 0                        ; saved command-line cursor col
 
 section .text
 ;------------------------------------------------------------------------------------------------
-; Line-input test harness
-;   - Print prompt
-;   - Read line into LineBuf (editable)
-;   - Print "You typed: " + the line + CRLF
+; Command Line-input Console Loop
 ;------------------------------------------------------------------------------------------------
 ConsoleLoop:
+  ; Fixed command line always lives on last row
+  mov   al,25
+  mov   [Row],al
+  mov   al,1
+  mov   [Col],al
+  mov   ebx,CmdLineClearStr             ; blank out bottom row
+  call  PutStrRaw
+  mov   al,25                           ; restore cursor to start of cmd line
+  mov   [Row],al
+  mov   al,1
+  mov   [Col],al
   ; Show prompt (LStr)
   mov   ebx,PromptStr                   ; EBX = LStr "> "
-  call  PutStr                          ; print prompt
-  ; Read a full line into LineBuf as C string (NUL-terminated)
-  mov   ebx,LineBuf                     ; EBX = CStr destination buffer
-  mov   ecx,LINE_MAX                    ; max chars (excluding NUL)
-  call  KbReadLine                      ; blocks until Enter; LineBuf becomes NUL-terminated
-  ; Convert CStr(LineBuf) -> LStr(LineLStr) so we can print with PutStr
-  mov   esi,LineBuf                     ; ESI = CStr source
-  mov   edi,LineLStr                    ; EDI = LStr destination
-  call  CStrToLStr                      ; updates [LineLStr] length + payload
+  call  PutStrRaw                       ; print prompt
+  mov   ebx,LineLStr
+  mov   ecx,LSTR_MAX
+  call  CnReadLine
+  ; Switch to main output area before printing
+  mov   al,24
+  mov   [Row],al
+  mov   al,1
+  mov   [Col],al
+  call  MoveCursor
   ; Echo: "You typed: " + line + CRLF
-  mov   ebx,TypedPrefixStr              ; EBX = LStr "You typed: "
-  call  PutStr                          ; print prefix
-  mov   ebx,LineLStr                    ; EBX = LStr version of the input line
-  call  PutStr                          ; print the line
-  mov   ebx,CrLf                        ; EBX = LStr CRLF
-  call  PutStr                          ; newline
+  mov   ebx,TypedPrefixStr
+  call  PutStr
+  mov   ebx,LineLStr
+  call  PutStr
+  mov   ebx,CrLf
+  call  PutStr
   jmp   ConsoleLoop
 
 ;--------------------------------------------------------------------------------------------------
@@ -131,4 +145,94 @@ CnLog:
   call  PutStr                          ; Put message
   call  CnCrLf                          ; End line
   popa                                  ; Restore registers
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; CnCmdSave - save current cursor position for restoring fixed command line
+;--------------------------------------------------------------------------------------------------
+CnCmdSave:
+  pusha
+  mov   al,[Row]
+  mov   [CnCmdRow],al
+  mov   al,[Col]
+  mov   [CnCmdCol],al
+  popa
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; CnCmdRestore - restore cursor position for fixed command line
+;--------------------------------------------------------------------------------------------------
+CnCmdRestore:
+  pusha
+  mov   al,[CnCmdRow]
+  mov   [Row],al
+  mov   al,[CnCmdCol]
+  mov   [Col],al
+  call  MoveCursor
+  popa
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; CnReadLine
+;   Purpose:
+;     Read a full line of console input from the fixed bottom command line.
+;
+;   Behavior:
+;     - Blocks waiting for keyboard input
+;     - Echoes characters on row 25 only
+;     - Supports Backspace and Enter
+;     - Produces a NUL-terminated CStr
+;
+;   Input:
+;     EBX = destination buffer (CStr)
+;     ECX = maximum characters (excluding NUL)
+;
+;   Output:
+;     Buffer filled with ASCII chars
+;     Buffer terminated with NUL (0)
+;
+;   Notes:
+;     - Cursor never leaves row 25
+;     - Caller decides how to convert to LStr
+;     - Preserves all registers (ABI)
+;--------------------------------------------------------------------------------------------------
+CnReadLine:
+  pusha
+  lea   edx,[ebx+2]                     ; EDX = payload start (skip LStr length word)
+  xor   edi,edi                         ; EDI = current length / index
+  mov   word [ebx],2                    ; empty LStr length = 2 bytes (length word only)
+  mov   byte [edx],0                    ; payload[0] = NUL (keeps PutStr safe if length ever gets stale)
+CnReadLine_Loop:
+  call  KbWaitChar                      ; AL = ASCII (non-zero)
+  cmp   al,0Dh                          ; Enter?
+  je    CnReadLine_Done
+  cmp   al,08h                          ; Backspace?
+  je    CnReadLine_Backspace
+  ; Printable character
+  cmp   edi,ecx                         ; reached max length?
+  jae   CnReadLine_Loop                 ; ignore if full
+  mov   [edx+edi],al                    ; store character
+  inc   edi
+  ; echo char on command line using raw LStr writer
+  push  ebx
+  mov   [KbEchoBuf+2],al                ; reuse the 1-char LStr if it’s globally accessible
+  mov   ebx,KbEchoBuf
+  call  PutStrRaw
+  pop   ebx
+  jmp   CnReadLine_Loop
+CnReadLine_Backspace:
+  test  edi,edi                         ; nothing to delete?
+  jz    CnReadLine_Loop
+  dec   edi                             ; remove one char from buffer length
+  push  ebx                             ; <-- preserve destination LStr pointer
+  mov   ebx,CnBsSeqStr
+  call  PutStrRaw                       ; erase last char visually on row 25
+  pop   ebx                             ; <-- restore destination LStr pointer
+  jmp   CnReadLine_Loop
+CnReadLine_Done:
+  mov   ax,di                           ; AX = length typed
+  add   ax,2                            ; LStr total size includes the length word
+  mov   [ebx],ax                        ; store LStr length
+  mov   byte [edx+edi],0                ; optional NUL terminator for convenience
+  popa
   ret

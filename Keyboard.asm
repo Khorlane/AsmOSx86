@@ -76,6 +76,8 @@ KbRetChar   db 0                        ; ABI return staging (POPA restores EAX,
 KbLinePtr   dd 0                        ; caller buffer pointer
 KbLineMax   dd 0                        ; max chars (excluding terminator)
 KbLineLen   dd 0                        ; current length
+KbEchoSaveRow  db 0                     ; saved cursor row for echo helpers
+KbEchoSaveCol  db 0                     ; saved cursor col for echo helpers
 
 ;--------------------------------------------------------------------------------------------------
 ; Private strings for echo helpers (length-prefixed, Console.PutStr-compatible)
@@ -162,9 +164,9 @@ KbWaitCharLoop:
 ;     AL = 1 (success)   [always 1 in current implementation]
 ;
 ; Editing behavior
-;   - Printable ASCII (0x20..0x7E): append if space remains; echo
+;   - Printable ASCII (0x20..0x7E): append if space remains;
 ;   - Backspace (0x08): if len>0, delete last char and erase on screen
-;   - Enter (0x0D): echo CRLF, terminate buffer with 0, return
+;   - Enter (0x0D): terminate buffer with 0, return
 ;--------------------------------------------------------------------------------------------------
 KbReadLine:
   pusha
@@ -190,8 +192,6 @@ KbReadLineLoop:
   ; Append char into caller buffer at [ptr + len]
   mov   esi,[KbLinePtr]
   mov   [esi+edx],al
-  ; Echo typed character
-  call  KbEchoChar
   ; len++
   inc   dword[KbLineLen]
   jmp   KbReadLineLoop
@@ -206,16 +206,12 @@ KbReadLineBackspace:
   mov   edx,[KbLineLen]
   mov   esi,[KbLinePtr]
   mov   byte[esi+edx],0
-  ; Erase last char visually: BS, space, BS
-  call  KbEchoBackspace
   jmp   KbReadLineLoop
 KbReadLineEnter:
   ; Terminate buffer with 0 at [ptr + len]
   mov   edx,[KbLineLen]
   mov   esi,[KbLinePtr]
   mov   byte[esi+edx],0
-  ; Echo newline (CRLF)
-  call  KbEchoCrlf
   ; Return AL=1 (success), staged across POPA
   mov   byte[KbRetChar],1
   popa
@@ -322,9 +318,24 @@ KbDequeueDone:
 KbEchoChar:
   push  eax
   push  ebx
-  mov   [KbEchoBuf+2],al                ; put char into 1-char length-prefixed string
+  ; Save current cursor
+  mov   al,[Row]
+  mov   [KbEchoSaveRow],al
+  mov   al,[Col]
+  mov   [KbEchoSaveCol],al
+  ; Force echo onto command line row
+  mov   al,25
+  mov   [Row],al
+  ; Use the typed char from saved EAX (still on stack)
+  mov   al,[esp+4]                      ; AL = original typed char
+  mov   [KbEchoBuf+2],al                ; patch payload byte
   mov   ebx,KbEchoBuf
-  call  PutStr
+  call  PutStrRaw
+  ; Restore cursor
+  mov   al,[KbEchoSaveRow]
+  mov   [Row],al
+  mov   al,[KbEchoSaveCol]
+  mov   [Col],al
   pop   ebx
   pop   eax
   ret
@@ -336,7 +347,7 @@ KbEchoChar:
 KbEchoCrlf:
   push  ebx
   mov   ebx,KbEchoCrLf
-  call  PutStr
+  call  PutStrRaw
   pop   ebx
   ret
 
@@ -346,7 +357,20 @@ KbEchoCrlf:
 ;--------------------------------------------------------------------------------------------------
 KbEchoBackspace:
   push  ebx
+  ; Save current cursor
+  mov   al,[Row]
+  mov   [KbEchoSaveRow],al
+  mov   al,[Col]
+  mov   [KbEchoSaveCol],al
+  ; Force echo onto command line row
+  mov   al,25
+  mov   [Row],al
   mov   ebx,KbEchoBsSeq
-  call  PutStr
+  call  PutStrRaw
+  ; Restore cursor
+  mov   al,[KbEchoSaveRow]
+  mov   [Row],al
+  mov   al,[KbEchoSaveCol]
+  mov   [Col],al
   pop   ebx
   ret
