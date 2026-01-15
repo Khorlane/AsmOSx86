@@ -158,6 +158,8 @@ PutStr:
   push  ebx                             ; Copy the string address in EBX
   pop   esi                             ;  into ESI
   mov   cx,[esi]
+  cmp   cx,2                            ; if Length <= 2?
+  jbe   PutStrDone                      ;  then Empty string
   sub   cx,2
   add   esi,2
   jcxz  PutStrDone
@@ -217,6 +219,8 @@ PutStrRaw:
   push  ebx
   pop   esi
   mov   cx,[esi]
+  cmp   cx,2
+  jbe   PutStrRawDone
   sub   cx,2
   add   esi,2
   jcxz  PutStrRawDone

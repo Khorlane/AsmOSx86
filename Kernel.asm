@@ -1,10 +1,6 @@
 ;**************************************************************************************************
 ; Kernel.asm
-;   A basic 32 bit binary kernel
-;
-; Test goal (updated)
-;   - Exercise KbReadLine (editable line input) from Keyboard.asm
-;   - Show a prompt, accept a line, then print: "You typed: <line>"
+;   A basic 32 bit binary kernel for x86 PCs.
 ;
 ; nasm -f bin Kernel.asm -o Kernel.bin -l Kernel.lst
 ;**************************************************************************************************

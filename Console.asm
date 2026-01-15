@@ -45,6 +45,7 @@ String  PromptStr,">"," "
 String  TypedPrefixStr,"You typed: "
 String  CmdLineClearStr,"                                                                                "
 String  CnBsSeqStr,08h,020h,08h         ; BS, space, BS
+String  CnEchoBuf,"X"                   ; 1-char echo buffer for CnReadLine
 
 align 4
 ; Line input LStr buffer
@@ -215,8 +216,8 @@ CnReadLine_Loop:
   inc   edi
   ; echo char on command line using raw LStr writer
   push  ebx
-  mov   [KbEchoBuf+2],al                ; reuse the 1-char LStr if it’s globally accessible
-  mov   ebx,KbEchoBuf
+  mov   [CnEchoBuf+2],al
+  mov   ebx,CnEchoBuf
   call  PutStrRaw
   pop   ebx
   jmp   CnReadLine_Loop
