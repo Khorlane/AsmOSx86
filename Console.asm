@@ -59,9 +59,11 @@ CnInit:
 ; - Follows column alignment and PascalCase coding standards (LOCKED-IN).
 ;------------------------------------------------------------------------------
 CnCrLf:
-  mov   byte [VdInCh],0x0D                  ; Carriage return
+  mov   al,0x0D                          ; Carriage return
+  mov   [VdInCh],al
   call  VdPutChar
-  mov   byte [VdInCh],0x0A                  ; Line feed
+  mov   al,0x0A                          ; Line feed
+  mov   [VdInCh],al
   call  VdPutChar
   ret
 
