@@ -401,35 +401,22 @@ VdClearLoop:
 ;
 ; Notes:
 ; - Row,Col ordering (row first, then col)
-; - Clamps to 1-based screen bounds
 ; - Row 1, Col 1 maps to VGA offset 0
 ; - Also programs the VGA hardware cursor via ports 0x3D4/0x3D5
 ;------------------------------------------------------------------------------
 VdSetCursor:
-  ; Clamp row to 1..25
-  mov   ax,[VdCurRow]
+  mov   ax,[VdCurRow]                   ; Load desired row
   movzx eax,ax
-  test  eax,eax
-  jnz   VdSetCursorRowMinOk
-  mov   eax,1
-VdSetCursorRowMinOk:
+  cmp   eax,1
+  jb    VdSetCursorPanic
   cmp   eax,VD_IN_ROW
-  jbe   VdSetCursorRowOk
-  mov   eax,VD_IN_ROW
-VdSetCursorRowOk:
-  mov   [VdCurRow],ax
-  ; Clamp col to 1..80
-  mov   dx,[VdCurCol]
+  ja    VdSetCursorPanic
+  mov   dx,[VdCurCol]                   ; Load desired col
   movzx edx,dx
-  test  edx,edx
-  jnz   VdSetCursorColMinOk
-  mov   edx,1
-VdSetCursorColMinOk:
+  cmp   edx,1
+  jb    VdSetCursorPanic
   cmp   edx,VD_COLS
-  jbe   VdSetCursorColOk
-  mov   edx,VD_COLS
-VdSetCursorColOk:
-  mov   [VdCurCol],dx
+  ja    VdSetCursorPanic
   ; Compute linear position (0-based): pos0 = (row-1)*80 + (col-1)
   mov   ax,[VdCurRow]
   movzx eax,ax
@@ -463,15 +450,16 @@ VdSetCursorColOk:
   mov   [VdInCurCol],ax
   ret
 VdSetCursorIsOutput:
-  cmp   ecx,VD_OUT_MAX_ROW
-  jbe   VdSetCursorOutOk
-  mov   ecx,VD_OUT_MAX_ROW
-VdSetCursorOutOk:
-  mov   ax,cx
+  mov   ax,[VdCurRow]
   mov   [VdOutCurRow],ax
   mov   ax,[VdCurCol]
   mov   [VdOutCurCol],ax
   ret
+VdSetCursorPanic:
+  cli
+VdSetCursorPanicHang:
+  hlt
+  jmp   VdSetCursorPanicHang
 
 ; ----- Storage -----
 VdInCh           db 0
