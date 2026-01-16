@@ -69,19 +69,10 @@ FlushCS:
   call  VdInit                          ; Initialize video
 
 MainLoop:
-  ; Provide destination String buffer and max chars via memory inputs
-  lea   eax,[CmdBuf]                    ; Set destination 
-  mov   [CnInDstPtr],eax                ;  buffer for input
-  mov   ax,CN_IN_MAX                    ; Set max chars
-  mov   [CnInMax],ax                    ;  to read
   call  CnReadLine                      ; Echoes on bottom row; returns string in CmdBuf
-  ; v0.0.1: do nothing with the command yet (echo already happened)
   jmp   MainLoop
 
   hlt
-
-; ----- Kernel owned constants -----
-CN_IN_MAX     equ 11
 
 ; ----- Storage -----
 ; Kernel Context (all mutable "variables" live here)

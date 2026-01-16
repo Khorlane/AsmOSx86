@@ -24,6 +24,9 @@
 
 [bits 32]
 
+; ----- Console constants -----
+CN_IN_MAX     equ 11                      ; maximum console input length
+
 ;------------------------------------------------------------------------------
 ; CnInit
 ; Initializes the console input state.
@@ -36,7 +39,12 @@
 ; - Ensures the console input buffer is in a known, clean state.
 ;------------------------------------------------------------------------------
 CnInit:
-  mov   word [CnInWorkLen],0                ; Clear input length
+  xor   ax,ax                           ; Clear input
+  mov   [CnInWorkLen],ax                ;  length
+  lea   eax,[CmdBuf]                    ; Set destination 
+  mov   [CnInDstPtr],eax                ;  buffer for input
+  mov   ax,CN_IN_MAX                    ; Set max chars
+  mov   [CnInMax],ax                    ;  to read
   ret
 
 ;------------------------------------------------------------------------------
@@ -75,7 +83,8 @@ CnCrLf:
 ; - Follows column alignment and PascalCase coding standards (LOCKED-IN).
 ;------------------------------------------------------------------------------
 CnReadLine:
-  mov   word [CnInWorkLen],0                ; Reset input length
+  xor   ax,ax
+  mov   [CnInWorkLen],ax                ; Reset input length
   call  VdInClearLine
 CnReadLineLoop:
   call  KbGetKey
@@ -91,8 +100,10 @@ CnReadLineLoop:
   je    CnReadLineOnEnter
   jmp   CnReadLineLoop
 CnReadLineOnChar:
-  movzx ecx,word [CnInWorkLen]
-  movzx edx,word [CnInMax]
+  mov   ax,[CnInWorkLen]
+  movzx ecx,ax
+  mov   ax,[CnInMax]
+  movzx edx,ax
   cmp   ecx,edx
   jae   CnReadLineLoop
   mov   esi,[CnInDstPtr]
@@ -104,7 +115,8 @@ CnReadLineOnChar:
   call  VdInPutChar
   jmp   CnReadLineLoop
 CnReadLineOnBackspace:
-  movzx ecx,word [CnInWorkLen]
+  mov   ax,[CnInWorkLen]
+  movzx ecx,ax
   test  ecx,ecx
   jz    CnReadLineLoop
   dec   cx

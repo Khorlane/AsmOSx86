@@ -16,7 +16,7 @@
 
 [bits 32]
 
-; ----- Video-owned constants -----
+; ----- Video constants -----
 VD_COLS         equ 80
 VD_ROWS         equ 25
 VD_OUT_MAX_ROW  equ 23

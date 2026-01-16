@@ -23,7 +23,7 @@
 
 [bits 32]
 
-; ----- Keyboard-owned constants -----
+; ----- Keyboard constants -----
 KEY_NONE        equ 0
 KEY_CHAR        equ 1
 KEY_ENTER       equ 2
