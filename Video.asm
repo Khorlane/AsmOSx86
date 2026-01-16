@@ -49,11 +49,12 @@ VdInit:
   mov   [VdOutCurCol],ax
   mov   [VdInCurCol],ax
   call  VdClear
+
   mov   ax,1
-  mov   [VdCurRow],ax                   ; row 1
-  mov   ax,2
-  mov   [VdCurCol],ax                   ; col 2
-  call VdSetCursor
+  mov   [VdCurRow],ax
+  mov   ax,1
+  mov   [VdCurCol],ax
+
   ret
 
 ;------------------------------------------------------------------------------

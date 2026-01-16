@@ -62,6 +62,11 @@ CnInit:
   mov   [CnInDstPtr],eax                ;  buffer for input
   mov   ax,CN_IN_MAX                    ; Set max chars
   mov   [CnInMax],ax                    ;  to read
+  mov   ax,25
+  mov   [VdCurRow],ax
+  mov   ax,1
+  mov   [VdCurCol],ax
+  call  VdSetCursor
   ret
 
 ;------------------------------------------------------------------------------
