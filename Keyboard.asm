@@ -116,8 +116,16 @@ KbGetKeyMakeBackspace:
 KbGetKeyNoKey:
   ret
 
-; ----- Storage -----
+; ----- Keyboard-owned constants -----
+KEY_NONE        equ 0
+KEY_CHAR        equ 1
+KEY_ENTER       equ 2
+KEY_BACKSPACE   equ 3
 
+KBD_STATUS_PORT equ 0x64
+KBD_DATA_PORT   equ 0x60
+
+; ----- Storage -----
 KbModShift        db 0
 KbOutHasKey       db 0
 KbOutType         db 0
@@ -127,7 +135,6 @@ KbWorkScanCode    db 0
 KbPad1            db 0,0,0
 
 ; ----- Scancode tables -----
-
 KbScanToAscii:
     times 0x02 db 0
     db '1','2','3','4','5','6','7','8','9','0'

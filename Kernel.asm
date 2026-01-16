@@ -37,22 +37,6 @@ IDT2:
   dw 2047
   dd IDT1
 
-%define KEY_NONE        0
-%define KEY_CHAR        1
-%define KEY_ENTER       2
-%define KEY_BACKSPACE   3
-
-%define VD_COLS         80
-%define VD_ROWS         25
-%define VD_OUT_MAX_ROW  23          ; output region rows: 0..23
-%define VD_IN_ROW       24          ; fixed input line row
-
-%define VGA_TEXT_BASE   0xB8000
-%define VD_ATTR_DEFAULT 0x07
-
-%define KBD_STATUS_PORT 0x64
-%define KBD_DATA_PORT   0x60
-
 ;--------------------------------------------------------------------------------------------------
 ; Include Major Components
 ;--------------------------------------------------------------------------------------------------

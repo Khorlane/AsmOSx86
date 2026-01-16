@@ -284,8 +284,16 @@ VdScrollClearLoop:
 VdScrollDone:
   ret
 
-; ----- Storage -----
+; ----- Video-owned constants -----
+VD_COLS         equ 80
+VD_ROWS         equ 25
+VD_OUT_MAX_ROW  equ 23
+VD_IN_ROW       equ 24
 
+VGA_TEXT_BASE   equ 0xB8000
+VD_ATTR_DEFAULT equ 0x07
+
+; ----- Storage -----
 VdInCh           db 0
 VdPad0           db 0,0,0
 VdInStrPtr       dd 0
