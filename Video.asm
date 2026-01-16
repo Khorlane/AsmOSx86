@@ -1,18 +1,18 @@
 ;==============================================================================
-; Video.asm (Vd) - drop-in replacement (v0.0.1)
+; Video.asm (Vd) - drop-in replacement (v0.0.2)
 ; 32-bit NASM, single-binary (%include), no sections, no globals
 ;
-; FIXES:
-; - Do not rely on any register value across CALL boundaries.
-; - VdInClearLine no longer uses AX as a loop counter across a call.
-; - VdPutChar_BS ensures erase char is set immediately before erase writes.
-; - VdScrollOutputRegion avoids REP MOVSD to remove reliance on implicit state.
-; - Cursor contract is now 1-based:
-;     Row 1, Col 1 maps to VGA offset 0 (0xB8000 + 0 bytes)
+; CHANGE (minimal):
+; - Replace VD_IN_ROW usage with VdCurRow so the VdIn* routines are not locked
+;   to a fixed row. The Console will set VdCurRow=25 and never change it, but
+;   other components may set VdCurRow as needed before calling VdIn* routines.
+;
+; Cursor contract is 1-based:
+;   Row 1, Col 1 maps to VGA offset 0 (0xB8000 + 0 bytes)
 ;
 ; Screen: Rows=25, Cols=80
 ; Output region (scrolls): rows 1..24
-; Input line (fixed):      row 25
+; "Input-style" routines (VdIn*): write on row = VdCurRow (set by caller)
 ; Row,Col ordering everywhere (row first, then col)
 ;==============================================================================
 
@@ -22,7 +22,6 @@
 VD_COLS         equ 80
 VD_ROWS         equ 25
 VD_OUT_MAX_ROW  equ 24                   ; Output region rows 1..24 (scrolls)
-VD_IN_ROW       equ 25                   ; Input line row 25 (fixed)
 
 VGA_TEXT_BASE   equ 0xB8000
 VD_ATTR_DEFAULT equ 0x07
@@ -36,7 +35,7 @@ VGA_CRTC_DATA   equ 0x3D5
 ; Output (memory):
 ;   VdOutCurRow = 1    ; Output region row set to 1 (1-based)
 ;   VdOutCurCol = 1    ; Output region column set to 1 (1-based)
-;   VdInCurCol  = 1    ; Input line column set to 1 (1-based)
+;   VdInCurCol  = 1    ; "Input-style" column set to 1 (1-based)
 ;
 ; Notes:
 ; - Should be called once at system startup or reset.
@@ -151,9 +150,11 @@ VdPutCharBSDone:
   ret
 
 ;------------------------------------------------------------------------------
-; VdInPutChar (input line only: row 25)
+; VdInPutChar ("input-style" char write at row = VdCurRow)
 ; Input:
 ;   VdInCh
+;   VdCurRow must already be set by caller to the target row (1..25)
+;
 ; Stops at right edge (no scroll).
 ;
 ; Notes:
@@ -169,8 +170,6 @@ VdInPutChar:
   movzx eax,ax
   inc   eax
   mov   [VdInCurCol],ax
-  mov   ax,VD_IN_ROW
-  mov   [VdCurRow],ax
   mov   ax,[VdInCurCol]
   mov   [VdCurCol],ax
   call  VdSetCursor
@@ -185,6 +184,7 @@ VdInPutCharDone:
 ;
 ; Notes:
 ; - VdInCurCol is 1-based; cannot backspace past column 1.
+; - Writes on row = VdCurRow (set by caller).
 ;------------------------------------------------------------------------------
 VdInBackspaceVisual:
   mov   ax,[VdInCurCol]
@@ -196,8 +196,6 @@ VdInBackspaceVisual:
   mov   al,' '
   mov   [VdInCh],al
   call  VdWriteInCharAtCursor
-  mov   ax,VD_IN_ROW
-  mov   [VdCurRow],ax
   mov   ax,[VdInCurCol]
   mov   [VdCurCol],ax
   call  VdSetCursor
@@ -206,7 +204,7 @@ VdInBackspaceVisualDone:
 
 ;------------------------------------------------------------------------------
 ; VdInClearLine
-; Clears row 25 and sets InCurCol=1
+; Clears the current "input-style" line at row = VdCurRow and sets InCurCol=1
 ;
 ; IMPORTANT:
 ; - Do not use AX/EAX as the loop counter across CALL boundaries.
@@ -232,8 +230,6 @@ VdInClearLineLoop:
 VdInClearLineDone:
   mov   ax,1
   mov   [VdInCurCol],ax
-  mov   ax,VD_IN_ROW
-  mov   [VdCurRow],ax
   mov   ax,[VdInCurCol]
   mov   [VdCurCol],ax
   call  VdSetCursor
@@ -253,13 +249,9 @@ VdInClearLineDone:
 ;   VdOutCurRow   = Output row (1-based, 1..24)
 ;   VdOutCurCol   = Output column (1-based, 1..80)
 ;
-; Output:
-;   Writes character and attribute to VGA memory at (VdOutCurRow, VdOutCurCol)
-;
 ; Notes:
 ;   - Does not advance the cursor or modify VdOutCurRow/VdOutCurCol.
 ;   - Row 1, Col 1 maps to VGA offset 0.
-;   - Follows PascalCase and column alignment (LOCKED-IN).
 ;------------------------------------------------------------------------------
 VdWriteOutCharAtCursor:
   mov   ax,[VdOutCurRow]
@@ -280,24 +272,22 @@ VdWriteOutCharAtCursor:
 
 ;------------------------------------------------------------------------------
 ; VdWriteInCharAtCursor
-; Writes the character in VdInCh to the VGA text buffer at the input line
-; position (row 25, column = VdInCurCol) with the default attribute.
+; Writes the character in VdInCh to the VGA text buffer at:
+;   row = VdCurRow, col = VdInCurCol
 ;
 ; Input (memory):
 ;   VdInCh      = Character to write (byte)
-;   VdInCurCol  = Column position on input line (1-based, 1..80)
-;
-; Output:
-;   Writes character and attribute to VGA memory at (25, VdInCurCol)
+;   VdCurRow    = Target row (1-based, 1..25)
+;   VdInCurCol  = Target column (1-based, 1..80)
 ;
 ; Notes:
 ;   - Does not advance the cursor or modify VdInCurCol.
-;   - Row 1, Col 1 maps to VGA offset 0, so row 25 maps to row0=24.
-;   - Uses PascalCase and column alignment (LOCKED-IN).
+;   - Row 1, Col 1 maps to VGA offset 0.
 ;------------------------------------------------------------------------------
 VdWriteInCharAtCursor:
-  mov   eax,VD_IN_ROW
-  dec   eax                               ; row0 = 24
+  mov   ax,[VdCurRow]
+  movzx eax,ax
+  dec   eax                               ; row0 = row-1
   imul  eax,VD_COLS
   mov   dx,[VdInCurCol]
   movzx edx,dx
@@ -314,10 +304,6 @@ VdWriteInCharAtCursor:
 ;------------------------------------------------------------------------------
 ; VdScrollOutputRegion
 ; Scroll output region rows 1..24 up by one line; clear row 24.
-;
-; Avoid REP MOVSD to eliminate reliance on:
-; - ECX/ESI/EDI preservation assumptions
-; - direction flag assumptions
 ;
 ; Notes:
 ; - Copies rows 2..24 over rows 1..23 (23 rows).
@@ -365,11 +351,9 @@ VdScrollDone:
 ; VdClear
 ; Clears the entire screen (all rows and columns) by writing spaces with the default attribute.
 ;
-; Output:
-;   VGA text buffer is filled with spaces and default attribute.
-;
 ; Notes:
-; - Resets output and input cursor positions to row=1, col=1 (1-based).
+; - Resets output cursor positions to row=1, col=1 (1-based).
+; - Resets VdInCurCol to 1 (1-based).
 ;------------------------------------------------------------------------------
 VdClear:
   mov   edi,VGA_TEXT_BASE
@@ -393,21 +377,19 @@ VdClearLoop:
 ;   VdCurRow = desired row (1..25)
 ;   VdCurCol = desired col (1..80)
 ;
-; Output (memory):
-;   VdOutCurRow / VdOutCurCol updated if row<=24
-;   VdInCurCol updated if row==25
-;
 ; Notes:
 ; - Row,Col ordering (row first, then col)
 ; - Row 1, Col 1 maps to VGA offset 0
-; - Also programs the VGA hardware cursor via ports 0x3D4/0x3D5
+; - Programs the VGA hardware cursor via ports 0x3D4/0x3D5
+; - Does NOT decide "input row" vs "output row" here; it only sets hardware
+;   cursor and tracks the current "input-style" column in VdInCurCol.
 ;------------------------------------------------------------------------------
 VdSetCursor:
   mov   ax,[VdCurRow]                   ; Load desired row
   movzx eax,ax
   cmp   eax,1
   jb    VdSetCursorPanic
-  cmp   eax,VD_IN_ROW
+  cmp   eax,VD_ROWS
   ja    VdSetCursorPanic
   mov   dx,[VdCurCol]                   ; Load desired col
   movzx edx,dx
@@ -439,19 +421,9 @@ VdSetCursor:
   mov   dx,VGA_CRTC_DATA
   mov   al,bl
   out   dx,al
-  ; Update your software cursors to match (1-based)
-  mov   ax,[VdCurRow]
-  movzx ecx,ax
-  cmp   ecx,VD_IN_ROW
-  jne   VdSetCursorIsOutput
+  ; Track the active "input-style" column (1-based)
   mov   ax,[VdCurCol]
   mov   [VdInCurCol],ax
-  ret
-VdSetCursorIsOutput:
-  mov   ax,[VdCurRow]
-  mov   [VdOutCurRow],ax
-  mov   ax,[VdCurCol]
-  mov   [VdOutCurCol],ax
   ret
 VdSetCursorPanic:
   cli
