@@ -171,6 +171,11 @@ VdInPutChar:
   movzx eax,ax
   inc   eax
   mov   [VdInCurCol],ax
+  mov   ax,VD_IN_ROW
+  mov   [VdCurRow],ax
+  mov   ax,[VdInCurCol]
+  mov   [VdCurCol],ax
+  call  VdSetCursor
 VdInPutCharDone:
   ret
 
@@ -229,6 +234,11 @@ VdInClearLineLoop:
 VdInClearLineDone:
   mov   ax,1
   mov   [VdInCurCol],ax
+  mov   ax,VD_IN_ROW
+  mov   [VdCurRow],ax
+  mov   ax,[VdInCurCol]
+  mov   [VdCurCol],ax
+  call  VdSetCursor
   ret
 
 ;------------------------------------------------------------------------------

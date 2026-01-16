@@ -64,10 +64,10 @@ FlushCS:
   lea   eax,[IDT2]                      ; Load the IDT
   lidt  [eax]                           ;  register
 
+  call  VdInit                          ; Initialize video
   call  CnInit                          ; Initialize console
   call  KbInit                          ; Initialize keyboard
-  call  VdInit                          ; Initialize video
-  call Console                          ; Console command loop
+  call  Console                         ; Console command loop
 
   hlt
 

@@ -110,11 +110,6 @@ CnReadLine:
   xor   ax,ax
   mov   [CnInWorkLen],ax                ; Reset input length
   call  VdInClearLine
-  mov   ax,25
-  mov   [VdCurRow],ax
-  mov   ax,[VdInCurCol]
-  mov   [VdCurCol],ax
-  call  VdSetCursor
 CnReadLineLoop:
   call  KbGetKey
   mov   al,[KbOutHasKey]
@@ -142,11 +137,6 @@ CnReadLineOnChar:
   mov   [CnInWorkLen],cx
   mov   [VdInCh],al
   call  VdInPutChar
-  mov   ax,25
-  mov   [VdCurRow],ax
-  mov   ax,[VdInCurCol]
-  mov   [VdCurCol],ax
-  call  VdSetCursor
   jmp   CnReadLineLoop
 CnReadLineOnBackspace:
   mov   ax,[CnInWorkLen]
@@ -162,11 +152,6 @@ CnReadLineOnEnter:
   mov   ax,[CnInWorkLen]
   mov   [esi],ax
   call  VdInClearLine
-  mov   ax,25
-  mov   [VdCurRow],ax
-  mov   ax,1
-  mov   [VdCurCol],ax
-  call  VdSetCursor
   ret
 
 ; ----- Storage -----
