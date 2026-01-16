@@ -36,22 +36,28 @@ IDT1: times 256 dq 0
 IDT2:
   dw 2047
   dd IDT1
-;--------------------------------------------------------------------------------------------------
-; Include Macro Definitions
-;--------------------------------------------------------------------------------------------------
-%include "Macros.asm"
+
+%define KEY_NONE        0
+%define KEY_CHAR        1
+%define KEY_ENTER       2
+%define KEY_BACKSPACE   3
+
+%define VD_COLS         80
+%define VD_ROWS         25
+%define VD_OUT_MAX_ROW  23          ; output region rows: 0..23
+%define VD_IN_ROW       24          ; fixed input line row
+
+%define VGA_TEXT_BASE   0xB8000
+%define VD_ATTR_DEFAULT 0x07
+
+%define KBD_STATUS_PORT 0x64
+%define KBD_DATA_PORT   0x60
 
 ;--------------------------------------------------------------------------------------------------
 ; Include Major Components
 ;--------------------------------------------------------------------------------------------------
-%include "Config.asm"
 %include "Console.asm"
-%include "Floppy.asm"
 %include "Keyboard.asm"
-%include "Time.asm"
-%include "Timer.asm"
-%include "Uptime.asm"
-%include "Utility.asm"
 %include "Video.asm"
 
 ;--------------------------------------------------------------------------------------------------
@@ -74,53 +80,17 @@ FlushCS:
   lea   eax,[IDT2]                      ; Load the IDT
   lidt  [eax]                           ;  register
 
-  ; Clear screen
-  mov   al,Black                        ; Background
-  mov   [ColorBack],al                  ;  color
-  mov   al,Purple                       ; Foreground
-  mov   [ColorFore],al                  ;  color
-  call  SetColorAttr                    ; Set color
-  call  ClrScr                          ; Clear screen
-  mov   al,1                            ; Set
-  mov   [Row],al                        ;  Row,Col
-  mov   al,1                            ;  to
-  mov   [Col],al                        ;  1,1
-
-  ; Initialize components
-  call  TimerInit                       ; Initialize PIT / monotonic ticks
-  call  UptimeInit                      ; Initialize uptime
-  call  TimeSync                        ; Sync time from CMOS
   call  CnInit                          ; Initialize console
   call  KbInit                          ; Initialize keyboard
+  call  VdInit                          ; Initialize video
 
-  ; Debug prints to show time and uptime
-  call  UptimePrint                     ; Uptime
-  call  TimePrint                       ; Print Time
-  mov   eax,1000                        ; Delay                 
-  call  TimerDelayMs                    ;  1 second
-  call  TimePrint                       ; Print Time
-  call  UptimePrint                     ; Print Uptime
-  call  FloppyTest                      ; Floppy motor test
-
-  ; Debug addresses and memory content
-  mov   eax,0DEADBEEFh                  ; Dump a
-  mov   [Byte4],eax                     ;  known value
-  call  DebugIt                         ;  expect DEADBEEF
-  xor   eax,eax                         ; Dump
-  mov   [Byte4],eax                     ;  value of
-  mov   [Byte4],esp                     ;  esp
-  call  DebugIt                         ;  expect 00090000
-  xor   eax,eax                         ; Dump
-  mov   [Byte4],eax                     ;  value of
-  mov   [Byte4],cs                      ;  cs
-  call  DebugIt                         ;  expect 00000008
-  xor   eax,eax                         ; Dump
-  mov   [Byte4],eax                     ;  8 bytes of 
-  mov   eax,[100000h]                   ;  memory, starting
-  mov   [Byte4],eax                     ;  at address
-  call  DebugIt                         ;  1mb (100000h)
-
-  call ConsoleLoop                      ; Enter console loop
+MainLoop:
+    ; Provide destination Sting buffer and max chars via memory inputs
+    mov dword [Cn_In_DstPtr], CmdBuf
+    mov word  [Cn_In_Max], 80        ; max payload chars (<=80)
+    call CnReadLine                  ; echoes on bottom row; returns Sting in CmdBuf
+    ; v0.0.1: do nothing with the command yet (echo already happened)
+    jmp MainLoop
 
   hlt
 
@@ -153,3 +123,8 @@ KernelCtxSz  equ KernelCtxEnd - KernelCtx
 %if (KernelCtxSz % 4) != 0
   %error "KernelCtxSz is not dword aligned"
 %endif
+
+; Command line buffer as Sting:
+; [0..1]=u16 length, [2..]=payload chars
+CmdBuf:
+    times (2 + 80) db 0

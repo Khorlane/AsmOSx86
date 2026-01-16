@@ -1,376 +1,142 @@
-;**************************************************************************************************
-; Keyboard.asm
-;   Keyboard input (polled, no IRQ) — early-stage ASCII-only service + line input
-;
-; Big picture
-;   - KbPoll is the ONLY routine that touches the 8042 ports (064h/060h).
-;   - KbPoll translates ONE scancode (if present) into ASCII and enqueues it.
-;   - KbGetChar / KbWaitChar consume the ASCII ring buffer.
-;   - KbReadLine builds an editable line using KbWaitChar:
-;       - printable chars are appended + echoed
-;       - Backspace removes last char + erases on screen
-;       - Enter finishes: echoes CRLF, writes a 0-terminated string
-;
-; Locked-in constraints
-;   - ASCII only (a-z, 0-9, plus Space / Backspace / Enter)
-;   - No IRQ, no E0/E1 extended keys, no modifiers, no repeat handling
-;   - Ring buffer size 32 bytes; overflow overwrites oldest
-;   - Unknown scancodes are dropped
-;   - Break/release scancodes are ignored
-;   - Exported routines preserve all general registers (pusha/popa).
-;     Any return value in AL/EAX must be staged and restored after popa.
-;   - Provides key events / line-edit primitives, but does not own screen policy
-;**************************************************************************************************
+; Keyboard.asm (Kb) - no sections, no globals
 
-[bits 32]
-
-section .data
-;--------------------------------------------------------------------------------------------------
-; Translation tables (Set 1 make codes -> ASCII)
-;
-; Coverage
-;   - a-z, 0-9
-;   - space
-;   - enter
-;   - backspace
-;--------------------------------------------------------------------------------------------------
-
-; a-z + 0-9
-Scancode    db 01Eh, 030h, 02Eh, 020h, 012h, 021h, 022h, 023h, 017h, 024h, 025h, 026h
-            db 032h, 031h, 018h, 019h, 010h, 013h, 01Fh, 014h, 016h, 02Fh, 011h, 02Dh
-            db 015h, 02Ch, 00Bh, 002h, 003h, 004h, 005h, 006h, 007h, 008h, 009h, 00Ah
-            ; extras (space, enter, backspace)
-            db 039h, 01Ch, 00Eh
-ScancodeEnd:
-ScancodeSz  equ ScancodeEnd - Scancode
-
-CharCode    db 061h, 062h, 063h, 064h, 065h, 066h, 067h, 068h, 069h, 06Ah, 06Bh, 06Ch
-            db 06Dh, 06Eh, 06Fh, 070h, 071h, 072h, 073h, 074h, 075h, 076h, 077h, 078h
-            db 079h, 07Ah, 030h, 031h, 032h, 033h, 034h, 035h, 036h, 037h, 038h, 039h
-            ; extras (space, enter, backspace)
-            db 020h, 00Dh, 08h
-CharCodeEnd:
-CharCodeSz  equ CharCodeEnd - CharCode
-
-; break/release scancodes for a-z + 0-9 (existing)
-IgnoreCode  db 09Eh, 0B0h, 0AEh, 0A0h, 092h, 0A1h, 0A2h, 0A3h, 097h, 0A4h, 0A5h, 0A6h
-            db 0B2h, 0B1h, 098h, 099h, 090h, 093h, 09Fh, 094h, 096h, 0BFh, 091h, 0ADh
-            db 095h, 0ACh, 08Bh, 082h, 083h, 084h, 085h, 086h, 087h, 088h, 089h, 08Ah
-            ; extras (space, enter, backspace) break codes
-            db 0B9h, 09Ch, 08Eh
-IgnoreEnd:
-IgnoreSz    equ IgnoreEnd - IgnoreCode
-
-;--------------------------------------------------------------------------------------------------
-; ASCII ring buffer (internal)
-;   - Size 32 bytes (power of 2)
-;   - Overflow overwrites oldest: advance Tail before writing when full
-;--------------------------------------------------------------------------------------------------
-KB_BUF_SZ   equ 32                      ; ASCII ring buffer size (bytes)
-KbBuf       times KB_BUF_SZ db 0        ; ASCII ring buffer
-KbHead      db 0                        ; next write index
-KbTail      db 0                        ; next read index
-KbCount     db 0                        ; current count
-KbRetChar   db 0                        ; ABI return staging (POPA restores EAX, so we stage AL here)
-; KbReadLine state
-KbLinePtr   dd 0                        ; caller buffer pointer
-KbLineMax   dd 0                        ; max chars (excluding terminator)
-KbLineLen   dd 0                        ; current length
-KbEchoSaveRow  db 0                     ; saved cursor row for echo helpers
-KbEchoSaveCol  db 0                     ; saved cursor col for echo helpers
-
-;--------------------------------------------------------------------------------------------------
-; Private strings for echo helpers (length-prefixed, Console.PutStr-compatible)
-;--------------------------------------------------------------------------------------------------
-String  KbEchoBuf,"X"
-String  KbEchoCrLf,0Dh,0Ah
-String  KbEchoBsSeq,08h,020h,08h
-
-section .text
-;--------------------------------------------------------------------------------------------------
-; Exported: KbInit
-;   Big picture: reset all internal keyboard state to "empty"
-;--------------------------------------------------------------------------------------------------
 KbInit:
-  pusha
-  mov   byte[KbHead],0                  ; next write index = 0
-  mov   byte[KbTail],0                  ; next read index  = 0
-  mov   byte[KbCount],0                 ; buffer empty
-  mov   byte[KbRetChar],0               ; staged return = 0
-  mov   dword[KbLinePtr],0              ; clear line state
-  mov   dword[KbLineMax],0              ; clear line max
-  mov   dword[KbLineLen],0              ; clear line len
-  popa
+  mov   byte [Kb_Mod_Shift],0           ; Clear shift modifier
+  mov   byte [Kb_Out_HasKey],0          ; Clear key output flag
+  mov   byte [Kb_Out_Type],KEY_NONE     ; Set output type to none
+  mov   byte [Kb_Out_Char],0            ; Clear output character
   ret
 
-;--------------------------------------------------------------------------------------------------
-; Exported: KbPoll
-;   Big picture: sample the 8042 once; if a byte is ready, translate and enqueue ASCII
-;--------------------------------------------------------------------------------------------------
-KbPoll:
-  pusha
-  in    al,064h                         ; 8042 status port
-  test  al,1                            ; bit0=1 => data ready at 060h
-  jz    KbPollDone                      ; nothing waiting => return now
-  in    al,060h                         ; read one scancode byte
-  call  KbScancodeToAscii               ; map scancode -> ASCII (AL) or 0 (drop)
-  test  al,al
-  jz    KbPollDone                      ; ignored/unknown => drop silently
-  call  KbEnqueueAscii                  ; append ASCII into ring buffer
-KbPollDone:
-  popa
-  ret
+KbGetKey:
+  mov   byte [Kb_Out_HasKey],0          ; Clear key output flag
+  mov   byte [Kb_Out_Type],KEY_NONE     ; Set output type to none
+  mov   byte [Kb_Out_Char],0            ; Clear output character
 
-;--------------------------------------------------------------------------------------------------
-; Exported: KbGetChar
-;   Big picture: non-blocking "pull" from ASCII ring buffer
-;   Returns: AL = char, or 0 if empty
-;--------------------------------------------------------------------------------------------------
-KbGetChar:
-  pusha
-  call  KbDequeueAscii                  ; AL = next char or 0
-  mov   [KbRetChar],al                  ; stage return value across POPA
-  popa
-  mov   al,[KbRetChar]                  ; restore return value
-  ret
+  in    al,KBD_STATUS_PORT              ; Read keyboard status
+  test  al,0x01                         ; Key available?
+  jz    KbGetKey_NoKey
 
-;--------------------------------------------------------------------------------------------------
-; Exported: KbWaitChar
-;   Big picture: blocking "pull" — keep polling hardware until a char appears in the ring buffer
-;   Returns: AL = char (non-zero)
-;--------------------------------------------------------------------------------------------------
-KbWaitChar:
-  pusha
-KbWaitCharLoop:
-  call  KbPoll                          ; try to bring one new key into the buffer
-  call  KbDequeueAscii                  ; try to consume one buffered ASCII char
-  test  al,al
-  jz    KbWaitCharLoop                  ; still empty => keep polling
-  mov   [KbRetChar],al                  ; stage return value across POPA
-  popa
-  mov   al,[KbRetChar]
-  ret
+  in    al,KBD_DATA_PORT                ; Read key data
+  mov   [Kb_Work_ScanCode],al           ; Save scancode
 
-;--------------------------------------------------------------------------------------------------
-; Exported: KbReadLine
-;   Big picture: build an editable line from KbWaitChar
-;
-; Calling convention (simple + deterministic)
-;   Input:
-;     EBX = destination buffer (byte*)
-;     ECX = max length (chars, excluding trailing 0)
-;   Output:
-;     Buffer is 0-terminated
-;     AL = 1 (success)   [always 1 in current implementation]
-;
-; Editing behavior
-;   - Printable ASCII (0x20..0x7E): append if space remains;
-;   - Backspace (0x08): if len>0, delete last char and erase on screen
-;   - Enter (0x0D): terminate buffer with 0, return
-;--------------------------------------------------------------------------------------------------
-KbReadLine:
-  pusha
-  mov   [KbLinePtr],ebx                 ; remember caller buffer
-  mov   [KbLineMax],ecx                 ; remember max chars
-  mov   dword[KbLineLen],0              ; start empty
-KbReadLineLoop:
-  call  KbWaitChar                      ; AL = next ASCII key
-  cmp   al,0Dh                          ; Enter?
-  je    KbReadLineEnter
-  cmp   al,08h                          ; Backspace?
-  je    KbReadLineBackspace
-  ; Accept only printable ASCII range (space already maps to 0x20)
-  cmp   al,020h
-  jb    KbReadLineLoop                  ; control => ignore
-  cmp   al,07Eh
-  ja    KbReadLineLoop                  ; non-ASCII => ignore
-  ; If line is full, ignore extra printable chars
-  mov   edx,[KbLineLen]
-  mov   ecx,[KbLineMax]
-  cmp   edx,ecx
-  jae   KbReadLineLoop
-  ; Append char into caller buffer at [ptr + len]
-  mov   esi,[KbLinePtr]
-  mov   [esi+edx],al
-  ; len++
-  inc   dword[KbLineLen]
-  jmp   KbReadLineLoop
-KbReadLineBackspace:
-  ; If empty, nothing to delete
-  mov   edx,[KbLineLen]
-  test  edx,edx
-  jz    KbReadLineLoop
-  ; len--
-  dec   dword[KbLineLen]
-  ; Optional: clear byte in buffer (not required, but keeps things tidy)
-  mov   edx,[KbLineLen]
-  mov   esi,[KbLinePtr]
-  mov   byte[esi+edx],0
-  jmp   KbReadLineLoop
-KbReadLineEnter:
-  ; Terminate buffer with 0 at [ptr + len]
-  mov   edx,[KbLineLen]
-  mov   esi,[KbLinePtr]
-  mov   byte[esi+edx],0
-  ; Return AL=1 (success), staged across POPA
-  mov   byte[KbRetChar],1
-  popa
-  mov   al,[KbRetChar]
-  ret
+  test  al,0x80                         ; Break code?
+  jnz   KbGetKey_OnBreak
 
-;--------------------------------------------------------------------------------------------------
-; Private: KbScancodeToAscii
-;   Big picture: filter scancodes (ignore list), then map make-code -> ASCII
-;   Input:  AL = scancode
-;   Output: AL = ASCII, or 0 if ignored/unknown
-;--------------------------------------------------------------------------------------------------
-KbScancodeToAscii:
-  push  ecx
-  push  esi
-  ; First, filter out break/release scancodes (never produce ASCII)
-  xor   esi,esi
-  mov   ecx,IgnoreSz
-KbScancodeToAsciiIgnore:
-  cmp   al,[IgnoreCode+esi]
-  je    KbScancodeToAsciiDrop
-  inc   esi
-  loop  KbScancodeToAsciiIgnore
-  ; Next, map make scancodes to ASCII via index-aligned tables
-  xor   esi,esi
-  mov   ecx,ScancodeSz
-KbScancodeToAsciiScan:
-  cmp   al,[Scancode+esi]
-  je    KbScancodeToAsciiHit
-  inc   esi
-  loop  KbScancodeToAsciiScan
-  jmp   KbScancodeToAsciiDrop
-KbScancodeToAsciiHit:
-  mov   al,[CharCode+esi]               ; return mapped ASCII
-  jmp   KbScancodeToAsciiDone
-KbScancodeToAsciiDrop:
-  xor   eax,eax                         ; return 0 (drop)
-KbScancodeToAsciiDone:
-  pop   esi
-  pop   ecx
-  ret
+  cmp   al,0x2A                         ; Shift down?
+  je    KbGetKey_ShiftDown
+  cmp   al,0x36
+  je    KbGetKey_ShiftDown
 
-;--------------------------------------------------------------------------------------------------
-; Private: KbEnqueueAscii
-;   Big picture: append one ASCII byte into ring buffer, overwriting oldest when full
-;   Input:  AL = ASCII (non-zero)
-;--------------------------------------------------------------------------------------------------
-KbEnqueueAscii:
-  push  ebx
-  push  edx
-  mov   bl,[KbCount]
-  cmp   bl,KB_BUF_SZ
-  jne   KbEnqueueNotFull
-  ; Buffer full: advance Tail (discard oldest) before writing new byte
-  mov   dl,[KbTail]
-  inc   dl
-  and   dl,(KB_BUF_SZ-1)
-  mov   [KbTail],dl
-  jmp   KbEnqueueWrite
-KbEnqueueNotFull:
-  inc   bl
-  mov   [KbCount],bl
-KbEnqueueWrite:
-  mov   dl,[KbHead]                     ; write at Head
-  mov   [KbBuf+edx],al
-  inc   dl
-  and   dl,(KB_BUF_SZ-1)
-  mov   [KbHead],dl
-  pop   edx
-  pop   ebx
-  ret
+  cmp   al,0x1C                         ; Enter?
+  je    KbGetKey_MakeEnter
 
-;--------------------------------------------------------------------------------------------------
-; Private: KbDequeueAscii
-;   Big picture: remove one ASCII byte from ring buffer
-;   Output: AL = char, or 0 if empty
-;--------------------------------------------------------------------------------------------------
-KbDequeueAscii:
-  push  ebx
-  push  edx
-  mov   bl,[KbCount]
+  cmp   al,0x0E                         ; Backspace?
+  je    KbGetKey_MakeBackspace
+
+  movzx esi,byte [Kb_Work_ScanCode]     ; ESI = scancode
+  mov   bl,[Kb_Mod_Shift]               ; BL = shift state
   test  bl,bl
-  jnz   KbDequeueHasData
-  xor   eax,eax                         ; empty => AL=0
-  jmp   KbDequeueDone
-KbDequeueHasData:
-  mov   dl,[KbTail]                     ; read at Tail
-  mov   al,[KbBuf+edx]
-  inc   dl
-  and   dl,(KB_BUF_SZ-1)
-  mov   [KbTail],dl
-  dec   bl
-  mov   [KbCount],bl
-KbDequeueDone:
-  pop   edx
-  pop   ebx
+  jz    KbGetKey_Unshifted
+
+KbGetKey_Shifted:
+  mov   al,[Kb_ScanToAscii_Shift+esi]   ; Shifted ASCII
+  jmp   KbGetKey_MaybeChar
+
+KbGetKey_Unshifted:
+  mov   al,[Kb_ScanToAscii+esi]         ; Unshifted ASCII
+
+KbGetKey_MaybeChar:
+  test  al,al
+  jz    KbGetKey_NoKey
+
+  mov   byte [Kb_Out_HasKey],1          ; Mark key present
+  mov   byte [Kb_Out_Type],KEY_CHAR     ; Mark as char
+  mov   [Kb_Out_Char],al                ; Store char
   ret
 
-;--------------------------------------------------------------------------------------------------
-; Private: KbEchoChar
-;   Big picture: echo one printable ASCII char using Console.PutStr
-;   Input: AL = ASCII
-;--------------------------------------------------------------------------------------------------
-KbEchoChar:
-  push  eax
-  push  ebx
-  ; Save current cursor
-  mov   al,[Row]
-  mov   [KbEchoSaveRow],al
-  mov   al,[Col]
-  mov   [KbEchoSaveCol],al
-  ; Force echo onto command line row
-  mov   al,25
-  mov   [Row],al
-  ; Use the typed char from saved EAX (still on stack)
-  mov   al,[esp+4]                      ; AL = original typed char
-  mov   [KbEchoBuf+2],al                ; patch payload byte
-  mov   ebx,KbEchoBuf
-  call  PutStrRaw
-  ; Restore cursor
-  mov   al,[KbEchoSaveRow]
-  mov   [Row],al
-  mov   al,[KbEchoSaveCol]
-  mov   [Col],al
-  pop   ebx
-  pop   eax
+KbGetKey_OnBreak:
+  and   al,0x7F                         ; Remove break bit
+  cmp   al,0x2A                         ; Shift up?
+  je    KbGetKey_ShiftUp
+  cmp   al,0x36
+  je    KbGetKey_ShiftUp
+  jmp   KbGetKey_NoKey
+
+KbGetKey_ShiftDown:
+  mov   byte [Kb_Mod_Shift],1           ; Set shift
+  jmp   KbGetKey_NoKey
+
+KbGetKey_ShiftUp:
+  mov   byte [Kb_Mod_Shift],0           ; Clear shift
+  jmp   KbGetKey_NoKey
+
+KbGetKey_MakeEnter:
+  mov   byte [Kb_Out_HasKey],1          ; Mark key present
+  mov   byte [Kb_Out_Type],KEY_ENTER    ; Mark as enter
   ret
 
-;--------------------------------------------------------------------------------------------------
-; Private: KbEchoCrlf
-;   Big picture: echo CRLF using Console.PutStr
-;--------------------------------------------------------------------------------------------------
-KbEchoCrlf:
-  push  ebx
-  mov   ebx,KbEchoCrLf
-  call  PutStrRaw
-  pop   ebx
+KbGetKey_MakeBackspace:
+  mov   byte [Kb_Out_HasKey],1          ; Mark key present
+  mov   byte [Kb_Out_Type],KEY_BACKSPACE ; Mark as backspace
   ret
 
-;--------------------------------------------------------------------------------------------------
-; Private: KbEchoBackspace
-;   Big picture: erase last echoed char on screen: BS, space, BS
-;--------------------------------------------------------------------------------------------------
-KbEchoBackspace:
-  push  ebx
-  ; Save current cursor
-  mov   al,[Row]
-  mov   [KbEchoSaveRow],al
-  mov   al,[Col]
-  mov   [KbEchoSaveCol],al
-  ; Force echo onto command line row
-  mov   al,25
-  mov   [Row],al
-  mov   ebx,KbEchoBsSeq
-  call  PutStrRaw
-  ; Restore cursor
-  mov   al,[KbEchoSaveRow]
-  mov   [Row],al
-  mov   al,[KbEchoSaveCol]
-  mov   [Col],al
-  pop   ebx
+KbGetKey_NoKey:
   ret
+
+; ----- Storage (explicit zeros; no .bss) -----
+
+Kb_Mod_Shift      db 0
+
+Kb_Out_HasKey     db 0
+Kb_Out_Type       db 0
+Kb_Out_Char       db 0
+Kb_Pad0           db 0
+
+Kb_Work_ScanCode  db 0
+Kb_Pad1           db 0,0,0
+
+; ----- Scancode tables (same as before) -----
+
+Kb_ScanToAscii:
+    times 0x02 db 0
+    db '1','2','3','4','5','6','7','8','9','0'
+    db '-','='
+    db 0
+    db 0
+    db 'q','w','e','r','t','y','u','i','o','p'
+    db '[',']'
+    db 0
+    db 0
+    db 'a','s','d','f','g','h','j','k','l'
+    db ';',39,'`'
+    db 0
+    db '\'
+    db 'z','x','c','v','b','n','m'
+    db ',', '.', '/'
+    db 0
+    db '*'
+    db 0
+    db ' '
+    times (128 - 0x3A) db 0
+
+Kb_ScanToAscii_Shift:
+    times 0x02 db 0
+    db '!','@','#','$','%','^','&','*','(',')'
+    db '_','+'
+    db 0
+    db 0
+    db 'Q','W','E','R','T','Y','U','I','O','P'
+    db '{','}'
+    db 0
+    db 0
+    db 'A','S','D','F','G','H','J','K','L'
+    db ':','"','~'
+    db 0
+    db '|'
+    db 'Z','X','C','V','B','N','M'
+    db '<','>','?'
+    db 0
+    db '*'
+    db 0
+    db ' '
+    times (128 - 0x3A) db 0
