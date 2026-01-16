@@ -16,6 +16,15 @@
 
 [bits 32]
 
+; ----- Video-owned constants -----
+VD_COLS         equ 80
+VD_ROWS         equ 25
+VD_OUT_MAX_ROW  equ 23
+VD_IN_ROW       equ 24
+
+VGA_TEXT_BASE   equ 0xB8000
+VD_ATTR_DEFAULT equ 0x07
+
 ;------------------------------------------------------------------------------
 ; VdInit
 ; Initializes the video output and input cursor state.
@@ -30,9 +39,10 @@
 ; - Ensures video cursor state is in a known, clean state.
 ;------------------------------------------------------------------------------
 VdInit:
-  mov   word [VdOutCurRow],0                ; Clear output row
-  mov   word [VdOutCurCol],0                ; Clear output col
-  mov   word [VdInCurCol],0                 ; Clear input col
+  mov   word [VdOutCurRow],0
+  mov   word [VdOutCurCol],0
+  mov   word [VdInCurCol],0
+  call  VdClear
   ret
 
 ;------------------------------------------------------------------------------
@@ -284,14 +294,28 @@ VdScrollClearLoop:
 VdScrollDone:
   ret
 
-; ----- Video-owned constants -----
-VD_COLS         equ 80
-VD_ROWS         equ 25
-VD_OUT_MAX_ROW  equ 23
-VD_IN_ROW       equ 24
-
-VGA_TEXT_BASE   equ 0xB8000
-VD_ATTR_DEFAULT equ 0x07
+;------------------------------------------------------------------------------
+; VdClear
+; Clears the entire screen (all rows and columns) by writing spaces with the default attribute.
+;
+; Output:
+;   VGA text buffer is filled with spaces and default attribute.
+;
+; Notes:
+; - Resets output and input cursor positions to zero.
+;------------------------------------------------------------------------------
+VdClear:
+  mov   edi,VGA_TEXT_BASE
+  mov   ecx,VD_COLS * VD_ROWS
+VdClearLoop:
+  mov   ax,(VD_ATTR_DEFAULT << 8) | ' '
+  mov   [edi],ax
+  add   edi,2
+  loop  VdClearLoop
+  mov   word [VdOutCurRow],0
+  mov   word [VdOutCurCol],0
+  mov   word [VdInCurCol],0
+  ret
 
 ; ----- Storage -----
 VdInCh           db 0

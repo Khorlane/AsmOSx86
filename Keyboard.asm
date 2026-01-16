@@ -23,6 +23,15 @@
 
 [bits 32]
 
+; ----- Keyboard-owned constants -----
+KEY_NONE        equ 0
+KEY_CHAR        equ 1
+KEY_ENTER       equ 2
+KEY_BACKSPACE   equ 3
+
+KBD_STATUS_PORT equ 0x64
+KBD_DATA_PORT   equ 0x60
+
 ;------------------------------------------------------------------------------
 ; KbInit
 ; Initializes keyboard state variables.
@@ -115,15 +124,6 @@ KbGetKeyMakeBackspace:
   ret
 KbGetKeyNoKey:
   ret
-
-; ----- Keyboard-owned constants -----
-KEY_NONE        equ 0
-KEY_CHAR        equ 1
-KEY_ENTER       equ 2
-KEY_BACKSPACE   equ 3
-
-KBD_STATUS_PORT equ 0x64
-KBD_DATA_PORT   equ 0x60
 
 ; ----- Storage -----
 KbModShift        db 0
