@@ -14,6 +14,21 @@
 ; Row,Col ordering everywhere (row first, then col)
 ;==============================================================================
 
+[bits 32]
+
+;------------------------------------------------------------------------------
+; VdInit
+; Initializes the video output and input cursor state.
+;
+; Output (memory):
+;   VdOutCurRow = 0    ; Output region row set to 0
+;   VdOutCurCol = 0    ; Output region column set to 0
+;   VdInCurCol  = 0    ; Input line column set to 0
+;
+; Notes:
+; - Should be called once at system startup or reset.
+; - Ensures video cursor state is in a known, clean state.
+;------------------------------------------------------------------------------
 VdInit:
   mov   word [VdOutCurRow],0                ; Clear output row
   mov   word [VdOutCurCol],0                ; Clear output col
@@ -29,7 +44,6 @@ VdPutStr:
   mov   esi,[VdInStrPtr]
   movzx ecx,word [esi]
   add   esi,2
-
 VdPutStrNext:
   test  ecx,ecx
   jz    VdPutStrDone
@@ -39,7 +53,6 @@ VdPutStrNext:
   mov   [VdInCh],al
   call  VdPutChar
   jmp   VdPutStrNext
-
 VdPutStrDone:
   ret
 
@@ -76,11 +89,9 @@ VdPutCharRowOk:
 VdPutCharSetCol:
   mov   [VdOutCurCol],ax
   ret
-
 VdPutCharCR:
   mov   word [VdOutCurCol],0
   ret
-
 VdPutCharLF:
   movzx eax,word [VdOutCurRow]
   inc   eax
@@ -92,7 +103,6 @@ VdPutCharLF:
 VdPutCharSetRow:
   mov   [VdOutCurRow],ax
   ret
-
 VdPutCharBS:
   movzx eax,word [VdOutCurCol]
   test  eax,eax
@@ -172,7 +182,23 @@ VdInClearLineDone:
 ; Internal helpers
 ;------------------------------------------------------------------------------
 
-; Write VdInCh at (VdOutCurRow, VdOutCurCol)
+;------------------------------------------------------------------------------
+; VdWriteOutCharAtCursor
+; Writes the character in VdInCh to the VGA text buffer at the current output
+; region position (row = VdOutCurRow, col = VdOutCurCol) with the default attribute.
+;
+; Input (memory):
+;   VdInCh        = Character to write (byte)
+;   VdOutCurRow   = Output row (word)
+;   VdOutCurCol   = Output column (word)
+;
+; Output:
+;   Writes character and attribute to VGA memory at (VdOutCurRow, VdOutCurCol)
+;
+; Notes:
+;   - Does not advance the cursor or modify VdOutCurRow/VdOutCurCol.
+;   - Follows PascalCase and column alignment (LOCKED-IN).
+;------------------------------------------------------------------------------
 VdWriteOutCharAtCursor:
   movzx eax,word [VdOutCurRow]
   imul  eax,VD_COLS
@@ -186,7 +212,22 @@ VdWriteOutCharAtCursor:
   mov   [edi],ax
   ret
 
-; Write VdInCh at (row=24, col=VdInCurCol)
+;------------------------------------------------------------------------------
+; VdWriteInCharAtCursor
+; Writes the character in VdInCh to the VGA text buffer at the input line
+; position (row 24, column = VdInCurCol) with the default attribute.
+;
+; Input (memory):
+;   VdInCh      = Character to write (byte)
+;   VdInCurCol  = Column position on input line (word)
+;
+; Output:
+;   Writes character and attribute to VGA memory at (24, VdInCurCol)
+;
+; Notes:
+;   - Does not advance the cursor or modify VdInCurCol.
+;   - Uses PascalCase and column alignment (LOCKED-IN).
+;------------------------------------------------------------------------------
 VdWriteInCharAtCursor:
   mov   eax,VD_IN_ROW
   imul  eax,VD_COLS
@@ -243,7 +284,7 @@ VdScrollClearLoop:
 VdScrollDone:
   ret
 
-; ----- Storage (explicit zeros; no .bss) -----
+; ----- Storage -----
 
 VdInCh           db 0
 VdPad0           db 0,0,0

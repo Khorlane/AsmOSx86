@@ -20,6 +20,9 @@
 ;   - No .bss section; all storage is explicitly zero-initialized.
 ;   - No globals or sections outside this file.
 ;==============================================================================
+
+[bits 32]
+
 ;------------------------------------------------------------------------------
 ; KbInit
 ; Initializes keyboard state variables.

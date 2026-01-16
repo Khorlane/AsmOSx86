@@ -85,18 +85,16 @@ FlushCS:
   call  VdInit                          ; Initialize video
 
 MainLoop:
-  ; Provide destination Sting buffer and max chars via memory inputs
-  mov dword [CnInDstPtr], CmdBuf
-  mov word  [CnInMax], 80        ; max payload chars (<=80)
-  call CnReadLine                  ; echoes on bottom row; returns Sting in CmdBuf
+  ; Provide destination String buffer and max chars via memory inputs
+  mov   dword [CnInDstPtr],CmdBuf       ; Set destination buffer for input
+  mov   word  [CnInMax],80              ; Max payload chars (<=80)
+  call  CnReadLine                      ; Echoes on bottom row; returns string in CmdBuf
   ; v0.0.1: do nothing with the command yet (echo already happened)
-  jmp MainLoop
+  jmp   MainLoop
 
   hlt
 
-;--------------------------------------------------------------------------------------------------
-; Working Storage
-;--------------------------------------------------------------------------------------------------
+; ----- Storage -----
 
 ; Kernel Context (all mutable "variables" live here)
 align 4
