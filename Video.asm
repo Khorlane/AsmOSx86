@@ -39,9 +39,10 @@ VD_ATTR_DEFAULT equ 0x07
 ; - Ensures video cursor state is in a known, clean state.
 ;------------------------------------------------------------------------------
 VdInit:
-  mov   word [VdOutCurRow],0
-  mov   word [VdOutCurCol],0
-  mov   word [VdInCurCol],0
+  xor   eax,eax
+  mov   [VdOutCurRow],ax
+  mov   [VdOutCurCol],ax
+  mov   [VdInCurCol],ax
   call  VdClear
   ret
 
@@ -52,7 +53,8 @@ VdInit:
 ;------------------------------------------------------------------------------
 VdPutStr:
   mov   esi,[VdInStrPtr]
-  movzx ecx,word [esi]
+  mov   ax,[esi]
+  movzx ecx,ax
   add   esi,2
 VdPutStrNext:
   test  ecx,ecx
@@ -84,44 +86,54 @@ VdPutChar:
   je    VdPutCharLF
   cmp   al,0x08
   je    VdPutCharBS
-  movzx eax,word [VdOutCurRow]
+  mov   ax,[VdOutCurRow]
+  movzx eax,ax
   cmp   eax,VD_OUT_MAX_ROW
   jbe   VdPutCharRowOk
-  mov   word [VdOutCurRow],VD_OUT_MAX_ROW
+  mov   ax,VD_OUT_MAX_ROW
+  mov   [VdOutCurRow],ax
 VdPutCharRowOk:
   call  VdWriteOutCharAtCursor
-  movzx eax,word [VdOutCurCol]
+  mov   ax,[VdOutCurCol]
+  movzx eax,ax
   inc   eax
   cmp   eax,VD_COLS
   jb    VdPutCharSetCol
-  mov   word [VdOutCurCol],0
+  xor   eax,eax
+  mov   [VdOutCurCol],ax
   jmp   VdPutCharLF
 VdPutCharSetCol:
   mov   [VdOutCurCol],ax
   ret
 VdPutCharCR:
-  mov   word [VdOutCurCol],0
+  xor   eax,eax
+  mov   [VdOutCurCol],ax
   ret
 VdPutCharLF:
-  movzx eax,word [VdOutCurRow]
+  mov   ax,[VdOutCurRow]
+  movzx eax,ax
   inc   eax
   cmp   eax,VD_OUT_MAX_ROW
   jbe   VdPutCharSetRow
   call  VdScrollOutputRegion
-  mov   word [VdOutCurRow],VD_OUT_MAX_ROW
+  mov   ax,VD_OUT_MAX_ROW
+  mov   [VdOutCurRow],ax
   ret
 VdPutCharSetRow:
   mov   [VdOutCurRow],ax
   ret
 VdPutCharBS:
-  movzx eax,word [VdOutCurCol]
+  mov   ax,[VdOutCurCol]
+  movzx eax,ax
   test  eax,eax
   jz    VdPutCharBSDone
   dec   eax
   mov   [VdOutCurCol],ax
-  mov   byte [VdInCh],' '
+  mov   al,' '
+  mov   [VdInCh],al
   call  VdWriteOutCharAtCursor
-  movzx eax,word [VdOutCurCol]
+  mov   ax,[VdOutCurCol]
+  movzx eax,ax
   test  eax,eax
   jz    VdPutCharBSDone
   dec   eax
@@ -136,11 +148,13 @@ VdPutCharBSDone:
 ; Stops at right edge (no scroll).
 ;------------------------------------------------------------------------------
 VdInPutChar:
-  movzx eax,word [VdInCurCol]
+  mov   ax,[VdInCurCol]
+  movzx eax,ax
   cmp   eax,VD_COLS
   jae   VdInPutCharDone
   call  VdWriteInCharAtCursor
-  movzx eax,word [VdInCurCol]
+  mov   ax,[VdInCurCol]
+  movzx eax,ax
   inc   eax
   mov   [VdInCurCol],ax
 VdInPutCharDone:
@@ -153,12 +167,14 @@ VdInPutCharDone:
 ; - Cursor remains at erased position
 ;------------------------------------------------------------------------------
 VdInBackspaceVisual:
-  movzx eax,word [VdInCurCol]
+  mov   ax,[VdInCurCol]
+  movzx eax,ax
   test  eax,eax
   jz    VdInBackspaceVisualDone
   dec   eax
   mov   [VdInCurCol],ax
-  mov   byte [VdInCh],' '
+  mov   al,' '
+  mov   [VdInCh],al
   call  VdWriteInCharAtCursor
 VdInBackspaceVisualDone:
   ret
@@ -171,21 +187,25 @@ VdInBackspaceVisualDone:
 ; - Do not use AX/EAX as the loop counter across CALL boundaries.
 ;------------------------------------------------------------------------------
 VdInClearLine:
-  mov   word [VdInCurCol],0
-  mov   word [VdWorkCol],0
+  xor   eax,eax
+  mov   [VdInCurCol],ax
+  mov   [VdWorkCol],ax
 VdInClearLineLoop:
-  movzx eax,word [VdWorkCol]
+  mov   ax,[VdWorkCol]
+  movzx eax,ax
   cmp   eax,VD_COLS
   jae   VdInClearLineDone
   mov   [VdInCurCol],ax
-  mov   byte [VdInCh],' '
+  mov   al,' '
+  mov   [VdInCh],al
   call  VdWriteInCharAtCursor
   mov   ax,[VdWorkCol]
   inc   ax
   mov   [VdWorkCol],ax
   jmp   VdInClearLineLoop
 VdInClearLineDone:
-  mov   word [VdInCurCol],0
+  xor   eax,eax
+  mov   [VdInCurCol],ax
   ret
 
 ;------------------------------------------------------------------------------
@@ -210,9 +230,11 @@ VdInClearLineDone:
 ;   - Follows PascalCase and column alignment (LOCKED-IN).
 ;------------------------------------------------------------------------------
 VdWriteOutCharAtCursor:
-  movzx eax,word [VdOutCurRow]
+  mov   ax,[VdOutCurRow]
+  movzx eax,ax
   imul  eax,VD_COLS
-  movzx edx,word [VdOutCurCol]
+  mov   dx,[VdOutCurCol]
+  movzx edx,dx
   add   eax,edx
   shl   eax,1
   mov   edi,VGA_TEXT_BASE
@@ -241,7 +263,8 @@ VdWriteOutCharAtCursor:
 VdWriteInCharAtCursor:
   mov   eax,VD_IN_ROW
   imul  eax,VD_COLS
-  movzx edx,word [VdInCurCol]
+  mov   dx,[VdInCurCol]
+  movzx edx,dx
   add   eax,edx
   shl   eax,1
   mov   edi,VGA_TEXT_BASE
@@ -260,7 +283,8 @@ VdWriteInCharAtCursor:
 ; - direction flag assumptions
 ;------------------------------------------------------------------------------
 VdScrollOutputRegion:
-  mov   dword [VdWorkCount],VD_OUT_MAX_ROW * 160
+  mov   eax,VD_OUT_MAX_ROW * 160
+  mov   [VdWorkCount],eax
   mov   esi,VGA_TEXT_BASE
   mov   edi,VGA_TEXT_BASE
   add   esi,160
@@ -279,9 +303,11 @@ VdScrollCopyLoop:
 VdScrollClearRow:
   mov   edi,VGA_TEXT_BASE
   add   edi,VD_OUT_MAX_ROW * 160
-  mov   word [VdWorkCol],0
+  xor   eax,eax
+  mov   [VdWorkCol],ax
 VdScrollClearLoop:
-  movzx eax,word [VdWorkCol]
+  mov   ax,[VdWorkCol]
+  movzx eax,ax
   cmp   eax,VD_COLS
   jae   VdScrollDone
   mov   ax,(VD_ATTR_DEFAULT << 8) | ' '
@@ -312,9 +338,10 @@ VdClearLoop:
   mov   [edi],ax
   add   edi,2
   loop  VdClearLoop
-  mov   word [VdOutCurRow],0
-  mov   word [VdOutCurCol],0
-  mov   word [VdInCurCol],0
+  xor   eax,eax
+  mov   [VdOutCurRow],ax
+  mov   [VdOutCurCol],ax
+  mov   [VdInCurCol],ax
   ret
 
 ; ----- Storage -----
