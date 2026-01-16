@@ -1,79 +1,68 @@
 ; Console.asm (Cn) - no sections, no globals
 
 CnInit:
-    mov word [Cn_Work_Len], 0
-    ret
+  mov   word [CnInWorkLen],0                ; Clear input length
+  ret
 
 CnCrLf:
-    mov byte [Vd_In_Ch], 0x0D
-    call VdPutChar
-    mov byte [Vd_In_Ch], 0x0A
-    call VdPutChar
-    ret
+  mov   byte [VdInCh],0x0D                  ; Carriage return
+  call  VdPutChar
+  mov   byte [VdInCh],0x0A                  ; Line feed
+  call  VdPutChar
+  ret
 
 CnReadLine:
-    mov word [Cn_Work_Len], 0
-    call VdInClearLine
+  mov   word [CnInWorkLen],0                ; Reset input length
+  call  VdInClearLine
 
-CnReadLine_Loop:
-    call KbGetKey
+CnReadLineLoop:
+  call  KbGetKey
+  mov   al,[KbOutHasKey]
+  test  al,al
+  jz    CnReadLineLoop
+  mov   al,[KbOutType]
+  cmp   al,KEY_CHAR
+  je    CnReadLineOnChar
+  cmp   al,KEY_BACKSPACE
+  je    CnReadLineOnBackspace
+  cmp   al,KEY_ENTER
+  je    CnReadLineOnEnter
+  jmp   CnReadLineLoop
 
-    mov al, [Kb_Out_HasKey]
-    test al, al
-    jz  CnReadLine_Loop
+CnReadLineOnChar:
+  movzx ecx,word [CnInWorkLen]
+  movzx edx,word [CnInMax]
+  cmp   ecx,edx
+  jae   CnReadLineLoop
+  mov   esi,[CnInDstPtr]
+  mov   al,[KbOutChar]
+  mov   [esi+2+ecx],al
+  inc   cx
+  mov   [CnInWorkLen],cx
+  mov   [VdInCh],al
+  call  VdInPutChar
+  jmp   CnReadLineLoop
 
-    mov al, [Kb_Out_Type]
+CnReadLineOnBackspace:
+  movzx ecx,word [CnInWorkLen]
+  test  ecx,ecx
+  jz    CnReadLineLoop
+  dec   cx
+  mov   [CnInWorkLen],cx
+  call  VdInBackspaceVisual
+  jmp   CnReadLineLoop
 
-    cmp al, KEY_CHAR
-    je  CnReadLine_OnChar
-    cmp al, KEY_BACKSPACE
-    je  CnReadLine_OnBackspace
-    cmp al, KEY_ENTER
-    je  CnReadLine_OnEnter
-    jmp CnReadLine_Loop
-
-CnReadLine_OnChar:
-    movzx ecx, word [Cn_Work_Len]
-    movzx edx, word [Cn_In_Max]
-    cmp ecx, edx
-    jae CnReadLine_Loop
-
-    mov esi, [Cn_In_DstPtr]
-    mov al,  [Kb_Out_Char]
-    mov [esi + 2 + ecx], al
-
-    inc cx
-    mov [Cn_Work_Len], cx
-
-    mov [Vd_In_Ch], al
-    call VdInPutChar
-    jmp CnReadLine_Loop
-
-CnReadLine_OnBackspace:
-    movzx ecx, word [Cn_Work_Len]
-    test ecx, ecx
-    jz  CnReadLine_Loop
-
-    dec cx
-    mov [Cn_Work_Len], cx
-
-    call VdInBackspaceVisual
-    jmp CnReadLine_Loop
-
-CnReadLine_OnEnter:
-    mov esi, [Cn_In_DstPtr]
-    mov ax,  [Cn_Work_Len]
-    mov [esi], ax
-
-    call VdInClearLine
-    ret
-
+CnReadLineOnEnter:
+  mov   esi,[CnInDstPtr]
+  mov   ax,[CnInWorkLen]
+  mov   [esi],ax
+  call  VdInClearLine
+  ret
 
 ; ----- Storage (explicit zeros; no .bss) -----
 
-Cn_In_DstPtr     dd 0
-Cn_In_Max        dw 0
-Cn_Pad0          dw 0
-
-Cn_Work_Len      dw 0
-Cn_Pad1          dw 0
+CnInDstPtr       dd 0
+CnInMax          dw 0
+CnPad0           dw 0
+CnInWorkLen      dw 0
+CnPad1           dw 0

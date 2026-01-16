@@ -85,12 +85,12 @@ FlushCS:
   call  VdInit                          ; Initialize video
 
 MainLoop:
-    ; Provide destination Sting buffer and max chars via memory inputs
-    mov dword [Cn_In_DstPtr], CmdBuf
-    mov word  [Cn_In_Max], 80        ; max payload chars (<=80)
-    call CnReadLine                  ; echoes on bottom row; returns Sting in CmdBuf
-    ; v0.0.1: do nothing with the command yet (echo already happened)
-    jmp MainLoop
+  ; Provide destination Sting buffer and max chars via memory inputs
+  mov dword [CnInDstPtr], CmdBuf
+  mov word  [CnInMax], 80        ; max payload chars (<=80)
+  call CnReadLine                  ; echoes on bottom row; returns Sting in CmdBuf
+  ; v0.0.1: do nothing with the command yet (echo already happened)
+  jmp MainLoop
 
   hlt
 

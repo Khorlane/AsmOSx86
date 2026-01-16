@@ -6,7 +6,7 @@
 ; - Do not rely on any register value across CALL boundaries.
 ; - VdInClearLine no longer uses AX as a loop counter across a call.
 ; - VdPutChar_BS ensures erase char is set immediately before erase writes.
-; - Vd_ScrollOutputRegion avoids REP MOVSD to remove reliance on implicit state.
+; - VdScrollOutputRegion avoids REP MOVSD to remove reliance on implicit state.
 ;
 ; Screen: Rows=25, Cols=80
 ; Output region (scrolls): rows 0..23
@@ -15,41 +15,38 @@
 ;==============================================================================
 
 VdInit:
-    mov word [Vd_OutCurRow], 0
-    mov word [Vd_OutCurCol], 0
-    mov word [Vd_InCurCol],  0
-    ret
+  mov   word [VdOutCurRow],0                ; Clear output row
+  mov   word [VdOutCurCol],0                ; Clear output col
+  mov   word [VdInCurCol],0                 ; Clear input col
+  ret
 
 ;------------------------------------------------------------------------------
 ; VdPutStr
 ; Input (memory):
-;   Vd_In_StrPtr -> Sting [u16 len][bytes...]
+;   VdInStrPtr -> String [u16 len][bytes...]
 ;------------------------------------------------------------------------------
 VdPutStr:
-    mov esi, [Vd_In_StrPtr]
-    movzx ecx, word [esi]
-    add esi, 2
+  mov   esi,[VdInStrPtr]
+  movzx ecx,word [esi]
+  add   esi,2
 
-VdPutStr_Next:
-    test ecx, ecx
-    jz  VdPutStr_Done
+VdPutStrNext:
+  test  ecx,ecx
+  jz    VdPutStrDone
+  mov   al,[esi]
+  inc   esi
+  dec   ecx
+  mov   [VdInCh],al
+  call  VdPutChar
+  jmp   VdPutStrNext
 
-    mov al, [esi]
-    inc esi
-    dec ecx
-
-    mov [Vd_In_Ch], al
-    call VdPutChar
-    jmp VdPutStr_Next
-
-VdPutStr_Done:
-    ret
-
+VdPutStrDone:
+  ret
 
 ;------------------------------------------------------------------------------
 ; VdPutChar (output region only: rows 0..23)
 ; Input (memory):
-;   Vd_In_Ch = byte
+;   VdInCh = byte
 ;
 ; Control chars supported:
 ;   0x0D CR: col=0
@@ -57,101 +54,77 @@ VdPutStr_Done:
 ;   0x08 BS: move left, erase char, move left (within row)
 ;------------------------------------------------------------------------------
 VdPutChar:
-    mov al, [Vd_In_Ch]
+  mov   al,[VdInCh]
+  cmp   al,0x0D
+  je    VdPutCharCR
+  cmp   al,0x0A
+  je    VdPutCharLF
+  cmp   al,0x08
+  je    VdPutCharBS
+  movzx eax,word [VdOutCurRow]
+  cmp   eax,VD_OUT_MAX_ROW
+  jbe   VdPutCharRowOk
+  mov   word [VdOutCurRow],VD_OUT_MAX_ROW
+VdPutCharRowOk:
+  call  VdWriteOutCharAtCursor
+  movzx eax,word [VdOutCurCol]
+  inc   eax
+  cmp   eax,VD_COLS
+  jb    VdPutCharSetCol
+  mov   word [VdOutCurCol],0
+  jmp   VdPutCharLF
+VdPutCharSetCol:
+  mov   [VdOutCurCol],ax
+  ret
 
-    cmp al, 0x0D
-    je  VdPutChar_CR
-    cmp al, 0x0A
-    je  VdPutChar_LF
-    cmp al, 0x08
-    je  VdPutChar_BS
+VdPutCharCR:
+  mov   word [VdOutCurCol],0
+  ret
 
-    ; Clamp row (safety): never print into input line
-    movzx eax, word [Vd_OutCurRow]
-    cmp eax, VD_OUT_MAX_ROW
-    jbe VdPutChar_RowOk
-    mov word [Vd_OutCurRow], VD_OUT_MAX_ROW
-VdPutChar_RowOk:
+VdPutCharLF:
+  movzx eax,word [VdOutCurRow]
+  inc   eax
+  cmp   eax,VD_OUT_MAX_ROW
+  jbe   VdPutCharSetRow
+  call  VdScrollOutputRegion
+  mov   word [VdOutCurRow],VD_OUT_MAX_ROW
+  ret
+VdPutCharSetRow:
+  mov   [VdOutCurRow],ax
+  ret
 
-    call Vd_WriteOutCharAtCursor
-
-    ; Reload OutCurCol after CALL (regs clobbered)
-    movzx eax, word [Vd_OutCurCol]
-    inc eax
-    cmp eax, VD_COLS
-    jb  VdPutChar_SetCol
-
-    mov word [Vd_OutCurCol], 0
-    jmp VdPutChar_LF
-
-VdPutChar_SetCol:
-    mov [Vd_OutCurCol], ax
-    ret
-
-VdPutChar_CR:
-    mov word [Vd_OutCurCol], 0
-    ret
-
-VdPutChar_LF:
-    movzx eax, word [Vd_OutCurRow]
-    inc eax
-    cmp eax, VD_OUT_MAX_ROW
-    jbe VdPutChar_SetRow
-
-    call Vd_ScrollOutputRegion
-    mov word [Vd_OutCurRow], VD_OUT_MAX_ROW
-    ret
-
-VdPutChar_SetRow:
-    mov [Vd_OutCurRow], ax
-    ret
-
-VdPutChar_BS:
-    ; If col==0, nothing
-    movzx eax, word [Vd_OutCurCol]
-    test eax, eax
-    jz  VdPutChar_BSDone
-
-    ; move left one
-    dec eax
-    mov [Vd_OutCurCol], ax
-
-    ; erase at current position
-    mov byte [Vd_In_Ch], ' '
-    call Vd_WriteOutCharAtCursor
-
-    ; move left again if possible
-    movzx eax, word [Vd_OutCurCol]
-    test eax, eax
-    jz  VdPutChar_BSDone
-    dec eax
-    mov [Vd_OutCurCol], ax
-
-VdPutChar_BSDone:
-    ret
-
+VdPutCharBS:
+  movzx eax,word [VdOutCurCol]
+  test  eax,eax
+  jz    VdPutCharBSDone
+  dec   eax
+  mov   [VdOutCurCol],ax
+  mov   byte [VdInCh],' '
+  call  VdWriteOutCharAtCursor
+  movzx eax,word [VdOutCurCol]
+  test  eax,eax
+  jz    VdPutCharBSDone
+  dec   eax
+  mov   [VdOutCurCol],ax
+VdPutCharBSDone:
+  ret
 
 ;------------------------------------------------------------------------------
 ; VdInPutChar (input line only: row 24)
 ; Input:
-;   Vd_In_Ch
+;   VdInCh
 ; Stops at right edge (no scroll).
 ;------------------------------------------------------------------------------
 VdInPutChar:
-    movzx eax, word [Vd_InCurCol]
-    cmp eax, VD_COLS
-    jae VdInPutChar_Done
-
-    call Vd_WriteInCharAtCursor
-
-    ; reload because Vd_WriteInCharAtCursor clobbers regs
-    movzx eax, word [Vd_InCurCol]
-    inc eax
-    mov [Vd_InCurCol], ax
-
-VdInPutChar_Done:
-    ret
-
+  movzx eax,word [VdInCurCol]
+  cmp   eax,VD_COLS
+  jae   VdInPutCharDone
+  call  VdWriteInCharAtCursor
+  movzx eax,word [VdInCurCol]
+  inc   eax
+  mov   [VdInCurCol],ax
+VdInPutCharDone:
+  ret
 
 ;------------------------------------------------------------------------------
 ; VdInBackspaceVisual
@@ -160,19 +133,15 @@ VdInPutChar_Done:
 ; - Cursor remains at erased position
 ;------------------------------------------------------------------------------
 VdInBackspaceVisual:
-    movzx eax, word [Vd_InCurCol]
-    test eax, eax
-    jz  VdInBackspaceVisual_Done
-
-    dec eax
-    mov [Vd_InCurCol], ax
-
-    mov byte [Vd_In_Ch], ' '
-    call Vd_WriteInCharAtCursor
-
-VdInBackspaceVisual_Done:
-    ret
-
+  movzx eax,word [VdInCurCol]
+  test  eax,eax
+  jz    VdInBackspaceVisualDone
+  dec   eax
+  mov   [VdInCurCol],ax
+  mov   byte [VdInCh],' '
+  call  VdWriteInCharAtCursor
+VdInBackspaceVisualDone:
+  ret
 
 ;------------------------------------------------------------------------------
 ; VdInClearLine
@@ -182,137 +151,107 @@ VdInBackspaceVisual_Done:
 ; - Do not use AX/EAX as the loop counter across CALL boundaries.
 ;------------------------------------------------------------------------------
 VdInClearLine:
-    mov word [Vd_InCurCol], 0
-    mov word [Vd_Work_Col], 0
-
-VdInClearLine_Loop:
-    movzx eax, word [Vd_Work_Col]
-    cmp eax, VD_COLS
-    jae VdInClearLine_Done
-
-    mov [Vd_InCurCol], ax
-    mov byte [Vd_In_Ch], ' '
-    call Vd_WriteInCharAtCursor
-
-    ; advance col in memory (regs clobbered)
-    mov ax, [Vd_Work_Col]
-    inc ax
-    mov [Vd_Work_Col], ax
-    jmp VdInClearLine_Loop
-
-VdInClearLine_Done:
-    mov word [Vd_InCurCol], 0
-    ret
-
+  mov   word [VdInCurCol],0
+  mov   word [VdWorkCol],0
+VdInClearLineLoop:
+  movzx eax,word [VdWorkCol]
+  cmp   eax,VD_COLS
+  jae   VdInClearLineDone
+  mov   [VdInCurCol],ax
+  mov   byte [VdInCh],' '
+  call  VdWriteInCharAtCursor
+  mov   ax,[VdWorkCol]
+  inc   ax
+  mov   [VdWorkCol],ax
+  jmp   VdInClearLineLoop
+VdInClearLineDone:
+  mov   word [VdInCurCol],0
+  ret
 
 ;------------------------------------------------------------------------------
 ; Internal helpers
 ;------------------------------------------------------------------------------
 
-; Write Vd_In_Ch at (Vd_OutCurRow, Vd_OutCurCol)
-Vd_WriteOutCharAtCursor:
-    movzx eax, word [Vd_OutCurRow]     ; row
-    imul eax, VD_COLS
-    movzx edx, word [Vd_OutCurCol]     ; col
-    add eax, edx
-    shl eax, 1
+; Write VdInCh at (VdOutCurRow, VdOutCurCol)
+VdWriteOutCharAtCursor:
+  movzx eax,word [VdOutCurRow]
+  imul  eax,VD_COLS
+  movzx edx,word [VdOutCurCol]
+  add   eax,edx
+  shl   eax,1
+  mov   edi,VGA_TEXT_BASE
+  add   edi,eax
+  mov   al,[VdInCh]
+  mov   ah,VD_ATTR_DEFAULT
+  mov   [edi],ax
+  ret
 
-    mov edi, VGA_TEXT_BASE
-    add edi, eax
-    mov al, [Vd_In_Ch]
-    mov ah, VD_ATTR_DEFAULT
-    mov [edi], ax
-    ret
-
-
-; Write Vd_In_Ch at (row=24, col=Vd_InCurCol)
-Vd_WriteInCharAtCursor:
-    mov eax, VD_IN_ROW                 ; row fixed
-    imul eax, VD_COLS
-    movzx edx, word [Vd_InCurCol]      ; col
-    add eax, edx
-    shl eax, 1
-
-    mov edi, VGA_TEXT_BASE
-    add edi, eax
-    mov al, [Vd_In_Ch]
-    mov ah, VD_ATTR_DEFAULT
-    mov [edi], ax
-    ret
-
+; Write VdInCh at (row=24, col=VdInCurCol)
+VdWriteInCharAtCursor:
+  mov   eax,VD_IN_ROW
+  imul  eax,VD_COLS
+  movzx edx,word [VdInCurCol]
+  add   eax,edx
+  shl   eax,1
+  mov   edi,VGA_TEXT_BASE
+  add   edi,eax
+  mov   al,[VdInCh]
+  mov   ah,VD_ATTR_DEFAULT
+  mov   [edi],ax
+  ret
 
 ;------------------------------------------------------------------------------
-; Vd_ScrollOutputRegion
+; VdScrollOutputRegion
 ; Scroll output region rows 0..23 up by one line; clear row 23.
 ;
 ; Avoid REP MOVSD to eliminate reliance on:
 ; - ECX/ESI/EDI preservation assumptions
 ; - direction flag assumptions
 ;------------------------------------------------------------------------------
-Vd_ScrollOutputRegion:
-    ; Copy rows 1..23 -> 0..22
-    ; Total bytes copied = 23 rows * 160 bytes = 3680 bytes
-    mov dword [Vd_Work_Count], VD_OUT_MAX_ROW * 160
-
-    mov esi, VGA_TEXT_BASE
-    mov edi, VGA_TEXT_BASE
-    add esi, 160
-
-Vd_Scroll_CopyLoop:
-    mov eax, [Vd_Work_Count]
-    test eax, eax
-    jz  Vd_Scroll_ClearRow
-
-    ; copy one dword
-    mov eax, [esi]
-    mov [edi], eax
-    add esi, 4
-    add edi, 4
-
-    ; decrement remaining bytes by 4
-    mov eax, [Vd_Work_Count]
-    sub eax, 4
-    mov [Vd_Work_Count], eax
-    jmp Vd_Scroll_CopyLoop
-
-Vd_Scroll_ClearRow:
-    ; Clear row 23 (last output row)
-    mov edi, VGA_TEXT_BASE
-    add edi, VD_OUT_MAX_ROW * 160
-
-    mov word [Vd_Work_Col], 0
-
-Vd_Scroll_ClearLoop:
-    movzx eax, word [Vd_Work_Col]
-    cmp eax, VD_COLS
-    jae Vd_Scroll_Done
-
-    mov ax, (VD_ATTR_DEFAULT << 8) | ' '
-    mov [edi], ax
-    add edi, 2
-
-    mov ax, [Vd_Work_Col]
-    inc ax
-    mov [Vd_Work_Col], ax
-    jmp Vd_Scroll_ClearLoop
-
-Vd_Scroll_Done:
-    ret
-
+VdScrollOutputRegion:
+  mov   dword [VdWorkCount],VD_OUT_MAX_ROW * 160
+  mov   esi,VGA_TEXT_BASE
+  mov   edi,VGA_TEXT_BASE
+  add   esi,160
+VdScrollCopyLoop:
+  mov   eax,[VdWorkCount]
+  test  eax,eax
+  jz    VdScrollClearRow
+  mov   eax,[esi]
+  mov   [edi],eax
+  add   esi,4
+  add   edi,4
+  mov   eax,[VdWorkCount]
+  sub   eax,4
+  mov   [VdWorkCount],eax
+  jmp   VdScrollCopyLoop
+VdScrollClearRow:
+  mov   edi,VGA_TEXT_BASE
+  add   edi,VD_OUT_MAX_ROW * 160
+  mov   word [VdWorkCol],0
+VdScrollClearLoop:
+  movzx eax,word [VdWorkCol]
+  cmp   eax,VD_COLS
+  jae   VdScrollDone
+  mov   ax,(VD_ATTR_DEFAULT << 8) | ' '
+  mov   [edi],ax
+  add   edi,2
+  mov   ax,[VdWorkCol]
+  inc   ax
+  mov   [VdWorkCol],ax
+  jmp   VdScrollClearLoop
+VdScrollDone:
+  ret
 
 ; ----- Storage (explicit zeros; no .bss) -----
 
-Vd_In_Ch        db 0
-Vd_Pad0         db 0,0,0
-Vd_In_StrPtr    dd 0
-
-Vd_OutCurRow    dw 0
-Vd_OutCurCol    dw 0
-
-Vd_InCurCol     dw 0
-Vd_Pad1         dw 0
-
-; Work vars (needed because regs are volatile across CALL)
-Vd_Work_Col     dw 0
-Vd_Work_Pad2    dw 0
-Vd_Work_Count   dd 0
+VdInCh           db 0
+VdPad0           db 0,0,0
+VdInStrPtr       dd 0
+VdOutCurRow      dw 0
+VdOutCurCol      dw 0
+VdInCurCol       dw 0
+VdPad1           dw 0
+VdWorkCol        dw 0
+VdWorkPad2       dw 0
+VdWorkCount      dd 0
