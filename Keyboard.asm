@@ -47,10 +47,11 @@ KBD_DATA_PORT   equ 0x60
 ; - Ensures keyboard state is in a known, clean state.
 ;------------------------------------------------------------------------------
 KbInit:
-  mov   byte [KbModShift],0             ; Clear shift modifier
-  mov   byte [KbOutHasKey],0            ; Clear key output flag
-  mov   byte [KbOutType],KEY_NONE       ; Set output type to none
-  mov   byte [KbOutChar],0              ; Clear output character
+  xor   eax,eax
+  mov   [KbModShift],al                 ; Clear shift modifier
+  mov   [KbOutHasKey],al                ; Clear key output flag
+  mov   [KbOutType],al                  ; Set output type to none
+  mov   [KbOutChar],al                  ; Clear output character
   ret
 
 ;------------------------------------------------------------------------------
@@ -67,9 +68,10 @@ KbInit:
 ; - Does not rely on register values across CALL boundaries.
 ;------------------------------------------------------------------------------
 KbGetKey:
-  mov   byte [KbOutHasKey],0            ; Clear key output flag
-  mov   byte [KbOutType],KEY_NONE       ; Set output type to none
-  mov   byte [KbOutChar],0              ; Clear output character
+  xor   eax,eax
+  mov   [KbOutHasKey],al                ; Clear key output flag
+  mov   [KbOutType],al                  ; Set output type to none
+  mov   [KbOutChar],al                  ; Clear output character
   in    al,KBD_STATUS_PORT              ; Read keyboard status
   test  al,0x01                         ; Key available?
   jz    KbGetKeyNoKey
@@ -85,7 +87,9 @@ KbGetKey:
   je    KbGetKeyMakeEnter
   cmp   al,0x0E                         ; Backspace?
   je    KbGetKeyMakeBackspace
-  movzx esi,byte [KbWorkScanCode]       ; ESI = scancode
+  xor   esi,esi
+  mov   al,[KbWorkScanCode]
+  movzx esi,al                          ; ESI = scancode
   mov   bl,[KbModShift]                 ; BL = shift state
   test  bl,bl
   jz    KbGetKeyUnshifted
@@ -97,8 +101,10 @@ KbGetKeyUnshifted:
 KbGetKeyMaybeChar:
   test  al,al
   jz    KbGetKeyNoKey
-  mov   byte [KbOutHasKey],1            ; Mark key present
-  mov   byte [KbOutType],KEY_CHAR       ; Mark as char
+  mov   bl,1
+  mov   [KbOutHasKey],bl                ; Mark key present
+  mov   bl,KEY_CHAR
+  mov   [KbOutType],bl                  ; Mark as char
   mov   [KbOutChar],al                  ; Store char
   ret
 KbGetKeyOnBreak:
@@ -109,18 +115,24 @@ KbGetKeyOnBreak:
   je    KbGetKeyShiftUp
   jmp   KbGetKeyNoKey
 KbGetKeyShiftDown:
-  mov   byte [KbModShift],1             ; Set shift
+  mov   al,1
+  mov   [KbModShift],al                 ; Set shift
   jmp   KbGetKeyNoKey
 KbGetKeyShiftUp:
-  mov   byte [KbModShift],0             ; Clear shift
+  xor   eax,eax
+  mov   [KbModShift],al                 ; Clear shift
   jmp   KbGetKeyNoKey
 KbGetKeyMakeEnter:
-  mov   byte [KbOutHasKey],1            ; Mark key present
-  mov   byte [KbOutType],KEY_ENTER      ; Mark as enter
+  mov   al,1
+  mov   [KbOutHasKey],al                ; Mark key present
+  mov   al,KEY_ENTER
+  mov   [KbOutType],al                  ; Mark as enter
   ret
 KbGetKeyMakeBackspace:
-  mov   byte [KbOutHasKey],1            ; Mark key present
-  mov   byte [KbOutType],KEY_BACKSPACE  ; Mark as backspace
+  mov   al,1
+  mov   [KbOutHasKey],al                ; Mark key present
+  mov   al,KEY_BACKSPACE
+  mov   [KbOutType],al                  ; Mark as backspace
   ret
 KbGetKeyNoKey:
   ret
