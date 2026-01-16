@@ -156,11 +156,6 @@ CnReadLineOnBackspace:
   dec   cx
   mov   [CnInWorkLen],cx
   call  VdInBackspaceVisual
-  mov   ax,25
-  mov   [VdCurRow],ax
-  mov   ax,[VdInCurCol]
-  mov   [VdCurCol],ax
-  call  VdSetCursor
   jmp   CnReadLineLoop
 CnReadLineOnEnter:
   mov   esi,[CnInDstPtr]

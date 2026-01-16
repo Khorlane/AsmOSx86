@@ -193,6 +193,11 @@ VdInBackspaceVisual:
   mov   al,' '
   mov   [VdInCh],al
   call  VdWriteInCharAtCursor
+  mov   ax,VD_IN_ROW
+  mov   [VdCurRow],ax
+  mov   ax,[VdInCurCol]
+  mov   [VdCurCol],ax
+  call  VdSetCursor
 VdInBackspaceVisualDone:
   ret
 
