@@ -148,7 +148,7 @@ KbScanToAscii:
     db 'a','s','d','f','g','h','j','k','l'
     db ';',39,'`'
     db 0
-    db '\'
+    db 0x5C ; '\' backslash
     db 'z','x','c','v','b','n','m'
     db ',', '.', '/'
     db 0
