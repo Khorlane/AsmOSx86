@@ -67,10 +67,7 @@ FlushCS:
   call  CnInit                          ; Initialize console
   call  KbInit                          ; Initialize keyboard
   call  VdInit                          ; Initialize video
-
-MainLoop:
-  call  CnReadLine                      ; Echoes on bottom row; returns string in CmdBuf
-  jmp   MainLoop
+  call Console                          ; Console command loop
 
   hlt
 

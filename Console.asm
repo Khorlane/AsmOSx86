@@ -28,6 +28,23 @@
 CN_IN_MAX     equ 80                      ; maximum console input length
 
 ;------------------------------------------------------------------------------
+; Console
+; Main console loop for AsmOSx86.
+;
+; Behavior:
+;   - Continuously reads a line of user input using CnReadLine.
+;   - Echoes input on the bottom row of the screen.
+;   - Intended as the primary user interaction loop.
+;
+; Notes:
+;   - Each iteration waits for and processes a full line of input.
+;   - Output is displayed immediately; command processing can be added as needed.
+;------------------------------------------------------------------------------
+Console:
+  call  CnReadLine                      ; Echoes on bottom row; returns string in CmdBuf
+  jmp   Console
+
+;------------------------------------------------------------------------------
 ; CnInit
 ; Initializes the console input state.
 ;
