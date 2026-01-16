@@ -6,20 +6,10 @@
 ;   Handles user input line editing, carriage return/line feed, and integration
 ;   with the video and keyboard subsystems.
 ;
-; Coding Standards:
-;   - Column alignment (LOCKED-IN)
-;   - No blank lines within functions (LOCKED-IN)
-;   - PascalCase for variable and label names (LOCKED-IN)
-;
 ; Usage:
 ;   Call CnInit at system startup to initialize console state.
 ;   Use CnReadLine to read a line of user input with editing support.
 ;   Use CnCrLf to output a new line.
-;
-; Notes:
-;   - No reliance on register values across CALL boundaries.
-;   - No .bss section; all storage is explicitly zero-initialized.
-;   - No globals or sections outside this file.
 ;==============================================================================
 
 [bits 32]

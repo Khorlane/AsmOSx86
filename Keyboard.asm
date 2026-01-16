@@ -14,11 +14,6 @@
 ; Usage:
 ;   Call KbInit at system startup to initialize keyboard state.
 ;   Call KbGetKey to poll and decode key events.
-;
-; Notes:
-;   - No reliance on register values across CALL boundaries.
-;   - No .bss section; all storage is explicitly zero-initialized.
-;   - No globals or sections outside this file.
 ;==============================================================================
 
 [bits 32]

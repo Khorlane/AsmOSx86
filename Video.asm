@@ -1,11 +1,5 @@
 ;==============================================================================
-; Video.asm (Vd) - drop-in replacement (v0.0.2)
-; 32-bit NASM, single-binary (%include), no sections, no globals
-;
-; CHANGE (minimal):
-; - Replace VD_IN_ROW usage with VdCurRow so the VdIn* routines are not locked
-;   to a fixed row. The Console will set VdCurRow=25 and never change it, but
-;   other components may set VdCurRow as needed before calling VdIn* routines.
+; Video.asm (Vd) - Video Output and Cursor Management for AsmOSx86
 ;
 ; Cursor contract is 1-based:
 ;   Row 1, Col 1 maps to VGA offset 0 (0xB8000 + 0 bytes)

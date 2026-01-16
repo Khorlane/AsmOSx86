@@ -3,6 +3,29 @@
 ;   A basic 32 bit binary kernel for x86 PCs.
 ;
 ; nasm -f bin Kernel.asm -o Kernel.bin -l Kernel.lst
+;
+; Coding Standards (LOCKED-IN)
+;
+; 0) Applies to all included files as well
+; 1) Column Alignment
+;    - Instruction mnemonic starts at column 3
+;    - Operand 1 starts at column 9
+;    - No spaces around operand commas
+;    - Line comments start at column 41
+; 2) Blank Lines
+;    - No blank lines are allowed within a function
+;    - Blank lines are allowed only between functions or major sections
+; 3) Naming
+;    - PascalCase (no underscores) is REQUIRED for:
+;        * Labels
+;        * Variables
+;        * Storage symbols
+;    - SCREAMING_SNAKE_CASE is REQUIRED for:
+;        * Equates / constants
+; 4) General Rules
+;    - No reliance on register values across CALL boundaries
+;    - No .bss section; all storage is explicitly zero-initialized
+;    - Row,Col ordering everywhere (row first, then column)
 ;**************************************************************************************************
 
 [bits  32]                              ; 32 bit code
