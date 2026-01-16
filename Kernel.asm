@@ -100,8 +100,3 @@ KernelCtxSz  equ KernelCtxEnd - KernelCtx
 %if (KernelCtxSz % 4) != 0
   %error "KernelCtxSz is not dword aligned"
 %endif
-
-; Command line buffer as Sting:
-; [0..1]=u16 length, [2..]=payload chars
-CmdBuf:
-    times (2 + 80) db 0

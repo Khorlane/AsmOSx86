@@ -25,7 +25,7 @@
 [bits 32]
 
 ; ----- Console constants -----
-CN_IN_MAX     equ 11                      ; maximum console input length
+CN_IN_MAX     equ 80                      ; maximum console input length
 
 ;------------------------------------------------------------------------------
 ; CnInit
@@ -137,3 +137,8 @@ CnInMax          dw 0
 CnPad0           dw 0
 CnInWorkLen      dw 0
 CnPad1           dw 0
+
+; Command line buffer as String:
+; [0..1]=u16 length, [2..]=payload chars
+CmdBuf:
+  times (2 + CN_IN_MAX) db 0
