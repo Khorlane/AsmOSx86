@@ -5,24 +5,24 @@
 ; nasm -f bin Kernel.asm -o Kernel.bin -l Kernel.lst
 ;
 ; Coding Standards (LOCKED-IN)
-;
-; 0) Applies to all included files as well
-; 1) Column Alignment
+; 1) Applies to all included files as well
+; 2) Column Alignment
 ;    - Instruction mnemonic starts at column 3
 ;    - Operand 1 starts at column 9
 ;    - No spaces around operand commas
 ;    - Line comments start at column 41
-; 2) Blank Lines
+; 3) Blank Lines
 ;    - No blank lines are allowed within a function
 ;    - Blank lines are allowed only between functions or major sections
-; 3) Naming
+; 4) Naming
 ;    - PascalCase (no underscores) is REQUIRED for:
-;        * Labels
-;        * Variables
-;        * Storage symbols
+;      * Labels
+;      * Variables
+;      * Storage symbols
 ;    - SCREAMING_SNAKE_CASE is REQUIRED for:
-;        * Equates / constants
-; 4) General Rules
+;      * Equates / constants
+; 5) General Rules
+;    - No size specifiers like BYTE, WORD, DWORD except for storage definitions
 ;    - No reliance on register values across CALL boundaries
 ;    - No .bss section; all storage is explicitly zero-initialized
 ;    - Row,Col ordering everywhere (row first, then column)
@@ -80,7 +80,8 @@ Stage3:
   ; Set up segments, stack, GDT, IDT
   lea   eax,[GDTDescriptor]             ; Load the GDT
   lgdt  [eax]                           ;  register
-  jmp   CODE_DESC:FlushCS               ; Far jump to reload CS’s hidden descriptor cache
+  ; Far jump required to reload CS hidden descriptor cache
+  jmp   CODE_DESC:FlushCS               ; Reload CS hidden descriptor cache
 FlushCS:
   mov   ax,DATA_DESC                    ; Set segment registers to data selector
   mov   ds,ax                           ;  Data segment
@@ -101,6 +102,8 @@ FlushCS:
 
 ; ----- Storage -----
 ; Kernel Context (all mutable "variables" live here)
+;LegacyCtx: 
+; "Legacy - unused - do not reference."
 align 4
 KernelCtx:
 Char        db  0                       ; ASCII character (used by KbPrintChar)
