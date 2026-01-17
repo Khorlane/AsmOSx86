@@ -21,6 +21,37 @@ VGA_TEXT_BASE   equ 0xB8000
 VD_ATTR_DEFAULT equ 0x07
 VGA_CRTC_INDEX  equ 0x3D4
 VGA_CRTC_DATA   equ 0x3D5
+;---------------
+;- Color Codes -
+;---------------
+;  0 0 Black
+;  1 1 Blue
+;  2 2 Green
+;  3 3 Cyan
+;  4 4 Red
+;  5 5 Magenta
+;  6 6 Brown
+;  7 7 White
+;  8 8 Gray
+;  9 9 Light Blue
+; 10 A Light Green
+; 11 B Light Cyan
+; 12 C Light Red
+; 13 D Light Magenta
+; 14 E Yellow
+; 15 F Bright White
+; Example 3F
+;         ^^
+;         ||
+;         ||- Foreground F = White
+;         |-- Background 3 = Cyan
+
+VidMem      equ 0B8000h                 ; Video Memory (Starting Address)
+TotCol      equ 80                      ; width and height of screen
+Black       equ 00h                     ; Black
+Cyan        equ 03h                     ; Cyan
+Purple      equ 05h                     ; Purple
+White       equ 0Fh                     ; White
 
 ;------------------------------------------------------------------------------
 ; VdInit
@@ -260,7 +291,7 @@ VdWriteOutCharAtCursor:
   mov   edi,VGA_TEXT_BASE
   add   edi,eax
   mov   al,[VdInCh]
-  mov   ah,VD_ATTR_DEFAULT
+  mov   ah,[VdColorAttr]                  ; Use current color attribute
   mov   [edi],ax
   ret
 
@@ -425,6 +456,19 @@ VdSetCursorPanicHang:
   hlt
   jmp   VdSetCursorPanicHang
 
+;--------------------------------------------------------------------------------------------------
+; Set Color Attribute
+;--------------------------------------------------------------------------------------------------
+VdSetColorAttr:
+  xor   eax,eax                           ; Clear full
+  xor   ebx,ebx                           ;  regs (avoid garbage OR)
+  mov   al,[VdColorBack]                  ; Background color (0..F)
+  shl   al,4                              ;  goes in high nibble
+  mov   bl,[VdColorFore]                  ; Foreground color (0..F)
+  or    al,bl                             ; Combine -> attribute byte
+  mov   [VdColorAttr],al                  ; Save attribute
+  ret
+
 ; ----- Storage -----
 VdInCh           db 0
 VdPad0           db 0,0,0
@@ -438,3 +482,6 @@ VdWorkPad2       dw 0
 VdWorkCount      dd 0
 VdCurRow         dw 0
 VdCurCol         dw 0
+VdColorBack   db  0                     ; Background color (00h - 0Fh)
+VdColorFore   db  0                     ; Foreground color (00h - 0Fh)
+VdColorAttr   db  0                     ; Combination of background and foreground color (e.g. 3Fh 3=cyan background,F=white text)

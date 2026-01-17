@@ -45,7 +45,12 @@ Console:
 ; - Should be called once at system startup or reset.
 ; - Ensures the console input buffer is in a known, clean state.
 ;------------------------------------------------------------------------------
-CnInit:
+CnInit:  
+  mov   al,Black                        ; Background
+  mov   [ColorBack],al                  ;  color
+  mov   al,Purple                       ; Foreground
+  mov   [VdColorFore],al                ;  color
+  call  VdSetColorAttr                  ; Set color
   mov   ax,1                            ; Move cursor
   mov   [VdCurRow],ax                   ;  to row 1
   mov   ax,1                            ;  and
