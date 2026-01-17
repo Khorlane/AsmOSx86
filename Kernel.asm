@@ -48,9 +48,9 @@ GDTDescriptor:
 ;--------------------------------------------------------------------------------------------------
 ; GDT Selector Equates
 ;--------------------------------------------------------------------------------------------------
-  NullDesc              equ 00h             ; Null Descriptor
-  CodeDesc              equ 08h             ; Code Segment Descriptor
-  DataDesc              equ 10h             ; Data Segment Descriptor
+  NULL_DESC             equ 00h         ; Null Descriptor
+  CODE_DESC             equ 08h         ; Code Segment Descriptor
+  DATA_DESC             equ 10h         ; Data Segment Descriptor
 
 ;--------------------------------------------------------------------------------------------------
 ; Interrupt Descriptor Table (IDT)
@@ -59,6 +59,11 @@ IDT1: times 256 dq 0
 IDT2:
   dw 2047
   dd IDT1
+
+;--------------------------------------------------------------------------------------------------
+; Include Macros
+;--------------------------------------------------------------------------------------------------
+%include "Macros.asm"
 
 ;--------------------------------------------------------------------------------------------------
 ; Include Major Components
@@ -75,9 +80,9 @@ Stage3:
   ; Set up segments, stack, GDT, IDT
   lea   eax,[GDTDescriptor]             ; Load the GDT
   lgdt  [eax]                           ;  register
-  jmp   CodeDesc:FlushCS                ; Far jump to reload CS’s hidden descriptor cache
+  jmp   CODE_DESC:FlushCS               ; Far jump to reload CS’s hidden descriptor cache
 FlushCS:
-  mov   ax,DataDesc                     ; Set segment registers to data selector
+  mov   ax,DATA_DESC                    ; Set segment registers to data selector
   mov   ds,ax                           ;  Data segment
   mov   ss,ax                           ;  Stack segment
   mov   es,ax                           ;  Extra segment

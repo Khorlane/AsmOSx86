@@ -46,6 +46,29 @@ Console:
 ; - Ensures the console input buffer is in a known, clean state.
 ;------------------------------------------------------------------------------
 CnInit:
+  mov   ax,1                            ; Move cursor
+  mov   [VdCurRow],ax                   ;  to row 1
+  mov   ax,1                            ;  and
+  mov   [VdCurCol],ax                   ;  column 1
+  call  VdSetCursor                     ;  do it 
+  lea   eax,[CnStartMsg1]               ; Print 
+  mov   [VdInStrPtr],eax                ;  startup
+  call  VdPutStr                        ;  message 1
+  call  CnCrLf                          ;  with new line
+  mov   ax,[VdCurRow]                   ; Bump
+  inc   ax                              ;  row
+  mov   [VdCurRow],ax                   ;  by 1
+  lea   eax,[CnStartMsg2]               ; Print 
+  mov   [VdInStrPtr],eax                ;  startup
+  call  VdPutStr                        ;  message 2
+  call  CnCrLf                          ;  with new line
+  mov   ax,[VdCurRow]                   ; Bump
+  inc   ax                              ;  row
+  mov   [VdCurRow],ax                   ;  by 1
+  lea   eax,[CnStartMsg3]               ; Print 
+  mov   [VdInStrPtr],eax                ;  startup
+  call  VdPutStr                        ;  message 3
+  call  CnCrLf                          ;  with new line
   xor   ax,ax                           ; Clear input
   mov   [CnInWorkLen],ax                ;  length
   lea   eax,[CmdBuf]                    ; Set destination 
@@ -156,3 +179,6 @@ CnPad1           dw 0
 ; [0..1]=u16 length, [2..]=payload chars
 CmdBuf:
   times (2 + CN_IN_MAX) db 0
+String  CnStartMsg1,"AsmOSx86 Console (Session 0)"
+String  CnStartMsg2,"AsmOSx86 - A Hobbyist Operating System in x86 Assembly"
+String  CnStartMsg3,"AsmOSx86 Initialization started"
