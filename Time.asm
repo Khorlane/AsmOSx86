@@ -25,8 +25,6 @@
 ;   - Requires Timer.asm contract:
 ;       TimerInit
 ;       TimerNowTicks     ; returns EDX:EAX ticks (PIT input ticks)
-;   - Requires Console.asm contract:
-;       CnPrint           ; EBX=String,prints+CrLf
 ;   - Requires Kernel working storage:
 ;       String  TimeStr,"XXXXXXXX"   ; payload 8 chars
 ;
@@ -76,8 +74,11 @@ TIME_RSYNC_SEC  equ 60
 TIME_RSYNC_TLO  equ (TIME_PIT_HZ*TIME_RSYNC_SEC) & 0FFFFFFFFh
 TIME_RSYNC_THI  equ (TIME_PIT_HZ*TIME_RSYNC_SEC) >> 32
 
-section .data
+;---------------------------------------------------------------------------------------------------
+; Strings
+;---------------------------------------------------------------------------------------------------
 String  TimeStr,"HH:MM:SS"
+
 ;---------------------------------------------------------------------------------------------------
 ; Raw CMOS fields (binary,24h after TimeReadCmos)
 ;---------------------------------------------------------------------------------------------------
@@ -111,67 +112,99 @@ BootLo          dd 0
 BootHi          dd 0
 BootValid       db 0
 
-section .text
 ;---------------------------------------------------------------------------------------------------
-; TimeCmosReadReg - AL=register,returns AL=value
+; TimeNow - advance wall time using monotonic ticks and sync with CMOS as needed
 ;---------------------------------------------------------------------------------------------------
-TimeCmosReadReg:
-  push  edx
-  mov   dx,CMOS_ADDR
-  or    al,CMOS_NMI                     ; NMI off while reading
-  out   dx,al
-  mov   dx,CMOS_DATA
-  in    al,dx
-  pop   edx
-  ret
-
-;---------------------------------------------------------------------------------------------------
-; TimeWaitNotUip - wait until RTC not updating
-;---------------------------------------------------------------------------------------------------
-TimeWaitNotUip:
+TimeNow:
   pusha
-TimeWaitNotUip1:
-  mov   al,RTC_STATUSA
-  call  TimeCmosReadReg
-  test  al,RTC_UIP
-  jnz   TimeWaitNotUip1
+  cmp   byte[WallSyncValid],1
+  je    TimeNow1
+  call  TimeSync
+  jmp   TimeNow4
+TimeNow1:
+  call  TimerNowTicks                   ; EDX:EAX = mono_now
+  mov   esi,eax                         ; now_lo
+  mov   edi,edx                         ; now_hi
+  ; since_sync = mono_now - WallSync
+  mov   eax,esi
+  mov   edx,edi
+  sub   eax,[WallSyncLo]
+  sbb   edx,[WallSyncHi]
+  cmp   edx,TIME_RSYNC_THI
+  jb    TimeNow3
+  ja    TimeNow2
+  cmp   eax,TIME_RSYNC_TLO
+  jb    TimeNow3
+TimeNow2:
+  call  TimeSync
+  jmp   TimeNow4
+TimeNow3:
+  ; delta = mono_now - WallLast
+  mov   eax,esi
+  mov   edx,edi
+  sub   eax,[WallLastLo]
+  sbb   edx,[WallLastHi]
+  mov   [WallLastLo],esi
+  mov   [WallLastHi],edi
+  ; total = delta_lo + WallRemTicks
+  add   eax,[WallRemTicks]
+  adc   edx,0
+  ; seconds_add = total / TIME_PIT_HZ,rem = total % TIME_PIT_HZ
+  mov   ecx,TIME_PIT_HZ
+  div   ecx                             ; EAX=seconds_add,EDX=rem
+  mov   [WallRemTicks],edx
+  ; WallSecDay = (WallSecDay + seconds_add) % 86400
+  mov   ebx,[WallSecDay]
+  add   ebx,eax
+  mov   eax,ebx
+  xor   edx,edx
+  mov   ecx,TIME_DAY_SEC
+  div   ecx                             ; EDX=sec_of_day
+  mov   [WallSecDay],edx
+TimeNow4:
+  ; Derive H:M:S from WallSecDay into TimeHour/Min/Sec
+  mov   eax,[WallSecDay]
+  xor   edx,edx
+  mov   ecx,3600
+  div   ecx                             ; EAX=hour,EDX=rem
+  mov   [TimeHour],al
+  mov   eax,edx
+  xor   edx,edx
+  mov   ecx,60
+  div   ecx                             ; EAX=min,EDX=sec
+  mov   [TimeMin],al
+  mov   [TimeSec],dl
   popa
   ret
 
 ;---------------------------------------------------------------------------------------------------
-; TimeBcdToBin - AL=BCD,returns AL=binary
+; TimeSync - read CMOS once and pin wall baseline to a monotonic tick
 ;---------------------------------------------------------------------------------------------------
-TimeBcdToBin:
-  push  ebx
-  mov   bl,al
-  and   al,0Fh
-  shr   bl,4
-  movzx ebx,bl
-  imul  ebx,10
-  add   al,bl
-  pop   ebx
-  ret
-
-;---------------------------------------------------------------------------------------------------
-; TimeNormalizeHour - AL=hour (maybe PM bit in 12h),returns AL=0..23
-;---------------------------------------------------------------------------------------------------
-TimeNormalizeHour:
-  push  ebx
-  mov   bl,[TimeStatB]
-  test  bl,RTC_24H
-  jnz   TimeNormalizeHour1
-  mov   bl,al
-  and   bl,080h                         ; PM flag
-  and   al,07Fh                         ; 1..12
-  cmp   al,12
-  jne   TimeNormalizeHour2
-  mov   al,0                            ; 12AM -> 00
-TimeNormalizeHour2:
-  cmp   bl,080h
-  jne   TimeNormalizeHour1
-  add   al,12                           ; PM add 12
-TimeNormalizeHour1:
-  pop   ebx
+TimeSync:
+  pusha
+  call  TimeReadCmos                    ; updates TimeHour/Min/Sec
+  xor   eax,eax
+  mov   al,[TimeHour]
+  mov   ebx,3600
+  mul   ebx                             ; EAX = hour*3600
+  mov   ecx,eax
+  xor   eax,eax
+  mov   al,[TimeMin]
+  mov   ebx,60
+  mul   ebx                             ; EAX = min*60
+  add   ecx,eax
+  xor   eax,eax
+  mov   al,[TimeSec]
+  add   ecx,eax
+  mov   [WallSecDay],ecx
+  call  TimerNowTicks                   ; EDX:EAX = now
+  mov   [WallSyncLo],eax
+  mov   [WallSyncHi],edx
+  mov   [WallLastLo],eax
+  mov   [WallLastHi],edx
+  mov   dword[WallRemTicks],0
+  mov   byte[WallSyncValid],1
+  popa
   ret
 
 ;---------------------------------------------------------------------------------------------------
@@ -252,7 +285,7 @@ TimeReadCmos2:
   mov   al,[TimeHour]
   call  TimeNormalizeHour
   mov   [TimeHour],al
-; Build full year: TimeYear = (CC*100 + YY) if CC present, else 19/20 pivot + YY
+  ; Build full year: TimeYear = (CC*100 + YY) if CC present, else 19/20 pivot + YY
   xor   eax,eax
   mov   al,[TimeCent]                   ; AL = YY (0..99)
   movzx ebx,al                          ; EBX = YY
@@ -283,117 +316,21 @@ TimeReadCmos5:
   ret
 
 ;---------------------------------------------------------------------------------------------------
-; TimeSync - read CMOS once and pin wall baseline to a monotonic tick
+; Time print functions
 ;---------------------------------------------------------------------------------------------------
-TimeSync:
-  pusha
-  call  TimeReadCmos                    ; updates TimeHour/Min/Sec
-  xor   eax,eax
-  mov   al,[TimeHour]
-  mov   ebx,3600
-  mul   ebx                             ; EAX = hour*3600
-  mov   ecx,eax
-  xor   eax,eax
-  mov   al,[TimeMin]
-  mov   ebx,60
-  mul   ebx                             ; EAX = min*60
-  add   ecx,eax
-  xor   eax,eax
-  mov   al,[TimeSec]
-  add   ecx,eax
-  mov   [WallSecDay],ecx
-  call  TimerNowTicks                   ; EDX:EAX = now
-  mov   [WallSyncLo],eax
-  mov   [WallSyncHi],edx
-  mov   [WallLastLo],eax
-  mov   [WallLastHi],edx
-  mov   dword[WallRemTicks],0
-  mov   byte[WallSyncValid],1
-  popa
-  ret
 
 ;---------------------------------------------------------------------------------------------------
-; TimeNow - advance wall time using monotonic ticks (policy B resync)
+; TimePrint - prints wall time (HH:MM:SS)
 ;---------------------------------------------------------------------------------------------------
-TimeNow:
+TimePrint:
   pusha
-  cmp   byte[WallSyncValid],1
-  je    TimeNow1
-  call  TimeSync
-  jmp   TimeNow4
-TimeNow1:
-  call  TimerNowTicks                   ; EDX:EAX = mono_now
-  mov   esi,eax                         ; now_lo
-  mov   edi,edx                         ; now_hi
-  ; since_sync = mono_now - WallSync
-  mov   eax,esi
-  mov   edx,edi
-  sub   eax,[WallSyncLo]
-  sbb   edx,[WallSyncHi]
-  cmp   edx,TIME_RSYNC_THI
-  jb    TimeNow3
-  ja    TimeNow2
-  cmp   eax,TIME_RSYNC_TLO
-  jb    TimeNow3
-TimeNow2:
-  call  TimeSync
-  jmp   TimeNow4
-TimeNow3:
-  ; delta = mono_now - WallLast
-  mov   eax,esi
-  mov   edx,edi
-  sub   eax,[WallLastLo]
-  sbb   edx,[WallLastHi]
-  mov   [WallLastLo],esi
-  mov   [WallLastHi],edi
-  ; total = delta_lo + WallRemTicks
-  add   eax,[WallRemTicks]
-  adc   edx,0
-  ; seconds_add = total / TIME_PIT_HZ,rem = total % TIME_PIT_HZ
-  mov   ecx,TIME_PIT_HZ
-  div   ecx                             ; EAX=seconds_add,EDX=rem
-  mov   [WallRemTicks],edx
-  ; WallSecDay = (WallSecDay + seconds_add) % 86400
-  mov   ebx,[WallSecDay]
-  add   ebx,eax
-  mov   eax,ebx
-  xor   edx,edx
-  mov   ecx,TIME_DAY_SEC
-  div   ecx                             ; EDX=sec_of_day
-  mov   [WallSecDay],edx
-TimeNow4:
-  ; Derive H:M:S from WallSecDay into TimeHour/Min/Sec
-  mov   eax,[WallSecDay]
-  xor   edx,edx
-  mov   ecx,3600
-  div   ecx                             ; EAX=hour,EDX=rem
-  mov   [TimeHour],al
-  mov   eax,edx
-  xor   edx,edx
-  mov   ecx,60
-  div   ecx                             ; EAX=min,EDX=sec
-  mov   [TimeMin],al
-  mov   [TimeSec],dl
+  call  TimeNow
+  mov   ebx,TimeStr
+  call  TimeFmtHms
+  mov   eax,TimeStr
+  mov   [VdInStrPtr],eax
+  call  VdPutStr
   popa
-  ret
-
-;---------------------------------------------------------------------------------------------------
-; TimePut2Dec - AL=0..99,EDI=dest,writes two digits,EDI+=2
-;---------------------------------------------------------------------------------------------------
-TimePut2Dec:
-  push  eax
-  push  ebx
-  xor   ah,ah
-  mov   bl,10
-  div   bl                              ; AL=tens,AH=ones
-  add   al,'0'
-  mov   [edi],al
-  mov   al,ah
-  add   al,'0'
-  mov   [edi+1],al
-  add   edi,2
-  pop   ebx
-  pop   eax
   ret
 
 ;---------------------------------------------------------------------------------------------------
@@ -419,15 +356,39 @@ TimeFmtHms:
   ret
 
 ;---------------------------------------------------------------------------------------------------
-; TimePrint - prints wall time (HH:MM:SS) via TimeStr + CnPrint
+; TimeFmtYmdHms - EBX=String,formats current date/time as "YYYY-MM-DD HH:MM:SS"
 ;---------------------------------------------------------------------------------------------------
-TimePrint:
+TimeFmtYmdHms:
   pusha
-  call  TimeNow
-  mov   ebx,TimeStr
-  call  TimeFmtHms
-  mov   ebx,TimeStr
-  call  CnPrint
+  mov   edi,ebx
+  add   edi,2                           ; Skip length word
+  mov   ax,[TimeYear]                   ; YYYY
+  call  TimePut4Dec
+  mov   al,'-'
+  mov   [edi],al
+  inc   edi
+  mov   al,[TimeMon]                    ; MM
+  call  TimePut2Dec
+  mov   al,'-'
+  mov   [edi],al
+  inc   edi
+  mov   al,[TimeDay]                    ; DD
+  call  TimePut2Dec
+  mov   al,' '
+  mov   [edi],al
+  inc   edi
+  mov   al,[TimeHour]                   ; HH
+  call  TimePut2Dec
+  mov   al,':'
+  mov   [edi],al
+  inc   edi
+  mov   al,[TimeMin]                    ; MM
+  call  TimePut2Dec
+  mov   al,':'
+  mov   [edi],al
+  inc   edi
+  mov   al,[TimeSec]                    ; SS
+  call  TimePut2Dec
   popa
   ret
 
@@ -479,9 +440,81 @@ TimeUptimeFmtHms1:
   popa
   ret
 
-;--------------------------------------------------------------------------------------------------
+;---------------------------------------------------------------------------------------------------
+; Helper functions
+;---------------------------------------------------------------------------------------------------
+
+;---------------------------------------------------------------------------------------------------
+; TimeBcdToBin - AL=BCD,returns AL=binary
+;---------------------------------------------------------------------------------------------------
+TimeBcdToBin:
+  push  ebx
+  mov   bl,al
+  and   al,0Fh
+  shr   bl,4
+  movzx ebx,bl
+  imul  ebx,10
+  add   al,bl
+  pop   ebx
+  ret
+
+;---------------------------------------------------------------------------------------------------
+; TimeCmosReadReg - AL=register,returns AL=value
+;---------------------------------------------------------------------------------------------------
+TimeCmosReadReg:
+  push  edx
+  mov   dx,CMOS_ADDR
+  or    al,CMOS_NMI                     ; NMI off while reading
+  out   dx,al
+  mov   dx,CMOS_DATA
+  in    al,dx
+  pop   edx
+  ret
+
+;---------------------------------------------------------------------------------------------------
+; TimeNormalizeHour - AL=hour (maybe PM bit in 12h),returns AL=0..23
+;---------------------------------------------------------------------------------------------------
+TimeNormalizeHour:
+  push  ebx
+  mov   bl,[TimeStatB]
+  test  bl,RTC_24H
+  jnz   TimeNormalizeHour1
+  mov   bl,al
+  and   bl,080h                         ; PM flag
+  and   al,07Fh                         ; 1..12
+  cmp   al,12
+  jne   TimeNormalizeHour2
+  mov   al,0                            ; 12AM -> 00
+TimeNormalizeHour2:
+  cmp   bl,080h
+  jne   TimeNormalizeHour1
+  add   al,12                           ; PM add 12
+TimeNormalizeHour1:
+  pop   ebx
+  ret
+
+;---------------------------------------------------------------------------------------------------
+; TimePut2Dec - AL=0..99,EDI=dest,writes two digits,EDI+=2
+;---------------------------------------------------------------------------------------------------
+TimePut2Dec:
+  push  eax
+  push  ebx
+  xor   ah,ah
+  mov   bl,10
+  div   bl                              ; AL=tens,AH=ones
+  add   al,'0'
+  mov   [edi],al
+  mov   al,ah
+  add   al,'0'
+  mov   [edi+1],al
+  add   edi,2
+  pop   ebx
+  pop   eax
+  ret
+
+;---------------------------------------------------------------------------------------------------
 ; TimePut4Dec - AX=0..9999,EDI=dest,writes four digits,EDI+=4
-;--------------------------------------------------------------------------------------------------
+;---------------------------------------------------------------------------------------------------
 TimePut4Dec:
   push  eax
   push  ebx
@@ -514,40 +547,16 @@ TimePut4Dec:
   pop   ebx
   pop   eax
   ret
-  
-;--------------------------------------------------------------------------------------------------
-; TimeFmtYmdHms - EBX=String,formats current date/time as "YYYY-MM-DD HH:MM:SS"
-;--------------------------------------------------------------------------------------------------
-TimeFmtYmdHms:
+
+;---------------------------------------------------------------------------------------------------
+; TimeWaitNotUip - wait until RTC not updating
+;---------------------------------------------------------------------------------------------------
+TimeWaitNotUip:
   pusha
-  mov   edi,ebx
-  add   edi,2                           ; Skip length word
-  mov   ax,[TimeYear]                   ; YYYY
-  call  TimePut4Dec
-  mov   al,'-'
-  mov   [edi],al
-  inc   edi
-  mov   al,[TimeMon]                    ; MM
-  call  TimePut2Dec
-  mov   al,'-'
-  mov   [edi],al
-  inc   edi
-  mov   al,[TimeDay]                    ; DD
-  call  TimePut2Dec
-  mov   al,' '
-  mov   [edi],al
-  inc   edi
-  mov   al,[TimeHour]                   ; HH
-  call  TimePut2Dec
-  mov   al,':'
-  mov   [edi],al
-  inc   edi
-  mov   al,[TimeMin]                    ; MM
-  call  TimePut2Dec
-  mov   al,':'
-  mov   [edi],al
-  inc   edi
-  mov   al,[TimeSec]                    ; SS
-  call  TimePut2Dec
+TimeWaitNotUip1:
+  mov   al,RTC_STATUSA
+  call  TimeCmosReadReg
+  test  al,RTC_UIP
+  jnz   TimeWaitNotUip1
   popa
   ret

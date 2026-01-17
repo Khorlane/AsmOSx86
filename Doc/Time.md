@@ -153,4 +153,52 @@ Without breaking existing code.
 
 ---
 
+## Timekeeping Overview: CMOS Clock, TimeSync, and TimeNow
+
+### CMOS Clock (RTC)
+- The CMOS Real-Time Clock is the hardware source of “real” wall time.
+- It is accessed via I/O ports `0x70` / `0x71`.
+- The RTC updates once per second and may present values as:
+  - BCD or binary
+  - 12-hour or 24-hour format
+- `TimeReadCmos` reads the raw RTC registers, waits for a stable update window (UIP=0),
+  converts BCD to binary if needed, normalizes 12h → 24h, and produces clean binary
+  values in `TimeHour`, `TimeMin`, and `TimeSec` (plus date fields).
+
+### TimeSync
+- `TimeSync` bridges real (wall) time to the system’s monotonic clock.
+- It performs a single trusted RTC read via `TimeReadCmos`.
+- The current time is collapsed into a single scalar:
+  - `WallSecDay` = seconds since midnight (0..86399).
+- At the same moment, it reads the monotonic tick counter (`TimerNowTicks`).
+- This monotonic tick is stored as the synchronization baseline
+  (`WallSyncLo/Hi` and `WallLastLo/Hi`).
+- Fractional tick state is reset and `WallSyncValid` is set.
+
+**Conceptually:**  
+> “At monotonic tick **T**, wall time was **S** seconds into the day.”
+
+### TimeNow
+- `TimeNow` maintains wall time efficiently between RTC reads.
+- On each call it:
+  1. Ensures a valid baseline exists (calls `TimeSync` if not).
+  2. Reads the current monotonic tick count.
+  3. Computes elapsed ticks since the previous call.
+  4. Accumulates fractional ticks and converts whole ticks into seconds
+     using `TIME_PIT_HZ`.
+  5. Advances `WallSecDay` modulo 86400.
+  6. Derives `TimeHour`, `TimeMin`, and `TimeSec` from `WallSecDay`.
+
+- To limit drift, `TimeNow` enforces a resynchronization policy:
+  - If more than `TIME_RSYNC_SEC` seconds have elapsed since the last
+    synchronization, it calls `TimeSync` again.
+  - This keeps wall time aligned with the RTC without the cost of frequent
+    CMOS reads.
+
+### Summary
+- **CMOS RTC**: authoritative wall-time source.
+- **TimeSync**: snapshots RTC time and pins it to a monotonic tick baseline.
+- **TimeNow**: advances wall time using monotonic ticks, periodically
+  re-syncing to the RTC to correct drift.
+
 **This document reflects current implementation and is authoritative.**

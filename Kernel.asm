@@ -70,6 +70,7 @@ IDT2:
 ;--------------------------------------------------------------------------------------------------
 %include "Console.asm"
 %include "Keyboard.asm"
+%include "Time.asm"
 %include "Timer.asm"
 %include "Video.asm"
 
@@ -93,6 +94,7 @@ FlushCS:
   mov   esp,90000h                      ; Stack begins from 90000h
   lea   eax,[IDT2]                      ; Load the IDT
   lidt  [eax]                           ;  register
+
   ; Initialize subsystems
   call  TimerInit                       ; Initialize timer
   call  VdInit                          ; Initialize video
