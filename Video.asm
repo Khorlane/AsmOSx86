@@ -322,7 +322,7 @@ VdWriteInCharAtCursor:
   mov   edi,VGA_TEXT_BASE
   add   edi,eax
   mov   al,[VdInCh]
-  mov   ah,VD_ATTR_DEFAULT
+  mov   ah,[VdColorAttr]                  ; Use current color attribute
   mov   [edi],ax
   ret
 
