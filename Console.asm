@@ -15,7 +15,18 @@
 [bits 32]
 
 ; ----- Console constants -----
-CN_IN_MAX     equ 80                      ; maximum console input length
+CN_IN_MAX        equ 80                 ; maximum console input length
+; ----- Console variables -----
+CnInDstPtr       dd 0
+CnInMax          dw 0
+CnPad0           dw 0
+CnInWorkLen      dw 0
+CnPad1           dw 0
+; Strings
+CmdBuf: times (2 + CN_IN_MAX) db 0      ; Command line buffer as String:
+String  CnStartMsg1,"AsmOSx86 Console (Session 0)"
+String  CnStartMsg2,"AsmOSx86 - A Hobbyist Operating System in x86 Assembly"
+String  CnStartMsg3,"AsmOSx86 Initialization started"
 
 ;------------------------------------------------------------------------------
 ; Console
@@ -172,19 +183,3 @@ CnReadLineOnEnter:
   mov   [esi],ax
   call  VdInClearLine
   ret
-
-; ----- Storage -----
-
-CnInDstPtr       dd 0
-CnInMax          dw 0
-CnPad0           dw 0
-CnInWorkLen      dw 0
-CnPad1           dw 0
-
-; Command line buffer as String:
-; [0..1]=u16 length, [2..]=payload chars
-CmdBuf:
-  times (2 + CN_IN_MAX) db 0
-String  CnStartMsg1,"AsmOSx86 Console (Session 0)"
-String  CnStartMsg2,"AsmOSx86 - A Hobbyist Operating System in x86 Assembly"
-String  CnStartMsg3,"AsmOSx86 Initialization started"
