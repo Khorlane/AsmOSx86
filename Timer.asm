@@ -29,7 +29,6 @@ PIT_MODE2_CH0   equ 00110100b            ; ch0,lo/hi,mode2,binary
 ; PIT input clock (Hz)
 PIT_HZ          equ 1193182
 
-section .data
 ;--------------------------------------------------------------------------------------------------
 ; Working storage (kept local to Timer.asm)
 ;--------------------------------------------------------------------------------------------------
@@ -41,7 +40,6 @@ TimerTicksHi    dd 0                     ; 64-bit accumulated ticks (high)
 TimerRetLo      dd 0                     ; return staging (low)
 TimerRetHi      dd 0                     ; return staging (high)
 
-section .text
 ;--------------------------------------------------------------------------------------------------
 ; TimerInit - initialize PIT channel 0 for stable polling
 ;   Programs PIT ch0 mode 2 with divisor = 0 (65536).
