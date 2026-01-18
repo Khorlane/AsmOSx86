@@ -66,9 +66,9 @@ VdWorkPad2       dw 0
 VdWorkCount      dd 0
 VdCurRow         dw 0
 VdCurCol         dw 0
-VdColorBack   db  0                     ; Background color (00h - 0Fh)
-VdColorFore   db  0                     ; Foreground color (00h - 0Fh)
-VdColorAttr   db  0                     ; Combination of background and foreground color (e.g. 3Fh 3=cyan background,F=white text)
+VdColorBack      db  0                  ; Background color (00h - 0Fh)
+VdColorFore      db  0                  ; Foreground color (00h - 0Fh)
+VdColorAttr      db  0                  ; Combination of background and foreground color (e.g. 3Fh 3=cyan background,F=white text)
 
 ;------------------------------------------------------------------------------
 ; VdInit
@@ -89,6 +89,8 @@ VdInit:
   mov   [VdOutCurRow],ax
   mov   [VdOutCurCol],ax
   mov   [VdInCurCol],ax
+  mov   al,VD_ATTR_DEFAULT
+  mov   [VdColorAttr],al
   call  VdClear
   mov   ax,1
   mov   [VdCurRow],ax
@@ -379,7 +381,8 @@ VdScrollClearLoop:
   movzx eax,ax
   cmp   eax,(VD_COLS + 1)
   jae   VdScrollDone
-  mov   ax,(VD_ATTR_DEFAULT << 8) | ' '
+  mov   al,' '
+  mov   ah,[VdColorAttr]
   mov   [edi],ax
   add   edi,2
   mov   ax,[VdWorkCol]
@@ -401,7 +404,8 @@ VdClear:
   mov   edi,VGA_TEXT_BASE
   mov   ecx,VD_COLS * VD_ROWS
 VdClearLoop:
-  mov   ax,(VD_ATTR_DEFAULT << 8) | ' '
+  mov   al,' '
+  mov   ah,[VdColorAttr]
   mov   [edi],ax
   add   edi,2
   loop  VdClearLoop
