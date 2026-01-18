@@ -18,7 +18,7 @@ VD_ROWS         equ 25
 VD_OUT_MAX_ROW  equ 24                   ; Output region rows 1..24 (scrolls)
 
 VGA_TEXT_BASE   equ 0xB8000
-VD_ATTR_DEFAULT equ 0x07
+VD_ATTR_DEFAULT equ 0x07                 ; Default attribute: Light Gray on Black
 VGA_CRTC_INDEX  equ 0x3D4
 VGA_CRTC_DATA   equ 0x3D5
 ;---------------
@@ -52,6 +52,23 @@ Black       equ 00h                     ; Black
 Cyan        equ 03h                     ; Cyan
 Purple      equ 05h                     ; Purple
 White       equ 0Fh                     ; White
+
+; ----- Video variables -----
+VdInCh           db 0
+VdPad0           db 0,0,0
+VdInStrPtr       dd 0
+VdOutCurRow      dw 0
+VdOutCurCol      dw 0
+VdInCurCol       dw 0
+VdPad1           dw 0
+VdWorkCol        dw 0
+VdWorkPad2       dw 0
+VdWorkCount      dd 0
+VdCurRow         dw 0
+VdCurCol         dw 0
+VdColorBack   db  0                     ; Background color (00h - 0Fh)
+VdColorFore   db  0                     ; Foreground color (00h - 0Fh)
+VdColorAttr   db  0                     ; Combination of background and foreground color (e.g. 3Fh 3=cyan background,F=white text)
 
 ;------------------------------------------------------------------------------
 ; VdInit
@@ -468,20 +485,3 @@ VdSetColorAttr:
   or    al,bl                             ; Combine -> attribute byte
   mov   [VdColorAttr],al                  ; Save attribute
   ret
-
-; ----- Storage -----
-VdInCh           db 0
-VdPad0           db 0,0,0
-VdInStrPtr       dd 0
-VdOutCurRow      dw 0
-VdOutCurCol      dw 0
-VdInCurCol       dw 0
-VdPad1           dw 0
-VdWorkCol        dw 0
-VdWorkPad2       dw 0
-VdWorkCount      dd 0
-VdCurRow         dw 0
-VdCurCol         dw 0
-VdColorBack   db  0                     ; Background color (00h - 0Fh)
-VdColorFore   db  0                     ; Foreground color (00h - 0Fh)
-VdColorAttr   db  0                     ; Combination of background and foreground color (e.g. 3Fh 3=cyan background,F=white text)
