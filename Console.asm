@@ -63,11 +63,6 @@ CnInit:
   mov   [VdColorFore],al                ;  color
   call  VdSetColorAttr                  ; Set color
   call  VdClear                         ; Clear screen
-  mov   ax,1                            ; Move cursor
-  mov   [VdCurRow],ax                   ;  to row 1
-  mov   ax,1                            ;  and
-  mov   [VdCurCol],ax                   ;  column 1
-  call  VdSetCursor                     ;  do it 
   lea   eax,[CnStartMsg1]               ; Print 
   mov   [VdInStrPtr],eax                ;  startup
   call  VdPutStr                        ;  message 1
