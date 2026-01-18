@@ -56,7 +56,7 @@ White       equ 0Fh                     ; White
 ; ----- Video variables -----
 VdInCh           db 0
 VdPad0           db 0,0,0
-VdInStrPtr       dd 0
+VdStrPtr         dd 0
 VdOutCurRow      dw 0
 VdOutCurCol      dw 0
 VdInCurCol       dw 0
@@ -101,10 +101,10 @@ VdInit:
 ;------------------------------------------------------------------------------
 ; VdPutStr
 ; Input (memory):
-;   VdInStrPtr -> String [u16 len][bytes...]
+;   VdStrPtr -> String [u16 len][bytes...]
 ;------------------------------------------------------------------------------
 VdPutStr:
-  mov   esi,[VdInStrPtr]
+  mov   esi,[VdStrPtr]
   mov   ax,[esi]
   movzx ecx,ax
   add   esi,2

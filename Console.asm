@@ -64,21 +64,21 @@ CnInit:
   call  VdSetColorAttr                  ; Set color
   call  VdClear                         ; Clear screen
   lea   eax,[CnStartMsg1]               ; Print 
-  mov   [VdInStrPtr],eax                ;  startup
+  mov   [VdStrPtr],eax                  ;  startup
   call  VdPutStr                        ;  message 1
   call  CnCrLf                          ;  with new line
   mov   ax,[VdCurRow]                   ; Bump
   inc   ax                              ;  row
   mov   [VdCurRow],ax                   ;  by 1
   lea   eax,[CnStartMsg2]               ; Print 
-  mov   [VdInStrPtr],eax                ;  startup
+  mov   [VdStrPtr],eax                  ;  startup
   call  VdPutStr                        ;  message 2
   call  CnCrLf                          ;  with new line
   mov   ax,[VdCurRow]                   ; Bump
   inc   ax                              ;  row
   mov   [VdCurRow],ax                   ;  by 1
   lea   eax,[CnStartMsg3]               ; Print 
-  mov   [VdInStrPtr],eax                ;  startup
+  mov   [VdStrPtr],eax                  ;  startup
   call  VdPutStr                        ;  message 3
   call  CnCrLf                          ;  with new line
   xor   ax,ax                           ; Clear input
@@ -109,7 +109,7 @@ CnInit:
 ;------------------------------------------------------------------------------
 CnCrLf:
   lea   eax,[CrLf]        
-  mov   [VdInStrPtr],eax         
+  mov   [VdStrPtr],eax         
   call  VdPutStr   
   ret
 
