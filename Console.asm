@@ -57,7 +57,7 @@ Console:
 ; - Ensures the console input buffer is in a known, clean state.
 ;------------------------------------------------------------------------------
 CnInit:
-  mov   al,Cyan                         ; Background
+  mov   al,Black                        ; Background
   mov   [VdColorBack],al                ;  color
   mov   al,Purple                       ; Foreground
   mov   [VdColorFore],al                ;  color
