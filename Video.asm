@@ -410,9 +410,12 @@ VdClearLoop:
   add   edi,2
   loop  VdClearLoop
   mov   ax,1
+  mov   [VdCurRow],ax
+  mov   [VdCurCol],ax
   mov   [VdOutCurRow],ax
   mov   [VdOutCurCol],ax
   mov   [VdInCurCol],ax
+  call  VdSetCursor
   ret
 
 ;------------------------------------------------------------------------------
