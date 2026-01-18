@@ -102,19 +102,15 @@ CnInit:
 ; Outputs a carriage return and line feed to the console, advancing to a new line.
 ;
 ; Output:
-;   Calls VdPutChar twice to emit CR (0x0D) and LF (0x0A) to the video subsystem.
+;   Calls VdPutStr to print CRLF sequence
 ;
 ; Notes:
 ; - Used to move the cursor to the beginning of the next line in the console.
-; - Follows column alignment and PascalCase coding standards (LOCKED-IN).
 ;------------------------------------------------------------------------------
 CnCrLf:
-  mov   al,0x0D                          ; Carriage return
-  mov   [VdInCh],al
-  call  VdPutChar
-  mov   al,0x0A                          ; Line feed
-  mov   [VdInCh],al
-  call  VdPutChar
+  lea   eax,[CrLf]        
+  mov   [VdInStrPtr],eax         
+  call  VdPutStr   
   ret
 
 ;------------------------------------------------------------------------------
