@@ -122,7 +122,7 @@ Examples:
 - `TimeSync`
 - `TimeNow`
 - `TimeFmtHms`
-- `TimePrint`
+- `TimeTmPrint`
 
 ---
 

@@ -96,7 +96,9 @@ CnInit:
   mov   ax,1
   mov   [VdCurCol],ax
   call  VdSetCursor
-  call  TimePrint ; Temprary time print for testing
+  call  TimeDtPrint ; Temprary time print for testing
+  call  CnCrLf
+  call  TimeTmPrint ; Temprary time print for testing
   ret
 
 ;------------------------------------------------------------------------------

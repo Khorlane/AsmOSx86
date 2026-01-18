@@ -36,7 +36,7 @@
 ;   TimeSync
 ;   TimeNow
 ;   TimeFmtHms
-;   TimePrint
+;   TimeTmPrint
 ;   TimeUptimeFmtHms      ; formats uptime "HH:MM:SS" (hours mod 100)
 ;   TimeFmtYmdHms         ; formats wall time "YYYY-MM-DD HH:MM:SS"
 ;**************************************************************************************************
@@ -77,6 +77,7 @@ TIME_RSYNC_THI  equ (TIME_PIT_HZ*TIME_RSYNC_SEC) >> 32
 ;---------------------------------------------------------------------------------------------------
 ; Strings
 ;---------------------------------------------------------------------------------------------------
+String  DateStr,"YYYY-MM-DD"
 String  TimeStr,"HH:MM:SS"
 
 ;---------------------------------------------------------------------------------------------------
@@ -320,14 +321,28 @@ TimeReadCmos5:
 ;---------------------------------------------------------------------------------------------------
 
 ;---------------------------------------------------------------------------------------------------
-; TimePrint - prints wall time (HH:MM:SS)
+; TimeTmPrint - prints wall time (HH:MM:SS)
 ;---------------------------------------------------------------------------------------------------
-TimePrint:
+TimeTmPrint:
   pusha
   call  TimeNow
   mov   ebx,TimeStr
   call  TimeFmtHms
   mov   eax,TimeStr
+  mov   [VdInStrPtr],eax
+  call  VdPutStr
+  popa
+  ret
+
+;---------------------------------------------------------------------------------------------------
+; TimeDtPrint - prints wall time (YYYY-MM-DD)
+;---------------------------------------------------------------------------------------------------
+TimeDtPrint:
+  pusha
+  call  TimeNow
+  mov   ebx,DateStr
+  call  TimeFmtYmd
+  mov   eax,DateStr
   mov   [VdInStrPtr],eax
   call  VdPutStr
   popa
@@ -353,6 +368,27 @@ TimeFmtHms:
   mov   al,[TimeSec]
   call  TimePut2Dec
   popa
+  ret
+
+;---------------------------------------------------------------------------------------------------
+; TimeFmtYmd - Formats DateStr with current date/time as "YYYY-MM-DD"
+;---------------------------------------------------------------------------------------------------
+TimeFmtYmd:
+  mov   ebx,DateStr
+  mov   edi,ebx
+  add   edi,2                           ; Skip length word
+  mov   ax,[TimeYear]                   ; YYYY
+  call  TimePut4Dec
+  mov   al,'-'
+  mov   [edi],al
+  inc   edi
+  mov   al,[TimeMon]                    ; MM
+  call  TimePut2Dec
+  mov   al,'-'
+  mov   [edi],al
+  inc   edi
+  mov   al,[TimeDay]                    ; DD
+  call  TimePut2Dec
   ret
 
 ;---------------------------------------------------------------------------------------------------

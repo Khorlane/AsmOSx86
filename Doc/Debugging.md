@@ -8,9 +8,9 @@ To tell if resync is occuring add the following lines:
   ;-----------------------------------------
   mov   ecx,20                          ; Print time ~20 times
 TimeTestLoop:
-  call  TimePrint                      ; HH:MM:SS (wall time)
-  mov   eax,1000                       ; Delay
-  call  TimerDelayMs                  ;  1 second
+  call  TimeTmPrint                     ; HH:MM:SS (wall time)
+  mov   eax,1000                        ; Delay
+  call  TimerDelayMs                    ;  1 second
   loop  TimeTestLoop
 ```
 ### In Time.asm  

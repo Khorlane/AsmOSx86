@@ -23,9 +23,9 @@ This call graph is generated **only** from the files shown in this chat (treated
   - → CnInit (Console.asm)
   - → KbInit (Keyboard.asm)
   - → UptimePrint (Uptime.asm)
-  - → TimePrint (Time.asm)
+  - → Tm (Time.asm)
   - → TimerDelayMs (Timer.asm)
-  - → TimePrint (Time.asm)
+  - → TimeTmPrint (Time.asm)
   - → UptimePrint (Uptime.asm)
   - → FloppyTest (Utility.asm)
   - → DebugIt (Utility.asm)   *(multiple times)*
@@ -129,7 +129,7 @@ Private helpers:
 - **TimeFmtHms**
   - → TimePut2Dec (private)
 
-- **TimePrint**
+- **TimeTmPrint**
   - → TimeNow
   - → TimeFmtHms
   - → CnPrint (Console.asm)
@@ -307,7 +307,7 @@ flowchart TD
   Stage3 --> CnInit
   Stage3 --> KbInit
   Stage3 --> UptimePrint
-  Stage3 --> TimePrint
+  Stage3 --> TimeTmPrint
   Stage3 --> TimerDelayMs
   Stage3 --> FloppyTest
   Stage3 --> DebugIt
@@ -329,7 +329,7 @@ flowchart TD
   TimeNow --> TimeSync
   TimeSync --> TimeReadCmos
   TimeSync --> TimerNowTicks
-  TimePrint --> CnPrint
+  TimeTmPrint --> CnPrint
   UptimePrint --> CnPrint
 
   TimerDelayMs --> TimerNowTicks
