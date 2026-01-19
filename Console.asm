@@ -43,10 +43,10 @@ String  CnStartMsg3,"Initialization started"
 ;   - Output is displayed immediately; command processing can be added as needed.
 ;------------------------------------------------------------------------------
 Console:
-  call  CnReadLine                      ; Echoes on bottom row; returns string in CmdBuf
-  lea   eax,[CmdBuf]                    ; Echo the entered command
-  mov   [pLogMsg],eax
-  call  CnLogIt
+  call  CnReadLine                      ; Returns string in CmdBuf
+  lea   eax,[CmdBuf]                    ; Echo the
+  mov   [pLogMsg],eax                   ;  entered
+  call  CnLogIt                         ;  command
   jmp   Console
 
 ;------------------------------------------------------------------------------
