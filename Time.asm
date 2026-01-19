@@ -327,7 +327,7 @@ TimeTmPrint:
   mov   ebx,TimeStr
   call  TimeFmtHms
   mov   eax,TimeStr
-  mov   [VdStrPtr],eax
+  mov   [pVdStr],eax
   call  VdPutStr
   popa
   ret
@@ -341,7 +341,7 @@ TimeDtPrint:
   mov   ebx,DateStr
   call  TimeFmtYmd
   mov   eax,DateStr
-  mov   [VdStrPtr],eax
+  mov   [pVdStr],eax
   call  VdPutStr
   popa
   ret

@@ -96,7 +96,7 @@ CnInit:
 ;------------------------------------------------------------------------------
 CnCrLf:
   lea   eax,[CrLf]        
-  mov   [VdStrPtr],eax         
+  mov   [pVdStr],eax         
   call  VdPutStr   
   ret
 
@@ -109,7 +109,7 @@ CnCrLf:
 ;------------------------------------------------------------------------------
 CnSpace:
   lea   eax,[Space1]
-  mov   [VdStrPtr],eax
+  mov   [pVdStr],eax
   call  VdPutStr
   ret
 
@@ -191,7 +191,7 @@ CnLogIt:
   call  TimeTmPrint
   call  CnSpace
   mov   eax,[pLogMsg]
-  mov   [VdStrPtr],eax
+  mov   [pVdStr],eax
   call  VdPutStr
   call  CnCrLf
   ret
