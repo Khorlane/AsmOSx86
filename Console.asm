@@ -178,6 +178,13 @@ CnReadLineOnEnter:
   call  VdInClearLine
   ret
 
+; -----------------------------------------------------------------------------
+; CnLogIt - Logs a message with timestamp to the console
+; Output: None
+; Notes:
+; - Uses TimeDtPrint and TimeTmPrint for timestamping
+; - Outputs the message pointed to by pLogMsg
+; -----------------------------------------------------------------------------
 CnLogIt:
   call  TimeDtPrint
   call  CnSpace
