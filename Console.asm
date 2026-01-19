@@ -15,7 +15,7 @@
 [bits 32]
 
 ; ----- Console constants -----
-CN_IN_MAX        equ 79                 ; maximum console input length
+CN_CMD_MAX_LEN   equ 79                 ; maximum console input length
 ; ----- Console variables -----
 pCnCmdBuf        dd 0
 CnCmdMaxLen      dw 0
@@ -24,7 +24,7 @@ CnInWorkLen      dw 0
 CnPad1           dw 0
 pLogMsg          dw 0
 ; Strings
-CmdBuf: times (2 + CN_IN_MAX) db 0      ; Command line buffer as String:
+CmdBuf: times (2 + CN_CMD_MAX_LEN) db 0      ; Command line buffer as String:
 String  CnStartMsg1,"AsmOSx86 - A Hobbyist Operating System in x86 Assembly"
 String  CnStartMsg2,"Console (Session 0)"
 String  CnStartMsg3,"Initialization started"
@@ -71,7 +71,7 @@ CnInit:
   mov   [CnInWorkLen],ax                ;  length
   lea   eax,[CmdBuf]                    ; Set destination
   mov   [pCnCmdBuf],eax                 ;  buffer for input
-  mov   ax,CN_IN_MAX                    ; Set max chars
+  mov   ax,CN_CMD_MAX_LEN               ; Set max chars
   mov   [CnCmdMaxLen],ax                ;  to read
   mov   ax,25                           ; Set
   mov   [VdCurRow],ax                   ;  row to 25
