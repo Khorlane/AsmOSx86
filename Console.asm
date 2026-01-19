@@ -27,6 +27,22 @@ String  CnStartMsg1,"AsmOSx86 - A Hobbyist Operating System in x86 Assembly"
 String  CnStartMsg2,"Console (Session 0)"
 String  CnStartMsg3,"Initialization started"
 
+; ----- Console commands -----
+String  CommandDate,     "Date"
+String  CommandShutdown, "Shutdown"
+String  CommandHelp,     "Help"
+String  CommandEcho,     "Echo"
+; Console Command Table
+; Each entry: dd CommandNameLStr,CmdHandler
+ConsoleCmdTable:
+  dd CommandDate,     CmdDate
+  dd CommandShutdown, CmdShutdown
+  dd CommandHelp,     CmdHelp
+  dd CommandEcho,     CmdEcho
+ConsoleCmdTableEnd:
+ConsoleCmdTableCount equ (ConsoleCmdTableEnd-ConsoleCmdTable)/8
+
+
 ;------------------------------------------------------------------------------
 ; Console
 ; Main console loop for AsmOSx86.
@@ -45,6 +61,7 @@ Console:
   lea   eax,[CnCmd]                     ; Echo the
   mov   [pCnLogMsg],eax                 ;  entered command
   call  CnLogIt                         ;  command
+  call  ConsoleCmdDispatch              ; Call handler if match
   jmp   Console
 
 ;------------------------------------------------------------------------------
@@ -195,4 +212,71 @@ CnLogIt:
   mov   [pVdStr],eax
   call  VdPutStr
   call  CnCrLf
+  ret
+
+;------------------------------------------------------------------------------
+; ConsoleCmdDispatch
+; Dispatches the command in CnCmd by searching ConsoleCmdTable entries:
+;   dd CommandNameLStr,CmdHandler
+;
+; Match policy:
+;   - Exact match (case-sensitive)
+;   - Length must match
+;
+; On match:
+;   - Calls the handler
+; On no match:
+;   - Returns (no-op here)
+;------------------------------------------------------------------------------
+ConsoleCmdDispatch:
+  pusha
+  lea   esi,[CnCmd]                     ; ESI = input LStr
+  mov   cx,[esi]                        ; CX  = input length
+  mov   edi,ConsoleCmdTable             ; EDI = table base
+  mov   ebp,ConsoleCmdTableCount        ; EBP = entry count
+ConsoleCmdDispatchNext:
+  test  ebp,ebp
+  jz    ConsoleCmdDispatchDone
+  mov   ebx,[edi]                       ; EBX = ptr to command LStr
+  mov   dx,[ebx]                        ; DX  = cmd length
+  cmp   dx,cx
+  jne   ConsoleCmdDispatchSkip
+  push  esi                             ; Save input ptr
+  push  edi                             ; Save table ptr
+  push  ebp                             ; Save count
+  lea   esi,[esi+2]                     ; ESI = input payload
+  lea   ebx,[ebx+2]                     ; EBX = cmd payload
+  movzx ecx,cx                          ; ECX = compare count
+ConsoleCmdDispatchCmp:
+  test  ecx,ecx
+  jz    ConsoleCmdDispatchMatch
+  mov   al,[esi]
+  cmp   al,[ebx]
+  jne   ConsoleCmdDispatchNoMatch
+  inc   esi
+  inc   ebx
+  dec   ecx
+  jmp   ConsoleCmdDispatchCmp
+ConsoleCmdDispatchNoMatch:
+  pop   ebp
+  pop   edi
+  pop   esi
+ConsoleCmdDispatchSkip:
+  add   edi,8                           ; Next entry (name,handler)
+  dec   ebp
+  jmp   ConsoleCmdDispatchNext
+ConsoleCmdDispatchMatch:
+  pop   ebp
+  pop   edi
+  pop   esi
+  mov   eax,[edi+4]                     ; EAX = handler address
+  call  eax
+ConsoleCmdDispatchDone:
+  popa
+  ret
+
+CmdDate:
+CmdShutdown:
+CmdHelp:
+CmdEcho:
   ret
