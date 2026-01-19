@@ -17,7 +17,7 @@
 ; ----- Console constants -----
 CN_IN_MAX        equ 80                 ; maximum console input length
 ; ----- Console variables -----
-pCmdBuf          dd 0
+pCnCmdBuf        dd 0
 CnInMax          dw 0
 CnPad0           dw 0
 CnInWorkLen      dw 0
@@ -70,7 +70,7 @@ CnInit:
   xor   ax,ax                           ; Clear input
   mov   [CnInWorkLen],ax                ;  length
   lea   eax,[CmdBuf]                    ; Set destination
-  mov   [pCmdBuf],eax                   ;  buffer for input
+  mov   [pCnCmdBuf],eax                 ;  buffer for input
   mov   ax,CN_IN_MAX                    ; Set max chars
   mov   [CnInMax],ax                    ;  to read
   mov   ax,25                           ; Set
@@ -123,10 +123,10 @@ CnSpace:
 ; Behavior:
 ;   - Accepts character input, handles backspace and enter keys.
 ;   - Supports editing the input line before submission.
-;   - Stores the input as a length-prefixed string at [pCmdBuf].
+;   - Stores the input as a length-prefixed string at [pCnCmdBuf].
 ;
 ; Output (memory):
-;   [pCmdBuf]   = Length-prefixed input string (LStr format)
+;   [pCnCmdBuf]   = Length-prefixed input string (LStr format)
 ;   CnInWorkLen  = Number of characters entered
 ;
 ; Notes:
@@ -157,7 +157,7 @@ CnReadLineOnChar:
   movzx edx,ax
   cmp   ecx,edx
   jae   CnReadLineLoop
-  mov   esi,[pCmdBuf]
+  mov   esi,[pCnCmdBuf]
   mov   al,[KbOutChar]
   mov   [esi+2+ecx],al
   inc   cx
@@ -175,7 +175,7 @@ CnReadLineOnBackspace:
   call  VdInBackspaceVisual
   jmp   CnReadLineLoop
 CnReadLineOnEnter:
-  mov   esi,[pCmdBuf]
+  mov   esi,[pCnCmdBuf]
   mov   ax,[CnInWorkLen]
   mov   [esi],ax
   call  VdInClearLine
