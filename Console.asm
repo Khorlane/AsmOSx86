@@ -248,20 +248,21 @@ ConsoleCmdDispatchCmp:
   test  ecx,ecx
   jz    ConsoleCmdDispatchMatch
   mov   al,[esi]                        ; input char
-  mov   dl,[ebx]                        ; table char
+  mov   ah,[ebx]                        ; table char
+
   cmp   al,'A'
   jb    ConsoleCmdCi1
   cmp   al,'Z'
   ja    ConsoleCmdCi1
   add   al,32                           ; input -> lowercase
 ConsoleCmdCi1:
-  cmp   dl,'A'
+  cmp   ah,'A'
   jb    ConsoleCmdCi2
-  cmp   dl,'Z'
+  cmp   ah,'Z'
   ja    ConsoleCmdCi2
-  add   dl,32                           ; table -> lowercase
+  add   ah,32                           ; table -> lowercase
 ConsoleCmdCi2:
-  cmp   al,dl
+  cmp   al,ah
   jne   ConsoleCmdDispatchNoMatch
   inc   esi
   inc   ebx
@@ -284,6 +285,11 @@ ConsoleCmdDispatchMatch:
 ConsoleCmdDispatchDone:
   ret
 
+;------------------------------------------------------------------------------
+; Command Handlers
+; Each handler corresponds to a command in ConsoleCmdTable.
+; Handlers perform specific actions based on the command invoked.
+;------------------------------------------------------------------------------
 CmdDate:
   call  TimeDtPrint
   call  CnCrLf
