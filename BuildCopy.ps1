@@ -125,7 +125,7 @@ try {
     $forcedDetachUsed = $false
     $lastOut = ""
 
-    for ($i = 1; $i -le 5; $i++) {
+    for ($i = 1; $i -le 2; $i++) {
       $det = Run-ImDisk ('-d -m "{0}"' -f $Drive)
       $lastOut = $det.Output
       if ($det.ExitCode -eq 0) {
