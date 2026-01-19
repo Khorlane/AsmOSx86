@@ -22,6 +22,7 @@ CnInMax          dw 0
 CnPad0           dw 0
 CnInWorkLen      dw 0
 CnPad1           dw 0
+pLogMsg          dw 0
 ; Strings
 CmdBuf: times (2 + CN_IN_MAX) db 0      ; Command line buffer as String:
 String  CnStartMsg1,"AsmOSx86 Console (Session 0)"
@@ -63,54 +64,53 @@ CnInit:
   mov   [VdColorFore],al                ;  color
   call  VdSetColorAttr                  ; Set color
   call  VdClear                         ; Clear screen
-  lea   eax,[CnStartMsg1]               ; Print 
-  mov   [VdStrPtr],eax                  ;  startup
-  call  VdPutStr                        ;  message 1
-  call  CnCrLf                          ;  with new line
-  mov   ax,[VdCurRow]                   ; Bump
-  inc   ax                              ;  row
-  mov   [VdCurRow],ax                   ;  by 1
-  lea   eax,[CnStartMsg2]               ; Print 
-  mov   [VdStrPtr],eax                  ;  startup
-  call  VdPutStr                        ;  message 2
-  call  CnCrLf                          ;  with new line
-  mov   ax,[VdCurRow]                   ; Bump
-  inc   ax                              ;  row
-  mov   [VdCurRow],ax                   ;  by 1
-  lea   eax,[CnStartMsg3]               ; Print 
-  mov   [VdStrPtr],eax                  ;  startup
-  call  VdPutStr                        ;  message 3
-  call  CnCrLf                          ;  with new line
   xor   ax,ax                           ; Clear input
   mov   [CnInWorkLen],ax                ;  length
   lea   eax,[CmdBuf]                    ; Set destination 
   mov   [CnInDstPtr],eax                ;  buffer for input
   mov   ax,CN_IN_MAX                    ; Set max chars
   mov   [CnInMax],ax                    ;  to read
-  mov   ax,25
-  mov   [VdCurRow],ax
-  mov   ax,1
-  mov   [VdCurCol],ax
-  call  VdSetCursor
-  call  TimeDtPrint ; Temprary time print for testing
-  call  CnCrLf
-  call  TimeTmPrint ; Temprary time print for testing
+  mov   ax,25                           ; Set
+  mov   [VdCurRow],ax                   ;  row to 25
+  mov   ax,1                            ; Set
+  mov   [VdCurCol],ax                   ;  column to 1
+  call  VdSetCursor                     ; Update cursor position
+  ; Log startup messages
+  lea  eax,[CnStartMsg1]
+  mov  [pLogMsg],eax
+  call CnLogIt
+  lea  eax,[CnStartMsg2]
+  mov  [pLogMsg],eax
+  call CnLogIt
+  lea  eax,[CnStartMsg3]
+  mov  [pLogMsg],eax
+  call CnLogIt
   ret
 
 ;------------------------------------------------------------------------------
-; CnCrLf
-; Outputs a carriage return and line feed to the console, advancing to a new line.
-;
+; CnCrLf - Outputs a carriage return and line feed to the console
 ; Output:
 ;   Calls VdPutStr to print CRLF sequence
-;
 ; Notes:
-; - Used to move the cursor to the beginning of the next line in the console.
+; - Used to move the cursor to the beginning of the next line in the console
 ;------------------------------------------------------------------------------
 CnCrLf:
   lea   eax,[CrLf]        
   mov   [VdStrPtr],eax         
   call  VdPutStr   
+  ret
+
+;------------------------------------------------------------------------------
+; CnSpace -  Outputs a space character to the console
+; Output:
+;   Calls VdPutStr to print space character
+; Notes:
+; - Used to insert a space in the console output
+;------------------------------------------------------------------------------
+CnSpace:
+  lea   eax,[Space1]
+  mov   [VdStrPtr],eax
+  call  VdPutStr
   ret
 
 ;------------------------------------------------------------------------------
@@ -176,4 +176,15 @@ CnReadLineOnEnter:
   mov   ax,[CnInWorkLen]
   mov   [esi],ax
   call  VdInClearLine
+  ret
+
+CnLogIt:
+  call  TimeDtPrint
+  call  CnSpace
+  call  TimeTmPrint
+  call  CnSpace
+  mov   eax,[pLogMsg]
+  mov   [VdStrPtr],eax
+  call  VdPutStr
+  call  CnCrLf
   ret

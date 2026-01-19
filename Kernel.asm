@@ -73,6 +73,7 @@ IDT2:
 %include "Keyboard.asm"
 %include "Time.asm"
 %include "Timer.asm"
+%include "Utility.asm"
 %include "Video.asm"
 
 ;--------------------------------------------------------------------------------------------------
