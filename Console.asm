@@ -218,18 +218,15 @@ CnLogIt:
 ; ConsoleCmdDispatch
 ; Dispatches the command in CnCmd by searching ConsoleCmdTable entries:
 ;   dd CommandNameLStr,CmdHandler
-;
 ; Match policy:
 ;   - Exact match (case-sensitive)
 ;   - Length must match
-;
 ; On match:
 ;   - Calls the handler
 ; On no match:
 ;   - Returns (no-op here)
 ;------------------------------------------------------------------------------
 ConsoleCmdDispatch:
-  pusha
   lea   esi,[CnCmd]                     ; ESI = input LStr
   mov   cx,[esi]                        ; CX  = input length
   mov   edi,ConsoleCmdTable             ; EDI = table base
@@ -272,10 +269,12 @@ ConsoleCmdDispatchMatch:
   mov   eax,[edi+4]                     ; EAX = handler address
   call  eax
 ConsoleCmdDispatchDone:
-  popa
   ret
 
 CmdDate:
+  call  TimeDtPrint
+  call  CnCrLf
+  ret
 CmdShutdown:
 CmdHelp:
 CmdEcho:
