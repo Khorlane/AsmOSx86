@@ -44,6 +44,9 @@ String  CnStartMsg3,"Initialization started"
 ;------------------------------------------------------------------------------
 Console:
   call  CnReadLine                      ; Echoes on bottom row; returns string in CmdBuf
+  lea   eax,[CmdBuf]                    ; Echo the entered command
+  mov   [pLogMsg],eax
+  call  CnLogIt
   jmp   Console
 
 ;------------------------------------------------------------------------------
