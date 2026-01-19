@@ -15,10 +15,10 @@
 [bits 32]
 
 ; ----- Console constants -----
-CN_IN_MAX        equ 80                 ; maximum console input length
+CN_IN_MAX        equ 79                 ; maximum console input length
 ; ----- Console variables -----
 pCnCmdBuf        dd 0
-CnInMax          dw 0
+CnCmdMaxLen      dw 0
 CnPad0           dw 0
 CnInWorkLen      dw 0
 CnPad1           dw 0
@@ -72,7 +72,7 @@ CnInit:
   lea   eax,[CmdBuf]                    ; Set destination
   mov   [pCnCmdBuf],eax                 ;  buffer for input
   mov   ax,CN_IN_MAX                    ; Set max chars
-  mov   [CnInMax],ax                    ;  to read
+  mov   [CnCmdMaxLen],ax                ;  to read
   mov   ax,25                           ; Set
   mov   [VdCurRow],ax                   ;  row to 25
   mov   ax,1                            ; Set
@@ -153,7 +153,7 @@ CnReadLineLoop:
 CnReadLineOnChar:
   mov   ax,[CnInWorkLen]
   movzx ecx,ax
-  mov   ax,[CnInMax]
+  mov   ax,[CnCmdMaxLen]
   movzx edx,ax
   cmp   ecx,edx
   jae   CnReadLineLoop
