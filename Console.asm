@@ -17,6 +17,7 @@
 ; ----- Console constants -----
 CN_CMD_MAX_LEN   equ 79                 ; maximum console input length
 ; ----- Console variables -----
+align 4
 pCnCmd           dd 0
 pCnLogMsg        dd 0
 CnCmdLen         dw 0
@@ -34,6 +35,7 @@ String  CommandHelp,     "Help"
 String  CommandEcho,     "Echo"
 ; Console Command Table
 ; Each entry: dd CommandNameLStr,CmdHandler
+align 4
 ConsoleCmdTable:
   dd CommandDate,     CmdDate
   dd CommandShutdown, CmdShutdown
@@ -41,7 +43,12 @@ ConsoleCmdTable:
   dd CommandEcho,     CmdEcho
 ConsoleCmdTableEnd:
 ConsoleCmdTableCount equ (ConsoleCmdTableEnd-ConsoleCmdTable)/8
-
+; Scratch saves (NO stack usage)
+align 4
+CnSaveEax  dd 0
+CnSaveEcx  dd 0
+CnSaveEsi  dd 0
+CnSaveEdi  dd 0
 
 ;------------------------------------------------------------------------------
 ; Console
@@ -103,6 +110,7 @@ CnInit:
   lea  eax,[CnStartMsg3]
   mov  [pCnLogMsg],eax
   call CnLogIt
+  call  CnCmdTableToLower
   ret
 
 ;------------------------------------------------------------------------------
@@ -269,6 +277,70 @@ ConsoleCmdDispatchMatch:
   mov   eax,[edi+4]                     ; EAX = handler address
   call  eax
 ConsoleCmdDispatchDone:
+  ret
+
+;------------------------------------------------------------------------------
+; CnCmdTableToLower (NO push/pop)
+; One-time: force all command table strings to lowercase in-place.
+; Table entries are: dd CommandNameLStr,CmdHandler
+; Preserves: all regs
+;------------------------------------------------------------------------------
+CnCmdTableToLower:
+  mov   [CnSaveEax],eax
+  mov   [CnSaveEcx],ecx
+  mov   [CnSaveEsi],esi
+  mov   [CnSaveEdi],edi
+
+  mov   esi,ConsoleCmdTable
+  mov   ecx,ConsoleCmdTableCount
+CnCmdTableToLower1:
+  test  ecx,ecx
+  jz    CnCmdTableToLowerDone
+  mov   edi,[esi]                       ; EDI = ptr to command LStr (name)
+  call  CnLStrToLower
+  add   esi,8                           ; next entry (name,handler)
+  dec   ecx
+  jmp   CnCmdTableToLower1
+CnCmdTableToLowerDone:
+  mov   eax,[CnSaveEax]
+  mov   ecx,[CnSaveEcx]
+  mov   esi,[CnSaveEsi]
+  mov   edi,[CnSaveEdi]
+  ret
+
+;------------------------------------------------------------------------------
+; CnLStrToLower (NO push/pop)
+; Input:  EDI = ptr to LStr [u16 len][bytes...]
+; Output: payload converted A-Z -> a-z in-place
+; Preserves: all regs
+;------------------------------------------------------------------------------
+CnLStrToLower:
+  mov   [CnSaveEax],eax
+  mov   [CnSaveEcx],ecx
+  mov   [CnSaveEdi],edi
+
+  movzx ecx,word[edi]                   ; ECX = len
+  cmp   ecx,32                          ; safety cap (commands are small)
+  ja    CnLStrToLowerDone
+  add   edi,2                           ; EDI = payload
+CnLStrToLower1:
+  test  ecx,ecx
+  jz    CnLStrToLowerDone
+  mov   al,[edi]
+  cmp   al,'A'
+  jb    CnLStrToLower2
+  cmp   al,'Z'
+  ja    CnLStrToLower2
+  add   al,32
+  mov   [edi],al
+CnLStrToLower2:
+  inc   edi
+  dec   ecx
+  jmp   CnLStrToLower1
+CnLStrToLowerDone:
+  mov   eax,[CnSaveEax]
+  mov   ecx,[CnSaveEcx]
+  mov   edi,[CnSaveEdi]
   ret
 
 CmdDate:
