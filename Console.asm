@@ -25,9 +25,9 @@ CnPad1           dw 0
 pLogMsg          dw 0
 ; Strings
 CmdBuf: times (2 + CN_IN_MAX) db 0      ; Command line buffer as String:
-String  CnStartMsg1,"AsmOSx86 Console (Session 0)"
-String  CnStartMsg2,"AsmOSx86 - A Hobbyist Operating System in x86 Assembly"
-String  CnStartMsg3,"AsmOSx86 Initialization started"
+String  CnStartMsg1,"AsmOSx86 - A Hobbyist Operating System in x86 Assembly"
+String  CnStartMsg2,"Console (Session 0)"
+String  CnStartMsg3,"Initialization started"
 
 ;------------------------------------------------------------------------------
 ; Console
