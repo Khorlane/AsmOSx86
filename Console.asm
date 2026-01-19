@@ -43,12 +43,6 @@ ConsoleCmdTable:
   dd CommandEcho,     CmdEcho
 ConsoleCmdTableEnd:
 ConsoleCmdTableCount equ (ConsoleCmdTableEnd-ConsoleCmdTable)/8
-; Scratch saves (NO stack usage)
-align 4
-CnSaveEax  dd 0
-CnSaveEcx  dd 0
-CnSaveEsi  dd 0
-CnSaveEdi  dd 0
 
 ;------------------------------------------------------------------------------
 ; Console
@@ -110,7 +104,6 @@ CnInit:
   lea  eax,[CnStartMsg3]
   mov  [pCnLogMsg],eax
   call CnLogIt
-  call  CnCmdTableToLower
   ret
 
 ;------------------------------------------------------------------------------
@@ -227,8 +220,7 @@ CnLogIt:
 ; Dispatches the command in CnCmd by searching ConsoleCmdTable entries:
 ;   dd CommandNameLStr,CmdHandler
 ; Match policy:
-;   - Exact match (case-sensitive)
-;   - Length must match
+;   - exact match, case-insensitive, length must match
 ; On match:
 ;   - Calls the handler
 ; On no match:
@@ -255,8 +247,21 @@ ConsoleCmdDispatchNext:
 ConsoleCmdDispatchCmp:
   test  ecx,ecx
   jz    ConsoleCmdDispatchMatch
-  mov   al,[esi]
-  cmp   al,[ebx]
+  mov   al,[esi]                        ; input char
+  mov   dl,[ebx]                        ; table char
+  cmp   al,'A'
+  jb    ConsoleCmdCi1
+  cmp   al,'Z'
+  ja    ConsoleCmdCi1
+  add   al,32                           ; input -> lowercase
+ConsoleCmdCi1:
+  cmp   dl,'A'
+  jb    ConsoleCmdCi2
+  cmp   dl,'Z'
+  ja    ConsoleCmdCi2
+  add   dl,32                           ; table -> lowercase
+ConsoleCmdCi2:
+  cmp   al,dl
   jne   ConsoleCmdDispatchNoMatch
   inc   esi
   inc   ebx
@@ -277,70 +282,6 @@ ConsoleCmdDispatchMatch:
   mov   eax,[edi+4]                     ; EAX = handler address
   call  eax
 ConsoleCmdDispatchDone:
-  ret
-
-;------------------------------------------------------------------------------
-; CnCmdTableToLower (NO push/pop)
-; One-time: force all command table strings to lowercase in-place.
-; Table entries are: dd CommandNameLStr,CmdHandler
-; Preserves: all regs
-;------------------------------------------------------------------------------
-CnCmdTableToLower:
-  mov   [CnSaveEax],eax
-  mov   [CnSaveEcx],ecx
-  mov   [CnSaveEsi],esi
-  mov   [CnSaveEdi],edi
-
-  mov   esi,ConsoleCmdTable
-  mov   ecx,ConsoleCmdTableCount
-CnCmdTableToLower1:
-  test  ecx,ecx
-  jz    CnCmdTableToLowerDone
-  mov   edi,[esi]                       ; EDI = ptr to command LStr (name)
-  call  CnLStrToLower
-  add   esi,8                           ; next entry (name,handler)
-  dec   ecx
-  jmp   CnCmdTableToLower1
-CnCmdTableToLowerDone:
-  mov   eax,[CnSaveEax]
-  mov   ecx,[CnSaveEcx]
-  mov   esi,[CnSaveEsi]
-  mov   edi,[CnSaveEdi]
-  ret
-
-;------------------------------------------------------------------------------
-; CnLStrToLower (NO push/pop)
-; Input:  EDI = ptr to LStr [u16 len][bytes...]
-; Output: payload converted A-Z -> a-z in-place
-; Preserves: all regs
-;------------------------------------------------------------------------------
-CnLStrToLower:
-  mov   [CnSaveEax],eax
-  mov   [CnSaveEcx],ecx
-  mov   [CnSaveEdi],edi
-
-  movzx ecx,word[edi]                   ; ECX = len
-  cmp   ecx,32                          ; safety cap (commands are small)
-  ja    CnLStrToLowerDone
-  add   edi,2                           ; EDI = payload
-CnLStrToLower1:
-  test  ecx,ecx
-  jz    CnLStrToLowerDone
-  mov   al,[edi]
-  cmp   al,'A'
-  jb    CnLStrToLower2
-  cmp   al,'Z'
-  ja    CnLStrToLower2
-  add   al,32
-  mov   [edi],al
-CnLStrToLower2:
-  inc   edi
-  dec   ecx
-  jmp   CnLStrToLower1
-CnLStrToLowerDone:
-  mov   eax,[CnSaveEax]
-  mov   ecx,[CnSaveEcx]
-  mov   edi,[CnSaveEdi]
   ret
 
 CmdDate:
