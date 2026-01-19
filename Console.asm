@@ -17,14 +17,12 @@
 ; ----- Console constants -----
 CN_CMD_MAX_LEN   equ 79                 ; maximum console input length
 ; ----- Console variables -----
-pCnCmdBuf        dd 0
+pCnCmd           dd 0
+pCnLogMsg        dd 0
+CnCmdLen         dw 0
 CnCmdMaxLen      dw 0
-CnPad0           dw 0
-CnInWorkLen      dw 0
-CnPad1           dw 0
-pLogMsg          dw 0
 ; Strings
-CmdBuf: times (2 + CN_CMD_MAX_LEN) db 0      ; Command line buffer as String:
+CnCmd: times (2 + CN_CMD_MAX_LEN) db 0  ; Command line buffer as String:
 String  CnStartMsg1,"AsmOSx86 - A Hobbyist Operating System in x86 Assembly"
 String  CnStartMsg2,"Console (Session 0)"
 String  CnStartMsg3,"Initialization started"
@@ -43,9 +41,9 @@ String  CnStartMsg3,"Initialization started"
 ;   - Output is displayed immediately; command processing can be added as needed.
 ;------------------------------------------------------------------------------
 Console:
-  call  CnReadLine                      ; Returns string in CmdBuf
-  lea   eax,[CmdBuf]                    ; Echo the
-  mov   [pLogMsg],eax                   ;  entered
+  call  CnReadLine                      ; Returns string in CnCmd
+  lea   eax,[CnCmd]                     ; Echo the
+  mov   [pCnLogMsg],eax                 ;  entered command
   call  CnLogIt                         ;  command
   jmp   Console
 
@@ -54,7 +52,7 @@ Console:
 ; Initializes the console input state.
 ;
 ; Output (memory):
-;   CnInWorkLen = 0    ; Input length cleared
+;   CnCmdLen = 0                        ; Input length cleared
 ;
 ; Notes:
 ; - Should be called once at system startup or reset.
@@ -68,9 +66,9 @@ CnInit:
   call  VdSetColorAttr                  ; Set color
   call  VdClear                         ; Clear screen
   xor   ax,ax                           ; Clear input
-  mov   [CnInWorkLen],ax                ;  length
-  lea   eax,[CmdBuf]                    ; Set destination
-  mov   [pCnCmdBuf],eax                 ;  buffer for input
+  mov   [CnCmdLen],ax                   ;  length
+  lea   eax,[CnCmd]                     ; Set destination
+  mov   [pCnCmd],eax                    ;  buffer for input
   mov   ax,CN_CMD_MAX_LEN               ; Set max chars
   mov   [CnCmdMaxLen],ax                ;  to read
   mov   ax,25                           ; Set
@@ -80,13 +78,13 @@ CnInit:
   call  VdSetCursor                     ; Update cursor position
   ; Log startup messages
   lea  eax,[CnStartMsg1]
-  mov  [pLogMsg],eax
+  mov  [pCnLogMsg],eax
   call CnLogIt
   lea  eax,[CnStartMsg2]
-  mov  [pLogMsg],eax
+  mov  [pCnLogMsg],eax
   call CnLogIt
   lea  eax,[CnStartMsg3]
-  mov  [pLogMsg],eax
+  mov  [pCnLogMsg],eax
   call CnLogIt
   ret
 
@@ -123,11 +121,11 @@ CnSpace:
 ; Behavior:
 ;   - Accepts character input, handles backspace and enter keys.
 ;   - Supports editing the input line before submission.
-;   - Stores the input as a length-prefixed string at [pCnCmdBuf].
+;   - Stores the input as a length-prefixed string at [pCnCmd].
 ;
 ; Output (memory):
-;   [pCnCmdBuf]   = Length-prefixed input string (LStr format)
-;   CnInWorkLen  = Number of characters entered
+;   [pCnCmd]   = Length-prefixed input string (LStr format)
+;   CnCmdLen  = Number of characters entered
 ;
 ; Notes:
 ; - Uses KbGetKey for keyboard input and VdInPutChar for display.
@@ -135,7 +133,7 @@ CnSpace:
 ;------------------------------------------------------------------------------
 CnReadLine:
   xor   ax,ax
-  mov   [CnInWorkLen],ax                ; Reset input length
+  mov   [CnCmdLen],ax                ; Reset input length
   call  VdInClearLine
 CnReadLineLoop:
   call  KbGetKey
@@ -151,32 +149,32 @@ CnReadLineLoop:
   je    CnReadLineOnEnter
   jmp   CnReadLineLoop
 CnReadLineOnChar:
-  mov   ax,[CnInWorkLen]
+  mov   ax,[CnCmdLen]
   movzx ecx,ax
   mov   ax,[CnCmdMaxLen]
   movzx edx,ax
   cmp   ecx,edx
   jae   CnReadLineLoop
-  mov   esi,[pCnCmdBuf]
+  mov   esi,[pCnCmd]
   mov   al,[KbOutChar]
   mov   [esi+2+ecx],al
   inc   cx
-  mov   [CnInWorkLen],cx
+  mov   [CnCmdLen],cx
   mov   [VdInCh],al
   call  VdInPutChar
   jmp   CnReadLineLoop
 CnReadLineOnBackspace:
-  mov   ax,[CnInWorkLen]
+  mov   ax,[CnCmdLen]
   movzx ecx,ax
   test  ecx,ecx
   jz    CnReadLineLoop
   dec   cx
-  mov   [CnInWorkLen],cx
+  mov   [CnCmdLen],cx
   call  VdInBackspaceVisual
   jmp   CnReadLineLoop
 CnReadLineOnEnter:
-  mov   esi,[pCnCmdBuf]
-  mov   ax,[CnInWorkLen]
+  mov   esi,[pCnCmd]
+  mov   ax,[CnCmdLen]
   mov   [esi],ax
   call  VdInClearLine
   ret
@@ -186,14 +184,14 @@ CnReadLineOnEnter:
 ; Output: None
 ; Notes:
 ; - Uses TimeDtPrint and TimeTmPrint for timestamping
-; - Outputs the message pointed to by pLogMsg
+; - Outputs the message pointed to by pCnLogMsg
 ; -----------------------------------------------------------------------------
 CnLogIt:
   call  TimeDtPrint
   call  CnSpace
   call  TimeTmPrint
   call  CnSpace
-  mov   eax,[pLogMsg]
+  mov   eax,[pCnLogMsg]
   mov   [pVdStr],eax
   call  VdPutStr
   call  CnCrLf
