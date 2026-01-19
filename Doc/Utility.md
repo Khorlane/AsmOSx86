@@ -36,7 +36,7 @@ A routine belongs in `Utility.asm` if **all** of the following are true:
 ### Typical examples
 
 - String conversion helpers  
-  (`CStrToLStr`)
+  (`CStrToStr`)
 - Small formatting helpers
 - Buffer manipulation helpers
 - Simple math helpers that don’t belong to Timer/Time/etc.
@@ -78,18 +78,18 @@ Utility routines must be **safe to call from anywhere**.
 Utility routines **must respect canonical string formats**:
 
 - **CStr** = NUL-terminated string
-- **LStr** = length-prefixed OS string (`dw total_bytes`)
+- **Str** = length-prefixed OS string (`dw total_bytes`)
 
 Utility code must:
-- never assume LStr payloads are NUL-terminated
+- never assume Str payloads are NUL-terminated
 - never print directly
-- never mix CStr and LStr implicitly
+- never mix CStr and Str implicitly
 
 ### Example (canonical)
 
-`CStrToLStr`:
+`CStrToStr`:
 - Input: CStr
-- Output: LStr
+- Output: Str
 - No printing
 - No padding
 - Length is authoritative
@@ -101,7 +101,7 @@ Utility code must:
 `Utility.asm` may depend on:
 
 - Constants (`equ`)
-- Global limits (e.g. `LSTR_MAX`)
+- Global limits (e.g. `STR_MAX`)
 - ABI rules defined in `Doc/Abi.md`
 
 `Utility.asm` must **not** depend on:

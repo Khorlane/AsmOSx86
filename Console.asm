@@ -34,7 +34,7 @@ String  CommandShutdown, "Shutdown"
 String  CommandHelp,     "Help"
 String  CommandEcho,     "Echo"
 ; Console Command Table
-; Each entry: dd CommandNameLStr,CmdHandler
+; Each entry: dd CommandNameStr,CmdHandler
 align 4
 ConsoleCmdTable:
   dd CommandDate,     CmdDate
@@ -62,6 +62,9 @@ Console:
   lea   eax,[CnCmd]                     ; Echo the
   mov   [pCnLogMsg],eax                 ;  entered command
   call  CnLogIt                         ;  command
+  lea   eax,[CnCmd]
+  mov   [pStr1],eax
+  call  StrTrim
   call  ConsoleCmdDispatch              ; Call handler if match
   jmp   Console
 
@@ -142,7 +145,7 @@ CnSpace:
 ;   - Stores the input as a length-prefixed string at [pCnCmd].
 ;
 ; Output (memory):
-;   [pCnCmd]   = Length-prefixed input string (LStr format)
+;   [pCnCmd]   = Length-prefixed input string (Str format)
 ;   CnCmdLen  = Number of characters entered
 ;
 ; Notes:
@@ -218,7 +221,7 @@ CnLogIt:
 ;------------------------------------------------------------------------------
 ; ConsoleCmdDispatch
 ; Dispatches the command in CnCmd by searching ConsoleCmdTable entries:
-;   dd CommandNameLStr,CmdHandler
+;   dd CommandNameStr,CmdHandler
 ; Match policy:
 ;   - exact match, case-insensitive, length must match
 ; On match:
@@ -227,14 +230,14 @@ CnLogIt:
 ;   - Returns (no-op here)
 ;------------------------------------------------------------------------------
 ConsoleCmdDispatch:
-  lea   esi,[CnCmd]                     ; ESI = input LStr
+  lea   esi,[CnCmd]                     ; ESI = input Str
   mov   cx,[esi]                        ; CX  = input length
   mov   edi,ConsoleCmdTable             ; EDI = table base
   mov   ebp,ConsoleCmdTableCount        ; EBP = entry count
 ConsoleCmdDispatchNext:
   test  ebp,ebp
   jz    ConsoleCmdDispatchDone
-  mov   ebx,[edi]                       ; EBX = ptr to command LStr
+  mov   ebx,[edi]                       ; EBX = ptr to command Str
   mov   dx,[ebx]                        ; DX  = cmd length
   cmp   dx,cx
   jne   ConsoleCmdDispatchSkip

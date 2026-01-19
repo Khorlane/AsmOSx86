@@ -9,7 +9,7 @@
 ;     - Must remain consistent across multiple modules
 ;
 ; Contains
-;   - Size limits (e.g. LStr payload capacity)
+;   - Size limits (e.g. Str payload capacity)
 ;   - Global policy constants
 ;   - Compile-time kernel configuration values
 ;

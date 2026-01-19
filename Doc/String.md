@@ -5,7 +5,7 @@
 AsmOSx86 uses **two string formats**:
 
 - **CStr**: C-style, **NUL-terminated** byte string.
-- **LStr**: OS-native, **length-prefixed** string produced by the `String` macro and consumed by `PutStr`.
+- **Str**: OS-native, **length-prefixed** string produced by the `String` macro and consumed by `PutStr`.
 
 This document defines the canonical rules so all modules handle strings consistently.
 
@@ -23,14 +23,14 @@ This document defines the canonical rules so all modules handle strings consiste
 
 ### Typical producers/consumers
 - Produced by: `KbReadLine` (0-terminated line buffer)
-- Avoid printing directly once converted workflows exist (prefer conversion to LStr).
+- Avoid printing directly once converted workflows exist (prefer conversion to Str).
 
 ---
 
-## LStr (length-prefixed OS string)
+## Str (length-prefixed OS string)
 
 ### Layout
-LStr starts with a 2-byte word length followed by payload bytes:
+Str starts with a 2-byte word length followed by payload bytes:
 ```
 dw TotalLengthBytes
 db PayloadBytes...
@@ -47,7 +47,7 @@ This matches:
 - `PutStr`, which does `mov cx,[esi]` then `sub cx,2` to get payload length
 
 ### Example
-String `"ABC"` in LStr format:
+String `"ABC"` in Str format:
 - Total length = 2 + 3 = 5
 
 ```
@@ -59,18 +59,18 @@ db 'A','B','C'
 
 ## The `String` macro
 
-The canonical way to define an LStr at assembly time:
+The canonical way to define an Str at assembly time:
 
 - Writes a `dw` length that includes the `dw` itself.
 - Emits the payload bytes immediately after the length field.
 
-All LStr constants should be created via this macro (or must exactly match its layout).
+All Str constants should be created via this macro (or must exactly match its layout).
 
 ---
 
 ## Printing: `PutStr`
 
-`PutStr` expects an **LStr** pointer in `EBX`.
+`PutStr` expects an **Str** pointer in `EBX`.
 
 Key behavior:
 - Reads `dw length` (total bytes)
@@ -80,26 +80,26 @@ Key behavior:
 
 ---
 
-## Conversion: `CStrToLStr`
+## Conversion: `CStrToStr`
 
 ### Purpose
-Convert a CStr (NUL-terminated) into an LStr (length-prefixed).
+Convert a CStr (NUL-terminated) into an Str (length-prefixed).
 
 ### Contract
 - Input:
   - `ESI` = CStr pointer
-  - `EDI` = LStr destination pointer
+  - `EDI` = Str destination pointer
 - Output:
-  - Copies up to `LSTR_MAX` payload bytes
+  - Copies up to `STR_MAX` payload bytes
   - Writes `dw total_length` where:
-    - `total_length = 2 + payload_length`
+    - `total_length = payload_length`
 - Policy:
   - No padding / no space-fill
-  - Truncates at `LSTR_MAX`
+  - Truncates at `STR_MAX`
   - Consumers must trust the length
 
 ### Capacity convention
-`LSTR_MAX` is the **maximum payload length** (bytes after the 2-byte length).
+`STR_MAX` is the **maximum payload length** (bytes after the 2-byte length).
 
 ---
 
@@ -107,21 +107,21 @@ Convert a CStr (NUL-terminated) into an LStr (length-prefixed).
 
 ### ✅ Do
 - Use **CStr** for editable buffers (keyboard input, parsing scratch).
-- Convert to **LStr** when passing strings into OS routines like `PutStr`.
-- Treat the LStr length as **authoritative** (never require padding).
+- Convert to **Str** when passing strings into OS routines like `PutStr`.
+- Treat the Str length as **authoritative** (never require padding).
 
 ### ❌ Don’t
 - Don’t pass a CStr directly to `PutStr`.
-- Don’t assume LStr payload is NUL-terminated.
-- Don’t store payload length in the LStr `dw`. It must be **total bytes**.
+- Don’t assume Str payload is NUL-terminated.
+- Don’t store payload length in the Str `dw`. It must be **total payload bytes**.
 
 ---
 
 ## Naming standards
 
 - **CStr**: NUL-terminated string
-- **LStr**: length-prefixed OS-native string (length includes the 2-byte prefix)
-- **LSTR_MAX**: maximum payload length (excludes the 2-byte length word)
+- **Str**: length-prefixed OS-native string (length includes the 2-byte prefix)
+- **STR_MAX**: maximum payload length (excludes the 2-byte length word)
 
 ---
 
@@ -130,5 +130,5 @@ Convert a CStr (NUL-terminated) into an LStr (length-prefixed).
 | Type | Terminator | Length storage | Length meaning |
 |------|------------|----------------|----------------|
 | CStr | NUL (0)    | none           | inferred by scan |
-| LStr | none       | `dw` prefix    | total bytes (2 + payload) |
+| Str  | none       | `dw` prefix    | total bytes (= payload length) |
 
