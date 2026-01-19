@@ -219,3 +219,51 @@ UptimePrint:
   call  CnPrint
   popa
   ret
+
+;---------------------------------------------------------------------------------------------------
+; TimeUptimeFmtHms - EBX=String,formats uptime "HH:MM:SS" (hours mod 100)
+;---------------------------------------------------------------------------------------------------
+TimeUptimeFmtHms:
+  pusha                                 ; Save registers
+  mov   ebp,ebx                         ; Save dest String
+  cmp   byte[BootValid],1
+  je    TimeUptimeFmtHms1
+TimeUptimeFmtHms1:
+  call  TimerNowTicks                   ; EDX:EAX = now
+  sub   eax,[BootLo]
+  sbb   edx,[BootHi]                    ; EDX:EAX = uptime_ticks
+  mov   ecx,TIME_PIT_HZ
+  div   ecx                             ; EAX=uptime_seconds,EDX=rem
+  xor   edx,edx
+  mov   ecx,3600
+  div   ecx                             ; EAX=hours_total,EDX=rem3600
+  mov   esi,eax                         ; hours_total
+  mov   edi,edx                         ; rem3600
+  mov   eax,edi
+  xor   edx,edx
+  mov   ecx,60
+  div   ecx                             ; EAX=minutes,EDX=seconds
+  mov   ebx,eax                         ; minutes
+  mov   ecx,edx                         ; seconds
+  mov   eax,esi
+  xor   edx,edx
+  mov   edi,100
+  div   edi                             ; EDX=hours_mod100
+  mov   al,dl                           ; AL=hours (0..99)
+  mov   edi,ebp                         ; EDI = String base
+  add   edi,2                           ; Skip length word
+  call  TimePut2Dec                     ; HH
+  mov   al,':'
+  mov   [edi],al
+  inc   edi
+  mov   eax,ebx
+  mov   al,al
+  call  TimePut2Dec                     ; MM
+  mov   al,':'
+  mov   [edi],al
+  inc   edi
+  mov   eax,ecx
+  mov   al,al
+  call  TimePut2Dec                     ; SS
+  popa
+  ret
