@@ -19,19 +19,20 @@ CN_CMD_MAX_LEN   equ 79                 ; maximum console input length
 ; ----- Console variables -----
 align 4
 CnHelpCnt        dd 0                  ; Number of help entries 
-CnHelpPtr        dd 0
 CnTmpCount       dd 0                  ; temp: table entry count
-pCnCmd           dd 0
-pCnLogMsg        dd 0
-pCnTmpInput      dd 0                  ; temp: input payload ptr
-pCnTmpTable      dd 0                  ; temp: table entry ptr
-CnCmdLen         dw 0
-CnCmdMaxLen      dw 0
+pCnCmdLine       dd 0                  ; Pointer to command line buffer
+pCnCmdTable      dd 0                  ; Pointer to command table
+pCnLogMsg        dd 0                  ; Pointer to log message
+pCnTmpInput      dd 0                  ; Pointer to temp: input payload
+pCnTmpTable      dd 0                  ; Pointer to temp: command table
+CnCmdLineLen     dw 0                  ; Command line length
+CnCmdMaxLen      dw 0                  ; Command line max length
 CnTmpLen         dw 0                  ; temp: input length (u16)
-CnTmpPad0        dw 0                  ; pad to keep dd aligned (optional)
+
+; Command line buffer as String:
+CnCmdLine: times (2 + CN_CMD_MAX_LEN) db 0
 
 ; Strings
-CnCmd: times (2 + CN_CMD_MAX_LEN) db 0  ; Command line buffer as String:
 String  CnStartMsg1,"AsmOSx86 - A Hobbyist Operating System in x86 Assembly"
 String  CnStartMsg2,"Console (Session 0)"
 String  CnStartMsg3,"Initialization started"
@@ -43,8 +44,8 @@ String  CnCmdDate,     "Date"
 String  CnCmdHelp,     "Help"
 String  CnCmdShutdown, "Shutdown"
 String  CnCmdTime,     "Time"
-; Console Command Table
-; Each entry: dd CnCmdNameStr,CnCmdHandler
+
+; Console Command Table and Handlers
 align 4
 CnCmdTable:
   dd CnCmdDate,     CmdDate
@@ -68,11 +69,11 @@ CnCmdTableCount equ (CnCmdTableEnd-CnCmdTable)/8
 ;   - Output is displayed immediately; command processing can be added as needed.
 ;------------------------------------------------------------------------------
 Console:
-  call  CnReadLine                      ; Returns string in CnCmd
-  lea   eax,[CnCmd]                     ; Echo the
+  call  CnReadLine                      ; Returns string in CnCmdLine
+  lea   eax,[CnCmdLine]                 ; Echo the
   mov   [pCnLogMsg],eax                 ;  entered command
   call  CnLogIt                         ;  command
-  lea   eax,[CnCmd]
+  lea   eax,[CnCmdLine]
   mov   [pStr1],eax
   call  StrTrim
   call  CnCmdDispatch                   ; Call handler if match
@@ -83,7 +84,7 @@ Console:
 ; Initializes the console input state.
 ;
 ; Output (memory):
-;   CnCmdLen = 0                        ; Input length cleared
+;   CnCmdLineLen = 0                        ; Input length cleared
 ;
 ; Notes:
 ; - Should be called once at system startup or reset.
@@ -97,9 +98,9 @@ CnInit:
   call  VdSetColorAttr                  ; Set color
   call  VdClear                         ; Clear screen
   xor   ax,ax                           ; Clear input
-  mov   [CnCmdLen],ax                   ;  length
-  lea   eax,[CnCmd]                     ; Set destination
-  mov   [pCnCmd],eax                    ;  buffer for input
+  mov   [CnCmdLineLen],ax               ;  length
+  lea   eax,[CnCmdLine]                 ; Set destination
+  mov   [pCnCmdLine],eax                ;  buffer for input
   mov   ax,CN_CMD_MAX_LEN               ; Set max chars
   mov   [CnCmdMaxLen],ax                ;  to read
   mov   ax,25                           ; Set
@@ -152,11 +153,11 @@ CnSpace:
 ; Behavior:
 ;   - Accepts character input, handles backspace and enter keys.
 ;   - Supports editing the input line before submission.
-;   - Stores the input as a length-prefixed string at [pCnCmd].
+;   - Stores the input as a length-prefixed string at [pCnCmdLine].
 ;
 ; Output (memory):
-;   [pCnCmd]   = Length-prefixed input string (Str format)
-;   CnCmdLen  = Number of characters entered
+;   [pCnCmdLine]   = Length-prefixed input string (Str format)
+;   CnCmdLineLen  = Number of characters entered
 ;
 ; Notes:
 ; - Uses KbGetKey for keyboard input and VdInPutChar for display.
@@ -164,7 +165,7 @@ CnSpace:
 ;------------------------------------------------------------------------------
 CnReadLine:
   xor   ax,ax
-  mov   [CnCmdLen],ax                   ; Reset input length
+  mov   [CnCmdLineLen],ax                   ; Reset input length
   call  VdInClearLine
 CnReadLineLoop:
   call  KbGetKey
@@ -180,32 +181,32 @@ CnReadLineLoop:
   je    CnReadLineOnEnter
   jmp   CnReadLineLoop
 CnReadLineOnChar:
-  mov   ax,[CnCmdLen]
+  mov   ax,[CnCmdLineLen]
   movzx ecx,ax
   mov   ax,[CnCmdMaxLen]
   movzx edx,ax
   cmp   ecx,edx
   jae   CnReadLineLoop
-  mov   esi,[pCnCmd]
+  mov   esi,[pCnCmdLine]
   mov   al,[KbOutChar]
   mov   [esi+2+ecx],al
   inc   cx
-  mov   [CnCmdLen],cx
+  mov   [CnCmdLineLen],cx
   mov   [VdInCh],al
   call  VdInPutChar
   jmp   CnReadLineLoop
 CnReadLineOnBackspace:
-  mov   ax,[CnCmdLen]
+  mov   ax,[CnCmdLineLen]
   movzx ecx,ax
   test  ecx,ecx
   jz    CnReadLineLoop
   dec   cx
-  mov   [CnCmdLen],cx
+  mov   [CnCmdLineLen],cx
   call  VdInBackspaceVisual
   jmp   CnReadLineLoop
 CnReadLineOnEnter:
-  mov   esi,[pCnCmd]
-  mov   ax,[CnCmdLen]
+  mov   esi,[pCnCmdLine]
+  mov   ax,[CnCmdLineLen]
   mov   [esi],ax
   call  VdInClearLine
   ret
@@ -230,7 +231,7 @@ CnLogIt:
 
 ;------------------------------------------------------------------------------
 ; CnCmdDispatch
-; Dispatches the command in CnCmd by searching CnCmdTable entries:
+; Dispatches the command in CnCmdLine by searching CnCmdTable entries:
 ;   dd CnCmdNameStr,CnCmdHandler
 ; Match policy:
 ;   - exact match, case-insensitive, length must match
@@ -240,7 +241,7 @@ CnLogIt:
 ;   - Just returns
 ;------------------------------------------------------------------------------
 CnCmdDispatch:
-  lea   eax,[CnCmd]                     ; EAX = input Str
+  lea   eax,[CnCmdLine]                 ; EAX = input Str
   mov   bx,[eax]                        ; BX  = input length
   mov   [CnTmpLen],bx                   ; save len (u16)
   lea   eax,[eax+2]                     ; EAX = input payload
@@ -312,21 +313,21 @@ CmdDate:
 
 CmdHelp:
   mov   eax,CnCmdTable
-  mov   [CnHelpPtr],eax
+  mov   [pCnCmdTable],eax
   mov   eax,CnCmdTableCount
   mov   [CnHelpCnt],eax
 CmdHelpLoop:
   mov   eax,[CnHelpCnt]
   test  eax,eax
   jz    CmdHelpDone
-  mov   eax,[CnHelpPtr]                 ; EAX = entry ptr (safe)
+  mov   eax,[pCnCmdTable]                 ; EAX = entry ptr (safe)
   mov   ebx,[eax]                       ; EBX = ptr to command Str
   mov   [pVdStr],ebx
   call  VdPutStr
   call  CnCrLf
-  mov   eax,[CnHelpPtr]                 ; reload (calls clobbered regs)
+  mov   eax,[pCnCmdTable]                 ; reload (calls clobbered regs)
   add   eax,8                           ; next entry
-  mov   [CnHelpPtr],eax
+  mov   [pCnCmdTable],eax
   mov   eax,[CnHelpCnt]
   dec   eax
   mov   [CnHelpCnt],eax
