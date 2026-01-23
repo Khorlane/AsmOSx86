@@ -18,12 +18,17 @@
 CN_CMD_MAX_LEN   equ 79                 ; maximum console input length
 ; ----- Console variables -----
 align 4
+CnHelpCnt        dd 0                  ; Number of help entries 
+CnHelpPtr        dd 0
+CnTmpCount       dd 0                  ; temp: table entry count
 pCnCmd           dd 0
 pCnLogMsg        dd 0
-CnHelpPtr        dd 0
-CnHelpCnt        dd 0
+pCnTmpInput      dd 0                  ; temp: input payload ptr
+pCnTmpTable      dd 0                  ; temp: table entry ptr
 CnCmdLen         dw 0
 CnCmdMaxLen      dw 0
+CnTmpLen         dw 0                  ; temp: input length (u16)
+CnTmpPad0        dw 0                  ; pad to keep dd aligned (optional)
 
 ; Strings
 CnCmd: times (2 + CN_CMD_MAX_LEN) db 0  ; Command line buffer as String:
@@ -232,26 +237,31 @@ CnLogIt:
 ; On match:
 ;   - Calls the handler
 ; On no match:
-;   - Returns (no-op here)
+;   - Just returns
 ;------------------------------------------------------------------------------
 CnCmdDispatch:
-  lea   esi,[CnCmd]                     ; ESI = input Str
-  mov   cx,[esi]                        ; CX  = input length
-  mov   edi,CnCmdTable                  ; EDI = table base
-  mov   ebp,CnCmdTableCount             ; EBP = entry count
+  lea   eax,[CnCmd]                     ; EAX = input Str
+  mov   bx,[eax]                        ; BX  = input length
+  mov   [CnTmpLen],bx                   ; save len (u16)
+  lea   eax,[eax+2]                     ; EAX = input payload
+  mov   [pCnTmpInput],eax               ; save input payload ptr
+  mov   eax,CnCmdTable                  ; EAX = table base
+  mov   [pCnTmpTable],eax               ; save table ptr
+  mov   eax,CnCmdTableCount             ; EAX = entry count
+  mov   [CnTmpCount],eax                ; save count
 CnCmdDispatchNext:
-  test  ebp,ebp
+  mov   eax,[CnTmpCount]                ; remaining entries
+  test  eax,eax
   jz    CnCmdDispatchDone
+  mov   edi,[pCnTmpTable]               ; EDI = entry ptr
   mov   ebx,[edi]                       ; EBX = ptr to command Str
   mov   dx,[ebx]                        ; DX  = cmd length
-  cmp   dx,cx
+  cmp   dx,[CnTmpLen]                   ; length match?
   jne   CnCmdDispatchSkip
-  push  esi                             ; Save input ptr
-  push  edi                             ; Save table ptr
-  push  ebp                             ; Save count
-  lea   esi,[esi+2]                     ; ESI = input payload
+  ; compare payloads, case-insensitive
+  movzx ecx,word[CnTmpLen]              ; ECX = compare count
+  mov   esi,[pCnTmpInput]               ; ESI = input payload
   lea   ebx,[ebx+2]                     ; EBX = cmd payload
-  movzx ecx,cx                          ; ECX = compare count
 CnCmdDispatchCmp:
   test  ecx,ecx
   jz    CnCmdDispatchMatch
@@ -270,25 +280,23 @@ CnCmdCi1:
   add   ah,32                           ; table -> lowercase
 CnCmdCi2:
   cmp   al,ah
-  jne   CnCmdDispatchNoMatch
+  jne   CnCmdDispatchSkip
   inc   esi
   inc   ebx
   dec   ecx
   jmp   CnCmdDispatchCmp
-CnCmdDispatchNoMatch:
-  pop   ebp
-  pop   edi
-  pop   esi
-CnCmdDispatchSkip:
-  add   edi,8                           ; Next entry (name,handler)
-  dec   ebp
-  jmp   CnCmdDispatchNext
 CnCmdDispatchMatch:
-  pop   ebp
-  pop   edi
-  pop   esi
   mov   eax,[edi+4]                     ; EAX = handler address
   call  eax
+  ret
+CnCmdDispatchSkip:
+  mov   eax,[pCnTmpTable]               ; advance to next entry
+  add   eax,8
+  mov   [pCnTmpTable],eax
+  mov   eax,[CnTmpCount]
+  dec   eax
+  mov   [CnTmpCount],eax
+  jmp   CnCmdDispatchNext
 CnCmdDispatchDone:
   ret
 
