@@ -41,13 +41,13 @@ String  CommandTime,     "Time"
 ; Console Command Table
 ; Each entry: dd CommandNameStr,CmdHandler
 align 4
-ConsoleCmdTable:
+CnCmdTable:
   dd CommandDate,     CmdDate
   dd CommandHelp,     CmdHelp
   dd CommandShutdown, CmdShutdown
   dd CommandTime,     CmdTime
-ConsoleCmdTableEnd:
-ConsoleCmdTableCount equ (ConsoleCmdTableEnd-ConsoleCmdTable)/8
+CnCmdTableEnd:
+CnCmdTableCount equ (CnCmdTableEnd-CnCmdTable)/8
 
 ;------------------------------------------------------------------------------
 ; Console
@@ -70,7 +70,7 @@ Console:
   lea   eax,[CnCmd]
   mov   [pStr1],eax
   call  StrTrim
-  call  ConsoleCmdDispatch              ; Call handler if match
+  call  CnCmdDispatch                   ; Call handler if match
   jmp   Console
 
 ;------------------------------------------------------------------------------
@@ -159,7 +159,7 @@ CnSpace:
 ;------------------------------------------------------------------------------
 CnReadLine:
   xor   ax,ax
-  mov   [CnCmdLen],ax                ; Reset input length
+  mov   [CnCmdLen],ax                   ; Reset input length
   call  VdInClearLine
 CnReadLineLoop:
   call  KbGetKey
@@ -224,8 +224,8 @@ CnLogIt:
   ret
 
 ;------------------------------------------------------------------------------
-; ConsoleCmdDispatch
-; Dispatches the command in CnCmd by searching ConsoleCmdTable entries:
+; CnCmdDispatch
+; Dispatches the command in CnCmd by searching CnCmdTable entries:
 ;   dd CommandNameStr,CmdHandler
 ; Match policy:
 ;   - exact match, case-insensitive, length must match
@@ -234,67 +234,67 @@ CnLogIt:
 ; On no match:
 ;   - Returns (no-op here)
 ;------------------------------------------------------------------------------
-ConsoleCmdDispatch:
+CnCmdDispatch:
   lea   esi,[CnCmd]                     ; ESI = input Str
   mov   cx,[esi]                        ; CX  = input length
-  mov   edi,ConsoleCmdTable             ; EDI = table base
-  mov   ebp,ConsoleCmdTableCount        ; EBP = entry count
-ConsoleCmdDispatchNext:
+  mov   edi,CnCmdTable                  ; EDI = table base
+  mov   ebp,CnCmdTableCount             ; EBP = entry count
+CnCmdDispatchNext:
   test  ebp,ebp
-  jz    ConsoleCmdDispatchDone
+  jz    CnCmdDispatchDone
   mov   ebx,[edi]                       ; EBX = ptr to command Str
   mov   dx,[ebx]                        ; DX  = cmd length
   cmp   dx,cx
-  jne   ConsoleCmdDispatchSkip
+  jne   CnCmdDispatchSkip
   push  esi                             ; Save input ptr
   push  edi                             ; Save table ptr
   push  ebp                             ; Save count
   lea   esi,[esi+2]                     ; ESI = input payload
   lea   ebx,[ebx+2]                     ; EBX = cmd payload
   movzx ecx,cx                          ; ECX = compare count
-ConsoleCmdDispatchCmp:
+CnCmdDispatchCmp:
   test  ecx,ecx
-  jz    ConsoleCmdDispatchMatch
+  jz    CnCmdDispatchMatch
   mov   al,[esi]                        ; input char
   mov   ah,[ebx]                        ; table char
   cmp   al,'A'
-  jb    ConsoleCmdCi1
+  jb    CnCmdCi1
   cmp   al,'Z'
-  ja    ConsoleCmdCi1
+  ja    CnCmdCi1
   add   al,32                           ; input -> lowercase
-ConsoleCmdCi1:
+CnCmdCi1:
   cmp   ah,'A'
-  jb    ConsoleCmdCi2
+  jb    CnCmdCi2
   cmp   ah,'Z'
-  ja    ConsoleCmdCi2
+  ja    CnCmdCi2
   add   ah,32                           ; table -> lowercase
-ConsoleCmdCi2:
+CnCmdCi2:
   cmp   al,ah
-  jne   ConsoleCmdDispatchNoMatch
+  jne   CnCmdDispatchNoMatch
   inc   esi
   inc   ebx
   dec   ecx
-  jmp   ConsoleCmdDispatchCmp
-ConsoleCmdDispatchNoMatch:
+  jmp   CnCmdDispatchCmp
+CnCmdDispatchNoMatch:
   pop   ebp
   pop   edi
   pop   esi
-ConsoleCmdDispatchSkip:
+CnCmdDispatchSkip:
   add   edi,8                           ; Next entry (name,handler)
   dec   ebp
-  jmp   ConsoleCmdDispatchNext
-ConsoleCmdDispatchMatch:
+  jmp   CnCmdDispatchNext
+CnCmdDispatchMatch:
   pop   ebp
   pop   edi
   pop   esi
   mov   eax,[edi+4]                     ; EAX = handler address
   call  eax
-ConsoleCmdDispatchDone:
+CnCmdDispatchDone:
   ret
 
 ;------------------------------------------------------------------------------
 ; Command Handlers
-; Each handler corresponds to a command in ConsoleCmdTable.
+; Each handler corresponds to a command in CnCmdTable.
 ; Handlers perform specific actions based on the command invoked.
 ;------------------------------------------------------------------------------
 CmdDate:
@@ -303,9 +303,9 @@ CmdDate:
   ret
 
 CmdHelp:
-  mov   eax,ConsoleCmdTable
+  mov   eax,CnCmdTable
   mov   [CnHelpPtr],eax
-  mov   eax,ConsoleCmdTableCount
+  mov   eax,CnCmdTableCount
   mov   [CnHelpCnt],eax
 CmdHelpLoop:
   mov   eax,[CnHelpCnt]
