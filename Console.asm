@@ -34,18 +34,18 @@ String  CnShutdown1,"AsmOSx86 shutting down system..."
 String  CnShutdown2,"Shutdown complete."
 
 ; ----- Console commands -----
-String  CommandDate,     "Date"
-String  CommandHelp,     "Help"
-String  CommandShutdown, "Shutdown"
-String  CommandTime,     "Time"
+String  CnCmdDate,     "Date"
+String  CnCmdHelp,     "Help"
+String  CnCmdShutdown, "Shutdown"
+String  CnCmdTime,     "Time"
 ; Console Command Table
-; Each entry: dd CommandNameStr,CmdHandler
+; Each entry: dd CnCmdNameStr,CnCmdHandler
 align 4
 CnCmdTable:
-  dd CommandDate,     CmdDate
-  dd CommandHelp,     CmdHelp
-  dd CommandShutdown, CmdShutdown
-  dd CommandTime,     CmdTime
+  dd CnCmdDate,     CmdDate
+  dd CnCmdHelp,     CmdHelp
+  dd CnCmdShutdown, CmdShutdown
+  dd CnCmdTime,     CmdTime
 CnCmdTableEnd:
 CnCmdTableCount equ (CnCmdTableEnd-CnCmdTable)/8
 
@@ -226,7 +226,7 @@ CnLogIt:
 ;------------------------------------------------------------------------------
 ; CnCmdDispatch
 ; Dispatches the command in CnCmd by searching CnCmdTable entries:
-;   dd CommandNameStr,CmdHandler
+;   dd CnCmdNameStr,CnCmdHandler
 ; Match policy:
 ;   - exact match, case-insensitive, length must match
 ; On match:
