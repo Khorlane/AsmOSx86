@@ -20,27 +20,32 @@ CN_CMD_MAX_LEN   equ 79                 ; maximum console input length
 align 4
 pCnCmd           dd 0
 pCnLogMsg        dd 0
+CnHelpPtr        dd 0
+CnHelpCnt        dd 0
 CnCmdLen         dw 0
 CnCmdMaxLen      dw 0
+
 ; Strings
 CnCmd: times (2 + CN_CMD_MAX_LEN) db 0  ; Command line buffer as String:
 String  CnStartMsg1,"AsmOSx86 - A Hobbyist Operating System in x86 Assembly"
 String  CnStartMsg2,"Console (Session 0)"
 String  CnStartMsg3,"Initialization started"
+String  CnShutdown1,"AsmOSx86 shutting down system..."
+String  CnShutdown2,"Shutdown complete."
 
 ; ----- Console commands -----
 String  CommandDate,     "Date"
-String  CommandShutdown, "Shutdown"
 String  CommandHelp,     "Help"
-String  CommandEcho,     "Echo"
+String  CommandShutdown, "Shutdown"
+String  CommandTime,     "Time"
 ; Console Command Table
 ; Each entry: dd CommandNameStr,CmdHandler
 align 4
 ConsoleCmdTable:
   dd CommandDate,     CmdDate
-  dd CommandShutdown, CmdShutdown
   dd CommandHelp,     CmdHelp
-  dd CommandEcho,     CmdEcho
+  dd CommandShutdown, CmdShutdown
+  dd CommandTime,     CmdTime
 ConsoleCmdTableEnd:
 ConsoleCmdTableCount equ (ConsoleCmdTableEnd-ConsoleCmdTable)/8
 
@@ -252,7 +257,6 @@ ConsoleCmdDispatchCmp:
   jz    ConsoleCmdDispatchMatch
   mov   al,[esi]                        ; input char
   mov   ah,[ebx]                        ; table char
-
   cmp   al,'A'
   jb    ConsoleCmdCi1
   cmp   al,'Z'
@@ -297,7 +301,48 @@ CmdDate:
   call  TimeDtPrint
   call  CnCrLf
   ret
-CmdShutdown:
+
 CmdHelp:
-CmdEcho:
+  mov   eax,ConsoleCmdTable
+  mov   [CnHelpPtr],eax
+  mov   eax,ConsoleCmdTableCount
+  mov   [CnHelpCnt],eax
+CmdHelpLoop:
+  mov   eax,[CnHelpCnt]
+  test  eax,eax
+  jz    CmdHelpDone
+  mov   eax,[CnHelpPtr]                 ; EAX = entry ptr (safe)
+  mov   ebx,[eax]                       ; EBX = ptr to command Str
+  mov   [pVdStr],ebx
+  call  VdPutStr
+  call  CnCrLf
+  mov   eax,[CnHelpPtr]                 ; reload (calls clobbered regs)
+  add   eax,8                           ; next entry
+  mov   [CnHelpPtr],eax
+  mov   eax,[CnHelpCnt]
+  dec   eax
+  mov   [CnHelpCnt],eax
+  jmp   CmdHelpLoop
+CmdHelpDone:
+  ret
+
+CmdShutdown:
+  lea   eax,[CnShutdown1]               ; Print 1st
+  mov   [pCnLogMsg],eax                 ;  shutdown
+  call  CnLogIt                         ;  message
+  lea   eax,[CnShutdown2]               ; Print 2nd
+  mov   [pCnLogMsg],eax                 ;  shutdown
+  call  CnLogIt                         ;  message
+  mov   ax,0x2000                       ; select Bochs power-control port
+  mov   dx,0xB004                       ;  "soft power off" value
+  out   dx,ax                           ;  write value to port
+  mov   dx,0x604                        ; Alternate ACPI 
+  out   dx,ax                           ;  poweroff port
+  cli                                   ; Fallback behavior
+  hlt                                   ;  if above fails
+  ret                                   ; Never reached
+
+CmdTime:
+  call  TimeTmPrint
+  call  CnCrLf
   ret
