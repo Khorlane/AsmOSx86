@@ -49,11 +49,12 @@ TimerInit:
   mov   al,PIT_MODE2_CH0                ; PIT ch0 mode2
   mov   dx,PIT_CMD                      ; Command port
   out   dx,al                           ; Program PIT
-  xor   eax,eax                         ; Divisor = 0 => 65536
   mov   dx,PIT_CH0                      ; Channel 0 data port
-  out   dx,al                           ; Low byte
-  out   dx,al                           ; High byte
-  mov   word[TimerReload],0             ; Store divisor (0=65536)
+  mov   al,0FFh                         ; Divisor low  = 0xFF
+  out   dx,al
+  mov   al,0FFh                         ; Divisor high = 0xFF  (0xFFFF)
+  out   dx,al
+  mov   word[TimerReload],0FFFFh        ; Store divisor
   mov   byte[TimerFirstRead],1          ; Force first-read behavior
   xor   eax,eax                         ; Clear accumulator
   mov   [TimerTicksLo],eax              ;  low
@@ -99,11 +100,7 @@ TimerNowTicks1:
   cmp   ax,bx                           ; last >= curr ?
   jae   TimerNowTicks3                  ;  Yes (no wrap)
   ; Wrap case: delta = last + reload - curr
-  ; reload = 65536 if TimerReload == 0
-  movzx ecx,word[TimerReload]           ; ECX = reload (0..65535)
-  test  ecx,ecx                         ; reload==0?
-  jne   TimerNowTicks2                  ;  No
-  mov   ecx,65536                       ;  Yes: treat as 65536
+  movzx ecx,word[TimerReload]           ; ECX = reload (1..65535)
 TimerNowTicks2:
   movzx edx,ax                          ; EDX = last
   add   edx,ecx                         ; EDX = last + reload

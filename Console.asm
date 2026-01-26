@@ -168,6 +168,7 @@ CnReadLine:
   mov   [CnCmdLineLen],ax                   ; Reset input length
   call  VdInClearLine
 CnReadLineLoop:
+  call  TimerNowTicks                       ; keep accumulator updated
   call  KbGetKey
   mov   al,[KbOutHasKey]
   test  al,al
