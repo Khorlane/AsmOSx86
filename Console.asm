@@ -48,10 +48,10 @@ String  CnCmdTime,     "Time"
 ; Console Command Table and Handlers
 align 4
 CnCmdTable:
-  dd CnCmdDate,     CmdDate
-  dd CnCmdHelp,     CmdHelp
-  dd CnCmdShutdown, CmdShutdown
-  dd CnCmdTime,     CmdTime
+  dd CnCmdDate,     CnDoCmdDate
+  dd CnCmdHelp,     CnDoCmdHelp
+  dd CnCmdShutdown, CnDoCmdShutdown
+  dd CnCmdTime,     CnDoCmdTime
 CnCmdTableEnd:
 CnCmdTableCount equ (CnCmdTableEnd-CnCmdTable)/8
 
@@ -306,20 +306,20 @@ CnCmdDispatchDone:
 ; Each handler corresponds to a command in CnCmdTable.
 ; Handlers perform specific actions based on the command invoked.
 ;------------------------------------------------------------------------------
-CmdDate:
+CnDoCmdDate:
   call  TimeDtPrint
   call  CnCrLf
   ret
 
-CmdHelp:
+CnDoCmdHelp:
   mov   eax,CnCmdTable
   mov   [pCnCmdTable],eax
   mov   eax,CnCmdTableCount
   mov   [CnHelpCnt],eax
-CmdHelpLoop:
+CnDoCmdHelpLoop:
   mov   eax,[CnHelpCnt]
   test  eax,eax
-  jz    CmdHelpDone
+  jz    CnDoCmdHelpDone
   mov   eax,[pCnCmdTable]                 ; EAX = entry ptr (safe)
   mov   ebx,[eax]                       ; EBX = ptr to command Str
   mov   [pVdStr],ebx
@@ -331,11 +331,11 @@ CmdHelpLoop:
   mov   eax,[CnHelpCnt]
   dec   eax
   mov   [CnHelpCnt],eax
-  jmp   CmdHelpLoop
-CmdHelpDone:
+  jmp   CnDoCmdHelpLoop
+CnDoCmdHelpDone:
   ret
 
-CmdShutdown:
+CnDoCmdShutdown:
   lea   eax,[CnShutdown1]               ; Print 1st
   mov   [pCnLogMsg],eax                 ;  shutdown
   call  CnLogIt                         ;  message
@@ -351,7 +351,7 @@ CmdShutdown:
   hlt                                   ;  if above fails
   ret                                   ; Never reached
 
-CmdTime:
+CnDoCmdTime:
   call  TimeTmPrint
   call  CnCrLf
   ret
