@@ -65,13 +65,13 @@ CnCmdTableCount equ (CnCmdTableEnd-CnCmdTable)/8
 ; Main console loop for AsmOSx86.
 ;
 ; Behavior:
-;   - Continuously reads a line of user input using CnReadLine.
-;   - Echoes input on the bottom row of the screen.
-;   - Intended as the primary user interaction loop.
+; - Continuously reads a line of user input using CnReadLine.
+; - Echoes input on the bottom row of the screen.
+; - Intended as the primary user interaction loop.
 ;
 ; Notes:
-;   - Each iteration waits for and processes a full line of input.
-;   - Output is displayed immediately; command processing can be added as needed.
+; - Each iteration waits for and processes a full line of input.
+; - Output is displayed immediately; command processing can be added as needed.
 ;------------------------------------------------------------------------------
 Console:
   call  CnReadLine                      ; Returns string in CnCmdLine
@@ -170,10 +170,10 @@ CnSpace:
 ;------------------------------------------------------------------------------
 CnReadLine:
   xor   ax,ax
-  mov   [CnCmdLineLen],ax                   ; Reset input length
+  mov   [CnCmdLineLen],ax               ; Reset input length
   call  VdInClearLine
 CnReadLineLoop:
-  call  TimerNowTicks                       ; keep accumulator updated
+  call  TimerNowTicks                   ; keep accumulator updated
   call  KbGetKey
   mov   al,[KbOutHasKey]
   test  al,al
@@ -343,12 +343,12 @@ CnDoCmdHelpLoop:
   mov   eax,[CnHelpCnt]
   test  eax,eax
   jz    CnDoCmdHelpDone
-  mov   eax,[pCnCmdTable]                 ; EAX = entry ptr (safe)
+  mov   eax,[pCnCmdTable]               ; EAX = entry ptr (safe)
   mov   ebx,[eax]                       ; EBX = ptr to command Str
   mov   [pVdStr],ebx
   call  VdPutStr
   call  CnCrLf
-  mov   eax,[pCnCmdTable]                 ; reload (calls clobbered regs)
+  mov   eax,[pCnCmdTable]               ; reload (calls clobbered regs)
   add   eax,8                           ; next entry
   mov   [pCnCmdTable],eax
   mov   eax,[CnHelpCnt]
