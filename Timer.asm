@@ -39,13 +39,17 @@ TimerTicksLo    dd 0                     ; 64-bit accumulated ticks (low)
 TimerTicksHi    dd 0                     ; 64-bit accumulated ticks (high)
 TimerRetLo      dd 0                     ; return staging (low)
 TimerRetHi      dd 0                     ; return staging (high)
+TimerStartLo    dd 0                     ; delay: start ticks (low)
+TimerStartHi    dd 0                     ; delay: start ticks (high)
+TimerDeadLo     dd 0                     ; delay: deadline ticks (low)
+TimerDeadHi     dd 0                     ; delay: deadline ticks (high)
+TimerTmpTicks   dd 0                     ; delay: delta ticks (32-bit)
 
 ;--------------------------------------------------------------------------------------------------
 ; TimerInit - initialize PIT channel 0 for stable polling
 ;   Programs PIT ch0 mode 2 with divisor = 0 (65536).
 ;--------------------------------------------------------------------------------------------------
 TimerInit:
-  pusha                                 ; Save registers
   mov   al,PIT_MODE2_CH0                ; PIT ch0 mode2
   mov   dx,PIT_CMD                      ; Command port
   out   dx,al                           ; Program PIT
@@ -59,7 +63,6 @@ TimerInit:
   xor   eax,eax                         ; Clear accumulator
   mov   [TimerTicksLo],eax              ;  low
   mov   [TimerTicksHi],eax              ;  high
-  popa                                  ; Restore registers
   ret                                   ; Return to caller
 
 ;--------------------------------------------------------------------------------------------------
@@ -67,7 +70,6 @@ TimerInit:
 ;   Returns AX = current down-counter value (latched)
 ;--------------------------------------------------------------------------------------------------
 TimerLatchCount0:
-  push  edx                             ; Save edx
   mov   dx,PIT_CMD                      ; PIT command port
   mov   al,PIT_LATCH0                   ; Latch ch0 count
   out   dx,al                           ; Issue latch
@@ -76,7 +78,6 @@ TimerLatchCount0:
   mov   ah,al                           ; Save low in AH temporarily
   in    al,dx                           ; Read high byte
   xchg  ah,al                           ; AX = hi:lo
-  pop   edx                             ; Restore edx
   ret                                   ; Return to caller
 
 ;--------------------------------------------------------------------------------------------------
@@ -85,14 +86,15 @@ TimerLatchCount0:
 ;     EDX:EAX = 64-bit accumulated PIT input ticks
 ;--------------------------------------------------------------------------------------------------
 TimerNowTicks:
-  pusha                                 ; Save registers
   call  TimerLatchCount0                ; AX = current count
   mov   bx,ax                           ; BX = curr
   cmp   byte[TimerFirstRead],1          ; First read?
   jne   TimerNowTicks1                  ;  No
   mov   [TimerLastCnt],bx               ;  Yes: seed last count
   mov   byte[TimerFirstRead],0          ;  Clear flag
-  jmp   TimerNowTicks5                  ;  Return 0 ticks so far
+  xor   eax,eax
+  xor   edx,edx
+  jmp   TimerNowTicks5                  ; Return zero ticks
 TimerNowTicks1:
   ; Compute delta = (last - curr) with wrap handling on down-counter.
   mov   ax,[TimerLastCnt]               ; AX = last
@@ -120,15 +122,9 @@ TimerNowTicks4:
   mov   eax,[TimerTicksHi]              ; EAX = hi
   adc   eax,0                           ; hi += carry
   mov   [TimerTicksHi],eax              ; store hi
+  mov   eax,[TimerTicksLo]              ; return lo
+  mov   edx,[TimerTicksHi]              ; return hi
 TimerNowTicks5:
-  ; Stage return so POPA can't clobber it
-  mov   eax,[TimerTicksLo]              ; lo
-  mov   edx,[TimerTicksHi]              ; hi
-  mov   [TimerRetLo],eax                ; stage lo
-  mov   [TimerRetHi],edx                ; stage hi
-  popa                                  ; Restore registers
-  mov   eax,[TimerRetLo]                ; return lo
-  mov   edx,[TimerRetHi]                ; return hi
   ret                                   ; Return to caller
 
 ;--------------------------------------------------------------------------------------------------
@@ -138,7 +134,6 @@ TimerNowTicks5:
 ;   Note: clamps very large ms to avoid DIV overflow on 386.
 ;--------------------------------------------------------------------------------------------------
 TimerDelayMs:
-  pusha                                 ; Save registers
   ; Clamp ms to avoid div overflow (ms <= ~3,598,000 is safe)
   cmp   eax,3600000                     ; Cap at ~1 hour
   jbe   TimerDelayMs1                   ;  ok
@@ -151,22 +146,26 @@ TimerDelayMs1:
   adc   edx,0                           ; carry into high
   mov   ecx,1000                        ; /1000
   div   ecx                             ; EAX=ticks (32-bit),EDX=remainder
-  mov   esi,eax                         ; ticks lo
-  xor   edi,edi                         ; ticks hi = 0
+  mov   [TimerTmpTicks],eax             ; ticks lo (persist across calls)
   ; start = TimerNowTicks
   call  TimerNowTicks                   ; EDX:EAX=start
-  mov   ebx,eax                         ; start lo
-  mov   ecx,edx                         ; start hi
+  mov   [TimerStartLo],eax
+  mov   [TimerStartHi],edx
   ; deadline = start + ticks
-  add   ebx,esi                         ; deadline lo
-  adc   ecx,edi                         ; deadline hi
+  mov   eax,[TimerStartLo]
+  mov   edx,[TimerStartHi]
+  add   eax,[TimerTmpTicks]
+  adc   edx,0
+  mov   [TimerDeadLo],eax
+  mov   [TimerDeadHi],edx
 TimerDelayMs2:
   call  TimerNowTicks                   ; EDX:EAX=now
+  mov   ecx,[TimerDeadHi]               ; deadline hi
   cmp   edx,ecx                         ; compare hi
   jb    TimerDelayMs2                   ; now.hi < deadline.hi
   ja    TimerDelayMs3                   ; now.hi > deadline.hi
+  mov   ebx,[TimerDeadLo]               ; deadline lo
   cmp   eax,ebx                         ; hi equal: compare lo
   jb    TimerDelayMs2                   ; now.lo < deadline.lo
 TimerDelayMs3:
-  popa                                  ; Restore registers
   ret                                   ; Return to caller

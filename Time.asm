@@ -92,6 +92,7 @@ TimeYear        dw 0                    ; full year (e.g., 2026)
 TimeCent        db 0
 TimeStatB       db 0
 TimeTmp         db 0                    ; temp byte for CMOS reads (century, etc.)
+TimePmBit       db 0                    ; temp: PM bit staging for hour conversion
 
 ;---------------------------------------------------------------------------------------------------
 ; Wall time state
@@ -115,7 +116,6 @@ BootValid       db 0
 ; TimeNow - advance wall time using monotonic ticks and sync with CMOS as needed
 ;---------------------------------------------------------------------------------------------------
 TimeNow:
-  pusha
   cmp   byte[WallSyncValid],1
   je    TimeNow1
   call  TimeSync
@@ -173,14 +173,12 @@ TimeNow4:
   div   ecx                             ; EAX=min,EDX=sec
   mov   [TimeMin],al
   mov   [TimeSec],dl
-  popa
   ret
 
 ;---------------------------------------------------------------------------------------------------
 ; TimeSync - read CMOS once and pin wall baseline to a monotonic tick
 ;---------------------------------------------------------------------------------------------------
 TimeSync:
-  pusha
   call  TimeReadCmos                    ; updates TimeHour/Min/Sec
   xor   eax,eax
   mov   al,[TimeHour]
@@ -203,7 +201,6 @@ TimeSync:
   mov   [WallLastHi],edx
   mov   dword[WallRemTicks],0
   mov   byte[WallSyncValid],1
-  popa
   ret
 
 ;---------------------------------------------------------------------------------------------------
@@ -219,8 +216,6 @@ TimeSync:
 ;     - Reads CMOS twice-stable: waits for UIP=0, reads fields, verifies UIP still 0.
 ;---------------------------------------------------------------------------------------------------
 TimeReadCmos:
-  pusha                                 ; Save registers
-TimeReadCmos1:
   call  TimeWaitNotUip                  ; Wait until RTC not updating (UIP=0)
   mov   al,RTC_STATUSB                  ; Read Status B (format flags)
   call  TimeCmosReadReg
@@ -249,11 +244,11 @@ TimeReadCmos1:
   mov   al,RTC_STATUSA                  ; Verify UIP didn't flip during reads
   call  TimeCmosReadReg
   test  al,RTC_UIP
-  jnz   TimeReadCmos1                   ; If updating started, retry
+  jnz   TimeReadCmos                    ; If updating started, retry
   ; If RTC provides BCD (RTC_BCD bit == 0), convert fields BCD->binary.
   mov   al,[TimeStatB]
   test  al,RTC_BCD
-  jnz   TimeReadCmos2                   ; If RTC_BCD=1 => already binary
+  jnz   TimeReadCmos1                   ; If RTC_BCD=1 => already binary
   mov   al,[TimeSec]                    ; SEC
   call  TimeBcdToBin
   mov   [TimeSec],al
@@ -263,8 +258,10 @@ TimeReadCmos1:
   mov   al,[TimeHour]                   ; HOUR (preserve PM bit if present)
   mov   ah,al
   and   ah,080h                         ; PM bit
+  mov   [TimePmBit],ah                  ; stage PM bit (calls clobber regs)
   and   al,07Fh
   call  TimeBcdToBin
+  mov   ah,[TimePmBit]
   or    al,ah
   mov   [TimeHour],al
   mov   al,[TimeDay]                    ; DAY
@@ -279,7 +276,7 @@ TimeReadCmos1:
   mov   al,[TimeTmp]                     ; CENTURY
   call  TimeBcdToBin
   mov   [TimeTmp],al                     ; temp now holds CC in binary
-TimeReadCmos2:
+TimeReadCmos1:
   ; Normalize hour to 24h if needed
   mov   al,[TimeHour]
   call  TimeNormalizeHour
@@ -291,27 +288,26 @@ TimeReadCmos2:
   xor   eax,eax
   mov   al,[TimeTmp]                    ; AL = CC (0 if not present / unreadable)
   test  al,al
-  jz    TimeReadCmos3                   ; No century => use pivot
+  jz    TimeReadCmos2                   ; No century => use pivot
   movzx eax,al                          ; EAX = CC
   imul  eax,100                         ; EAX = CC*100
   add   eax,ebx                         ; EAX = CC*100 + YY
   mov   [TimeYear],ax                   ; store full year
-  jmp   TimeReadCmos5
-TimeReadCmos3:
+  jmp   TimeReadCmos4
+TimeReadCmos2:
   ; No century register: pick 19xx vs 20xx using YY pivot
   ; Pivot policy: YY >= 80 => 19YY, else 20YY
   cmp   bl,80                           ; YY >= 80 ?
-  jb    TimeReadCmos4                   ;  No -> 20YY
+  jb    TimeReadCmos3                   ;  No -> 20YY
   mov   eax,1900
   add   eax,ebx                         ; 1900 + YY
   mov   [TimeYear],ax
-  jmp   TimeReadCmos5
-TimeReadCmos4:
+  jmp   TimeReadCmos4
+TimeReadCmos3:
   mov   eax,2000
   add   eax,ebx                         ; 2000 + YY
   mov   [TimeYear],ax
-TimeReadCmos5:
-  popa
+TimeReadCmos4:
   ret
 
 ;---------------------------------------------------------------------------------------------------
@@ -322,35 +318,30 @@ TimeReadCmos5:
 ; TimeTmPrint - prints wall time (HH:MM:SS)
 ;---------------------------------------------------------------------------------------------------
 TimeTmPrint:
-  pusha
   call  TimeNow
   mov   ebx,TimeStr
   call  TimeFmtHms
   mov   eax,TimeStr
   mov   [pVdStr],eax
   call  VdPutStr
-  popa
   ret
 
 ;---------------------------------------------------------------------------------------------------
 ; TimeDtPrint - prints wall time (YYYY-MM-DD)
 ;---------------------------------------------------------------------------------------------------
 TimeDtPrint:
-  pusha
   call  TimeNow
   mov   ebx,DateStr
   call  TimeFmtYmd
   mov   eax,DateStr
   mov   [pVdStr],eax
   call  VdPutStr
-  popa
   ret
 
 ;---------------------------------------------------------------------------------------------------
 ; TimeFmtHms - EBX=String,formats current TimeHour/Min/Sec as "HH:MM:SS"
 ;---------------------------------------------------------------------------------------------------
 TimeFmtHms:
-  pusha
   mov   edi,ebx
   add   edi,2
   mov   al,[TimeHour]
@@ -365,7 +356,6 @@ TimeFmtHms:
   inc   edi
   mov   al,[TimeSec]
   call  TimePut2Dec
-  popa
   ret
 
 ;---------------------------------------------------------------------------------------------------
@@ -397,57 +387,49 @@ TimeFmtYmd:
 ; TimeBcdToBin - AL=BCD,returns AL=binary
 ;---------------------------------------------------------------------------------------------------
 TimeBcdToBin:
-  push  ebx
   mov   bl,al
   and   al,0Fh
   shr   bl,4
   movzx ebx,bl
   imul  ebx,10
   add   al,bl
-  pop   ebx
   ret
 
 ;---------------------------------------------------------------------------------------------------
 ; TimeCmosReadReg - AL=register,returns AL=value
 ;---------------------------------------------------------------------------------------------------
 TimeCmosReadReg:
-  push  edx
   mov   dx,CMOS_ADDR
   or    al,CMOS_NMI                     ; NMI off while reading
   out   dx,al
   mov   dx,CMOS_DATA
   in    al,dx
-  pop   edx
   ret
 
 ;---------------------------------------------------------------------------------------------------
 ; TimeNormalizeHour - AL=hour (maybe PM bit in 12h),returns AL=0..23
 ;---------------------------------------------------------------------------------------------------
 TimeNormalizeHour:
-  push  ebx
   mov   bl,[TimeStatB]
   test  bl,RTC_24H
-  jnz   TimeNormalizeHour1
+  jnz   TimeNormalizeHour2
   mov   bl,al
   and   bl,080h                         ; PM flag
   and   al,07Fh                         ; 1..12
   cmp   al,12
-  jne   TimeNormalizeHour2
-  mov   al,0                            ; 12AM -> 00
-TimeNormalizeHour2:
-  cmp   bl,080h
   jne   TimeNormalizeHour1
-  add   al,12                           ; PM add 12
+  mov   al,0                            ; 12AM -> 00
 TimeNormalizeHour1:
-  pop   ebx
+  cmp   bl,080h
+  jne   TimeNormalizeHour2
+  add   al,12                           ; PM add 12
+TimeNormalizeHour2:
   ret
 
 ;---------------------------------------------------------------------------------------------------
 ; TimePut2Dec - AL=0..99,EDI=dest,writes two digits,EDI+=2
 ;---------------------------------------------------------------------------------------------------
 TimePut2Dec:
-  push  eax
-  push  ebx
   xor   ah,ah
   mov   bl,10
   div   bl                              ; AL=tens,AH=ones
@@ -457,17 +439,12 @@ TimePut2Dec:
   add   al,'0'
   mov   [edi+1],al
   add   edi,2
-  pop   ebx
-  pop   eax
   ret
 
 ;---------------------------------------------------------------------------------------------------
 ; TimePut4Dec - AX=0..9999,EDI=dest,writes four digits,EDI+=4
 ;---------------------------------------------------------------------------------------------------
 TimePut4Dec:
-  push  eax
-  push  ebx
-  push  edx
   movzx eax,ax                          ; IMPORTANT: use only AX (clear upper bits)
   xor   edx,edx
   mov   ebx,1000
@@ -492,20 +469,14 @@ TimePut4Dec:
   add   al,'0'
   mov   [edi+1],al
   add   edi,2
-  pop   edx
-  pop   ebx
-  pop   eax
   ret
 
 ;---------------------------------------------------------------------------------------------------
 ; TimeWaitNotUip - wait until RTC not updating
 ;---------------------------------------------------------------------------------------------------
 TimeWaitNotUip:
-  pusha
-TimeWaitNotUip1:
   mov   al,RTC_STATUSA
   call  TimeCmosReadReg
   test  al,RTC_UIP
-  jnz   TimeWaitNotUip1
-  popa
+  jnz   TimeWaitNotUip
   ret

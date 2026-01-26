@@ -38,9 +38,13 @@ String  CnStartMsg2,"Console (Session 0)"
 String  CnStartMsg3,"Initialization started"
 String  CnShutdown1,"AsmOSx86 shutting down system..."
 String  CnShutdown2,"Shutdown complete."
+String  CnDelayMsg1,"Delay test start (2000ms 2 seconds)"
+String  CnDelayMsg2,"Delay test end"
+
 
 ; ----- Console commands -----
 String  CnCmdDate,     "Date"
+String  CnCmdDelay,    "Delay"
 String  CnCmdHelp,     "Help"
 String  CnCmdShutdown, "Shutdown"
 String  CnCmdTime,     "Time"
@@ -49,6 +53,7 @@ String  CnCmdTime,     "Time"
 align 4
 CnCmdTable:
   dd CnCmdDate,     CnDoCmdDate
+  dd CnCmdDelay,    CnDoCmdDelay
   dd CnCmdHelp,     CnDoCmdHelp
   dd CnCmdShutdown, CnDoCmdShutdown
   dd CnCmdTime,     CnDoCmdTime
@@ -309,6 +314,23 @@ CnCmdDispatchDone:
 ;------------------------------------------------------------------------------
 CnDoCmdDate:
   call  TimeDtPrint
+  call  CnCrLf
+  ret
+
+CnDoCmdDelay:
+  call  TimeTmPrint
+  call  CnSpace
+  lea   eax,[CnDelayMsg1]
+  mov   [pVdStr],eax
+  call  VdPutStr
+  call  CnCrLf
+  mov   eax,2000
+  call  TimerDelayMs
+  call  TimeTmPrint
+  call  CnSpace
+  lea   eax,[CnDelayMsg2]
+  mov   [pVdStr],eax
+  call  VdPutStr
   call  CnCrLf
   ret
 
