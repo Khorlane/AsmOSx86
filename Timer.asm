@@ -5,7 +5,7 @@
 ;   Kernel-facing contract:
 ;     TimerInit
 ;     TimerNowTicks        ; returns EDX:EAX = monotonic PIT input ticks (1/1193182s)
-;     TimerDelayMs         ; EAX = ms, busy-wait using TimerNowTicks
+;     TimerSpinDelayMs     ; EAX = ms, busy-wait using TimerNowTicks
 ;
 ;   Notes:
 ;     - 386-safe (no 64-bit instructions; 64-bit values returned in EDX:EAX)
@@ -128,17 +128,17 @@ TimerNowTicks5:
   ret                                   ; Return to caller
 
 ;--------------------------------------------------------------------------------------------------
-; TimerDelayMs - busy-wait delay using TimerNowTicks
+; TimerSpinDelayMs - busy-wait delay using TimerNowTicks
 ;   EAX = milliseconds
 ;   Uses: ticks = round(ms*1193182/1000)
 ;   Note: clamps very large ms to avoid DIV overflow on 386.
 ;--------------------------------------------------------------------------------------------------
-TimerDelayMs:
+TimerSpinDelayMs:
   ; Clamp ms to avoid div overflow (ms <= ~3,598,000 is safe)
   cmp   eax,3600000                     ; Cap at ~1 hour
-  jbe   TimerDelayMs1                   ;  ok
+  jbe   TimerSpinDelayMs1               ;  ok
   mov   eax,3600000                     ;  clamp
-TimerDelayMs1:
+TimerSpinDelayMs1:
   ; ticks = round(ms*1193182/1000)
   mov   ebx,1193182                     ; PIT Hz
   mul   ebx                             ; EDX:EAX=ms*1193182
@@ -158,14 +158,14 @@ TimerDelayMs1:
   adc   edx,0
   mov   [TimerDeadLo],eax
   mov   [TimerDeadHi],edx
-TimerDelayMs2:
+TimerSpinDelayMs2:
   call  TimerNowTicks                   ; EDX:EAX=now
   mov   ecx,[TimerDeadHi]               ; deadline hi
   cmp   edx,ecx                         ; compare hi
-  jb    TimerDelayMs2                   ; now.hi < deadline.hi
-  ja    TimerDelayMs3                   ; now.hi > deadline.hi
+  jb    TimerSpinDelayMs2               ; now.hi < deadline.hi
+  ja    TimerSpinDelayMs3               ; now.hi > deadline.hi
   mov   ebx,[TimerDeadLo]               ; deadline lo
   cmp   eax,ebx                         ; hi equal: compare lo
-  jb    TimerDelayMs2                   ; now.lo < deadline.lo
-TimerDelayMs3:
+  jb    TimerSpinDelayMs2               ; now.lo < deadline.lo
+TimerSpinDelayMs3:
   ret                                   ; Return to caller

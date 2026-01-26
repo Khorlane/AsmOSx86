@@ -325,7 +325,7 @@ CnDoCmdDelay:
   call  VdPutStr
   call  CnCrLf
   mov   eax,2000
-  call  TimerDelayMs
+  call  TimerSpinDelayMs
   call  TimeTmPrint
   call  CnSpace
   lea   eax,[CnDelayMsg2]

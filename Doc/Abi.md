@@ -39,7 +39,7 @@ Default: **inputs are passed in registers**, documented per routine.
 
 Common patterns:
 - `EBX = address of String` for printing (`PutStr`, `CnPrint`)
-- `EAX = value` for numeric inputs (example: `TimerDelayMs`)
+- `EAX = value` for numeric inputs (example: `TimerSpinDelayMs`)
 
 ### 3.1 Reading the caller’s original registers after `pusha`
 

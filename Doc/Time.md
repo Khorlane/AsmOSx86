@@ -57,7 +57,7 @@ This separation is deliberate and permanent.
 - `TimerInit`
 - `TimerNowTicks`  
   - Returns `EDX:EAX = monotonic PIT input ticks`
-- `TimerDelayMs`
+- `TimerSpinDelayMs`
   - Busy-wait delay using monotonic ticks
 
 ### Characteristics

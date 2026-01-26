@@ -94,13 +94,13 @@ All labels local to a routine must be named using the following pattern:
 
 **Example:**
 ```
-TimerDelayMs1:
+TimerSpinDelayMs1:
   ; First step after entry
 
-TimerDelayMs2:
+TimerSpinDelayMs2:
   ; Main polling loop
 
-TimerDelayMs3:
+TimerSpinDelayMs3:
   ; Exit/return point
 ```
 

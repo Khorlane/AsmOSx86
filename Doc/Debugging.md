@@ -10,7 +10,7 @@ To tell if resync is occuring add the following lines:
 TimeTestLoop:
   call  TimeTmPrint                     ; HH:MM:SS (wall time)
   mov   eax,1000                        ; Delay
-  call  TimerDelayMs                    ;  1 second
+  call  TimerSpinDelayMs                ;  1 second
   loop  TimeTestLoop
 ```
 ### In Time.asm  

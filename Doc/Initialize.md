@@ -39,7 +39,7 @@ This step MUST occur before any routine that prints to the screen.
 `TimerInit` programs PIT channel 0 for polled timing and establishes the monotonic tick baseline.
 
 After this step:
-- `TimerNowTicks` and `TimerDelayMs` are valid to call.
+- `TimerNowTicks` and `TimerSpinDelayMs` are valid to call.
 
 ---
 
@@ -77,7 +77,7 @@ After this step:
 
 - `TimerInit` MUST run before any routine that relies on monotonic ticks:
   - `TimerNowTicks`
-  - `TimerDelayMs`
+  - `TimerSpinDelayMs`
   - `UptimeInit`, `UptimeNow`, `UptimePrint`
   - `TimeSync`, `TimeNow`, wall-clock interpolation/advance
 
