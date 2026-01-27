@@ -22,8 +22,8 @@ function Fail([string]$msg) {
   exit 1
 }
 
-function Run-ImDisk([string]$ArgumentString) {
-  # Runs imdisk.exe and returns: @{ ExitCode=int; Output=string }
+function Invoke-ImDisk([string]$ArgumentString) {
+  # Invokes imdisk.exe and returns: @{ ExitCode=int; Output=string }
 
   $cmd = Get-Command "imdisk.exe" -ErrorAction SilentlyContinue
   if ($null -eq $cmd -or -not $cmd.Source) {
@@ -71,7 +71,7 @@ try {
 
   Write-Host "[2/5] Mounting floppy.img as first free drive letter..."
   $mountArgStr = '-a -t file -f "{0}" -m "#:" -o rw,fix' -f $Image
-  $mount = Run-ImDisk $mountArgStr
+  $mount = Invoke-ImDisk $mountArgStr
 
   if ($mount.ExitCode -ne 0) {
     Write-Host "----- ImDisk mount output begin -----"
@@ -126,7 +126,7 @@ try {
     $lastOut = ""
 
     for ($i = 1; $i -le 2; $i++) {
-      $det = Run-ImDisk ('-d -m "{0}"' -f $Drive)
+      $det = Invoke-ImDisk ('-d -m "{0}"' -f $Drive)
       $lastOut = $det.Output
       if ($det.ExitCode -eq 0) {
         $detached = $true
@@ -139,7 +139,7 @@ try {
     if (-not $detached) {
       Write-Warning "Normal detach failed; forcing detach (-D)..."
       $forcedDetachUsed = $true
-      $fdet = Run-ImDisk ('-D -m "{0}"' -f $Drive)
+      $fdet = Invoke-ImDisk ('-D -m "{0}"' -f $Drive)
       $lastOut = $fdet.Output
       if ($fdet.ExitCode -eq 0) {
         $detached = $true
