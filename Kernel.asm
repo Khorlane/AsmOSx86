@@ -103,7 +103,9 @@ FlushCS:
   call  KbInit                          ; Initialize keyboard
   call  CnInit                          ; Initialize console
   ; Start main command loop
-  call  Console                         ; Console command loop
+MainLoop:
+  call  Console                         ; Console session and command processor
+  jmp   MainLoop
 
   hlt
 

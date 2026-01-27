@@ -28,6 +28,9 @@ pCnTmpTable      dd 0                  ; Pointer to temp: command table
 CnCmdLineLen     dw 0                  ; Command line length
 CnCmdMaxLen      dw 0                  ; Command line max length
 CnTmpLen         dw 0                  ; temp: input length (u16)
+CnRlActive       db 0                  ; 1=in-progress line edit,0=idle
+CnOutHasLine     db 0                  ; 1=completed line ready in CnCmdLine
+CnPad2           db 0,0                ; pad to keep alignment friendly
 
 ; Command line buffer as String:
 CnCmdLine: times (2 + CN_CMD_MAX_LEN) db 0
@@ -74,15 +77,19 @@ CnCmdTableCount equ (CnCmdTableEnd-CnCmdTable)/8
 ; - Output is displayed immediately; command processing can be added as needed.
 ;------------------------------------------------------------------------------
 Console:
-  call  CnReadLine                      ; Returns string in CnCmdLine
-  lea   eax,[CnCmdLine]                 ; Echo the
-  mov   [pCnLogMsg],eax                 ;  entered command
-  call  CnLogIt                         ;  command
+  call  CnReadLine                      ; non-blocking line editor
+  mov   al,[CnOutHasLine]
+  test  al,al
+  jz    ConsoleDone
+  lea   eax,[CnCmdLine]
+  mov   [pCnLogMsg],eax
+  call  CnLogIt
   lea   eax,[CnCmdLine]
   mov   [pStr1],eax
   call  StrTrim
-  call  CnCmdDispatch                   ; Call handler if match
-  jmp   Console
+  call  CnCmdDispatch
+ConsoleDone:
+  ret
 
 ;------------------------------------------------------------------------------
 ; CnInit
@@ -169,15 +176,19 @@ CnSpace:
 ; - Follows column alignment and PascalCase coding standards (LOCKED-IN).
 ;------------------------------------------------------------------------------
 CnReadLine:
+  mov   byte[CnOutHasLine],0           ; default: no completed line
+  cmp   byte[CnRlActive],1             ; already editing a line?
+  je    CnReadLinePoll
+  mov   byte[CnRlActive],1             ; begin new line
   xor   ax,ax
-  mov   [CnCmdLineLen],ax               ; Reset input length
-  call  VdInClearLine
-CnReadLineLoop:
-  call  TimerNowTicks                   ; keep accumulator updated
-  call  KbGetKey
+  mov   [CnCmdLineLen],ax              ; reset input length
+  call  VdInClearLine                  ; clear input row,InCurCol=1
+CnReadLinePoll:
+  call  TimerNowTicks                  ; keep accumulator updated
+  call  KbGetKey                       ; poll keyboard once
   mov   al,[KbOutHasKey]
   test  al,al
-  jz    CnReadLineLoop
+  jz    CnReadLineDone                 ; no key -> return immediately
   mov   al,[KbOutType]
   cmp   al,KEY_CHAR
   je    CnReadLineOnChar
@@ -185,14 +196,14 @@ CnReadLineLoop:
   je    CnReadLineOnBackspace
   cmp   al,KEY_ENTER
   je    CnReadLineOnEnter
-  jmp   CnReadLineLoop
+  jmp   CnReadLineDone
 CnReadLineOnChar:
   mov   ax,[CnCmdLineLen]
   movzx ecx,ax
   mov   ax,[CnCmdMaxLen]
   movzx edx,ax
   cmp   ecx,edx
-  jae   CnReadLineLoop
+  jae   CnReadLineDone
   mov   esi,[pCnCmdLine]
   mov   al,[KbOutChar]
   mov   [esi+2+ecx],al
@@ -200,21 +211,24 @@ CnReadLineOnChar:
   mov   [CnCmdLineLen],cx
   mov   [VdInCh],al
   call  VdInPutChar
-  jmp   CnReadLineLoop
+  jmp   CnReadLineDone
 CnReadLineOnBackspace:
   mov   ax,[CnCmdLineLen]
   movzx ecx,ax
   test  ecx,ecx
-  jz    CnReadLineLoop
+  jz    CnReadLineDone
   dec   cx
   mov   [CnCmdLineLen],cx
   call  VdInBackspaceVisual
-  jmp   CnReadLineLoop
+  jmp   CnReadLineDone
 CnReadLineOnEnter:
   mov   esi,[pCnCmdLine]
   mov   ax,[CnCmdLineLen]
-  mov   [esi],ax
-  call  VdInClearLine
+  mov   [esi],ax                       ; commit Str length
+  mov   byte[CnOutHasLine],1           ; signal: line ready
+  mov   byte[CnRlActive],0             ; go idle (next call starts new line)
+  call  VdInClearLine                  ; clear the input row after submit
+CnReadLineDone:
   ret
 
 ; -----------------------------------------------------------------------------
