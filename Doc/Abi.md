@@ -66,19 +66,20 @@ A “String” in AsmOSx86 is:
 - 2-byte little-endian length word
 - followed by payload bytes
 
-Length word includes itself (total bytes).
+Length word is the payload length in bytes.
 
 Example:
 ```
 String CrLf,0Dh,0Ah
-; dw length=4, db 0Dh,0Ah
+; dw length=2, db 0Dh,0Ah
 ```
 
 `PutStr`:
 - reads the length word
-- subtracts 2 to get payload length
 - prints payload bytes
 - interprets CR and LF as control characters (CR resets Col, LF increments Row)
+
+See also: `Doc/String.md`
 
 ---
 
