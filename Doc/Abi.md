@@ -18,44 +18,25 @@ The ABI specifies the formal rules and conventions for how modules interact and 
 
 Unless a routine explicitly documents otherwise:
 
-- **All exported (public) routines preserve all general registers**
-  using `pusha` / `popa`.
-- If a routine returns a value in a register that would be clobbered
-  by `popa`, it must **stage** that value in memory and reload it
-  after `popa`.
+- Registers are scratch working state, not a trusted interface contract.
+- Callers must not assume an incoming register contains meaningful data.
+- Callees do not promise to preserve general registers.
+- If a routine needs stable input or output, that contract must be expressed through documented memory locations.
 
-Example pattern:
-- compute return in EAX/EDX
-- store to `Ret*` variables
-- `popa`
-- reload EAX/EDX from `Ret*`
-- `ret`
+This project prefers memory-based contracts over register-based contracts.
 
 ---
 
 ## 3) Parameter Passing
 
-Default: **inputs are passed in registers**, documented per routine.
+Default: **inputs and outputs are passed through documented memory state**.
 
 Common patterns:
-- `EBX = address of String` for printing (`PutStr`, `CnPrint`)
-- `EAX = value` for numeric inputs (example: `TimerSpinDelayMs`)
+- module-local variables owned by the subsystem
+- shared state such as `KernelCtx` when explicitly applicable
+- documented string pointers or working buffers stored in memory
 
-### 3.1 Reading the caller’s original registers after `pusha`
-
-Some routines may read the caller’s original EAX/ECX/etc from the stack
-after `pusha`.
-
-This is allowed **only if** documented in that routine’s contract.
-
-Reminder:
-`pusha` pushes 8 dwords (32 bytes) in this order:
-EAX, ECX, EDX, EBX, ESP, EBP, ESI, EDI
-
-So inside the callee after `pusha`:
-- caller’s original **EAX** is at `[esp+28]`
-
-(Used by `FloppySetDrive`.)
+Register-based inputs or outputs are exceptions and must be explicitly documented by the routine that uses them.
 
 ---
 
