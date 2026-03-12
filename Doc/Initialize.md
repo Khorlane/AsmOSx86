@@ -1,121 +1,81 @@
-# 🛠️ Kernel Initialization Sequence (AsmOSx86)
+# Kernel Initialization Sequence
 
-This document defines the **authoritative** kernel initialization sequence for AsmOSx86.
-All initialization order dependencies are explicit and **owned by `Kernel.asm`**.
+This document describes the current kernel initialization flow implemented by `Kernel.asm`.
 
-Once a rule is marked **LOCKED-IN**, callers may rely on it permanently.
-
----
-
-## 1) Ownership Rule (LOCKED-IN)
-
-**`Kernel.asm` is the single owner of initialization order.**
-
-- `Kernel.asm` MUST call all `*Init` / `*Sync` routines in the required order.
-- No module MAY call another module’s `*Init` / `*Sync` internally.
-- No subsystem may “lazy init” itself on first use.
-- If a routine requires prior initialization and is called too early, that is a kernel bug.
-
-This eliminates hidden coupling and makes boot behavior deterministic.
+It is descriptive of the current code, not a broader future policy.
 
 ---
 
-## 2) Required Initialization Steps (LOCKED-IN)
+## Ownership Rule
 
-### Step 1 — Video / KernelCtx Baseline
-`Kernel.asm` MUST establish the initial console-visible state before any printing:
+`Kernel.asm` owns the top-level initialization sequence.
 
-- Screen cleared (or otherwise defined)
-- `Row`, `Col` set to a valid starting position
-- `ColorBack`, `ColorFore`, and derived `ColorAttr` set
-
-This step MUST occur before any routine that prints to the screen.
+It decides which subsystems are initialized explicitly during boot and in what order.
 
 ---
 
-### Step 2 — `TimerInit`
-`Kernel.asm` MUST call `TimerInit` exactly once during boot.
+## Current Boot Sequence
 
-`TimerInit` programs PIT channel 0 for polled timing and establishes the monotonic tick baseline.
+Current initialization order in `Kernel.asm`:
 
-After this step:
-- `TimerNowTicks` and `TimerSpinDelayMs` are valid to call.
+1. Load GDT and reload code/data segment state
+2. Load an empty IDT
+3. `TimerInit`
+4. `VdInit`
+5. `KbInit`
+6. `CnInit`
+7. Enter the main console loop
 
----
-
-### Step 3 — `UptimeInit`
-`Kernel.asm` MUST call `UptimeInit` after `TimerInit`.
-
-`UptimeInit` captures the monotonic baseline tick that defines “uptime start”.
-
-After this step:
-- `UptimeNow` and `UptimePrint` are valid to call.
+This is the active source-of-truth sequence.
 
 ---
 
-### Step 4 — `TimeSync`
-`Kernel.asm` MUST call `TimeSync` after `TimerInit` and before any timestamped logging.
+## Current Dependency Notes
 
-`TimeSync` reads CMOS once and pins the wall-clock baseline to a monotonic tick.
-
-After this step:
-- Wall time is considered initialized.
-- The first log line can safely include a real timestamp.
+- `TimerInit` must occur before timer-backed services are used.
+- `VdInit` must occur before normal kernel screen output is relied on.
+- `KbInit` must occur before keyboard polling is used.
+- `CnInit` occurs after timer, video, and keyboard initialization.
 
 ---
 
-### Step 5 — `CnInit`
-`Kernel.asm` MUST call `CnInit` after the timing subsystems are initialized.
+## Time Initialization Behavior
 
-`CnInit` establishes console policy/state (even if currently minimal).  
-After this step:
-- `CnPrint`, `CnBoot`, and `CnLog` are valid to call.
+Wall time is not explicitly initialized in `Kernel.asm` during boot.
 
----
+Current behavior:
+- `CnInit` emits startup log messages
+- log output uses wall-time printing
+- wall time becomes initialized on demand through `TimeNow`
+- `TimeNow` calls `TimeSync` if wall-time state is not yet valid
 
-## 3) Dependency Rules (LOCKED-IN)
-
-- `TimerInit` MUST run before any routine that relies on monotonic ticks:
-  - `TimerNowTicks`
-  - `TimerSpinDelayMs`
-  - `UptimeInit`, `UptimeNow`, `UptimePrint`
-  - `TimeSync`, `TimeNow`, wall-clock interpolation/advance
-
-- `UptimeInit` MUST run after `TimerInit`.
-
-- `TimeSync` MUST run after `TimerInit` and MUST occur before the first call to `CnLog`.
-
-- Video/KernelCtx Baseline MUST occur before any screen output routine (`PutStr`, `Cn*`, etc.).
+This lazy initialization behavior is part of the current implementation.
 
 ---
 
-## 4) Allowed Early-Use Exceptions
+## Uptime Initialization Behavior
 
-None.
+`UptimeInit` is not part of the current active kernel initialization path.
 
-There are no “safe to call before init” routines in the kernel ABI.
-Calling a routine before its required init step is a kernel bug.
-
----
-
-## 5) Extensibility
-
-New subsystems MUST be added to this document by:
-
-- Defining their `*Init` routine(s)
-- Stating exact dependencies (what must be initialized first)
-- Adding them to the required initialization steps in the correct order
-
-Hidden initialization or undocumented dependencies are forbidden.
+`Uptime.asm` exists as a subsystem, but it is not currently included by `Kernel.asm`.
 
 ---
 
-## Summary (LOCKED-IN)
+## Early-Use Rule
 
-Required boot order in `Kernel.asm`:
+Current code allows limited lazy initialization for wall time through `Time.asm`.
 
-1. Video / KernelCtx Baseline
-2. `TimerInit`
-3. `UptimeInit`
-4. `TimeSync`
-5. `CnInit`
+So the correct rule today is:
+- some services require explicit init
+- wall time currently supports first-use initialization internally
+
+This document should not claim that all subsystems forbid lazy init.
+
+---
+
+## Summary
+
+- `Kernel.asm` owns the active boot order
+- current boot order is `TimerInit`, `VdInit`, `KbInit`, `CnInit`
+- wall time currently initializes lazily on first use
+- `UptimeInit` is not part of the active kernel boot path today
