@@ -1,75 +1,95 @@
-# 🧠 Kernel Context + Shared Globals (AsmOSx86)
+# Kernel Context
 
-This document describes the shared mutable state and shared buffers
-that multiple modules rely on.
+This document describes `KernelCtx` as it exists today and the role it is intended to play later.
 
 ---
 
-## 1) KernelCtx memory block (mutable globals)
+## Overview
 
-Defined in: `Kernel.asm` under `KernelCtx:`.
+`KernelCtx` is defined in `Kernel.asm`.
 
-### Fields
+At present, it should be viewed as an early kernel-owned context/state block, not as the active owner of all subsystem runtime state.
 
-- `Char`        (db)  : scratch character for Video
-- `Byte1`       (db)  : generic scratch
-- `KbChar`      (db)  : keyboard scancode or ASCII depending on stage
-- `ColorBack`   (db)  : background color 0..15
-- `ColorFore`   (db)  : foreground color 0..15
-- `ColorAttr`   (db)  : packed attribute (back<<4 | fore)
-- `Row`         (db)  : 1..25
-- `Col`         (db)  : 1..80
-- `Byte2`       (dw)  : generic scratch
-- `Byte4`       (dd)  : generic scratch / debug value
-- `TvRowOfs`    (dd)  : video row offset scratch
-- `VidAdr`      (dd)  : current video address
+Its longer-term purpose is to support task-switching and related saved-context work.
 
-### Alignment rule
+---
+
+## Current Reality
+
+Most active subsystem state in the current kernel does **not** live in `KernelCtx`.
+
+Instead, subsystem state is currently owned locally by the module that uses it. Examples:
+- `Console.asm`
+- `Keyboard.asm`
+- `Video.asm`
+- `Timer.asm`
+- `Time.asm`
+
+This is the current source reality and should not be obscured by documentation.
+
+---
+
+## Current `KernelCtx` Block
+
+Defined in `Kernel.asm` under `KernelCtx:`.
+
+Current fields:
+- `Char`
+- `Byte1`
+- `KbChar`
+- `ColorBack`
+- `ColorFore`
+- `ColorAttr`
+- `Row`
+- `Col`
+- `Byte2`
+- `Byte4`
+- `TvRowOfs`
+- `VidAdr`
+
+These fields exist in the source, but they should not be interpreted as the current ownership model for the active kernel subsystems.
+
+Some are legacy scratch/state fields and may later be repurposed, reduced, or replaced as the task/context model becomes more explicit.
+
+---
+
+## Alignment Rule
 
 `KernelCtxSz` must be divisible by 4.
-(Required by future `rep movsd` usage; enforced by NASM check.)
+
+This is enforced in `Kernel.asm` and exists to preserve compatibility with future `rep movsd` style context copy operations.
 
 ---
 
-## 2) Shared string buffers / constants
+## Intended Direction
 
-Defined in: `Kernel.asm` String section.
+`KernelCtx` is intended to evolve into a shared kernel context block used for:
+- saved execution context
+- task-switch related state
+- other kernel-owned context data that benefits from block copy / structured save-restore behavior
 
-- `Buffer`      : general purpose 8-char payload string
-- `CrLf`        : 0Dh,0Ah
-- `CnStartMsg1` : console session banner
-- `CnStartMsg2` : announcement message
-- `CnStartMsg3` : initialization message
-- `TimeStr`     : "HH:MM:SS" buffer
-- `UptimeStr`   : "UP YY:DDD:HH:MM:SS" buffer
+That design is not fully fleshed out yet.
 
-String format is defined in `Doc/Abi.md`.
-
----
-
-## 3) Keyboard translation tables (current placement)
-
-Defined in: `Kernel.asm` (current canonical placement)
-
-- `Scancode`, `ScancodeSz`
-- `CharCode`, `CharCodeSz`
-- `IgnoreCode`, `IgnoreSz`
-
-`Keyboard.asm` depends on these being present.
-
-Ownership note:
-- Tables currently live in `Kernel.asm` for simplicity.
-- If/when Keyboard becomes fully self-owned, these may move into `Keyboard.asm`
-  without changing the calling contract.
+Until it is, documentation must distinguish between:
+- the current implementation
+- the intended architectural direction
 
 ---
 
-## 4) Ownership summary
+## Ownership Notes
 
-- `Kernel.asm` owns KernelCtx + shared buffers/strings.
-- `Video.asm` owns screen I/O primitives but uses KernelCtx fields.
-- `Console.asm` owns Session 0 console policy and uses `PutStr`.
-- `Keyboard.asm` owns keyboard polling + translation logic and uses tables.
-- `Timer.asm` owns monotonic ticks.
-- `Uptime.asm` owns uptime semantics + formatting.
-- `Time.asm` owns wall clock (RTC baseline + PIT interpolation policy).
+Current ownership model:
+- `Kernel.asm` owns the `KernelCtx` definition
+- active subsystem runtime state is mostly module-local
+- strings, tables, and working storage are generally owned by the module that uses them
+
+This means `KernelCtx` should not currently be described as the central home for shared strings, keyboard tables, or all mutable kernel state.
+
+---
+
+## Summary
+
+- `KernelCtx` exists today in `Kernel.asm`
+- it is not yet the active center of subsystem state ownership
+- its likely long-term role is task/context switching support
+- documentation must reflect both the current code and that intended direction without conflating them
