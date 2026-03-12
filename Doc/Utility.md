@@ -35,8 +35,8 @@ A routine belongs in `Utility.asm` if **all** of the following are true:
 
 ### Typical examples
 
-- String conversion helpers  
-  (`CStrToStr`)
+- String manipulation helpers
+- Small copy/trim helpers for kernel `Str`
 - Small formatting helpers
 - Buffer manipulation helpers
 - Simple math helpers that don’t belong to Timer/Time/etc.
@@ -85,14 +85,13 @@ Utility code must:
 - never print directly
 - never mix CStr and Str implicitly
 
-### Example (canonical)
+### Example (current)
 
-`CStrToStr`:
-- Input: CStr
-- Output: Str
+`StrTrim` / `StrTrimLead` / `StrTrimTrail`:
+- Input: `Str`
+- Output: same `Str`, updated in place
 - No printing
-- No padding
-- Length is authoritative
+- No hidden policy
 
 ---
 
