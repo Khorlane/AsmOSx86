@@ -23,7 +23,7 @@ Decided guidance. Relevant when reading CMOS in `Time.asm`.
 ### Discussion
 Common RTC failure modes identified during early design:
 - Update-In-Progress (UIP): CMOS updates once per second, so values can be inconsistent during rollover. Check Register A bit 7 and read only when UIP = 0.
-- Double-read safety: wait for UIP = 0, read all fields, wait for UIP = 0 again, read again, and retry on mismatch.
+- Double-read safety was considered as a hardening option: wait for UIP = 0, read all fields, wait for UIP = 0 again, read again, and retry on mismatch.
 - BCD vs binary: Register B bit 2 determines whether conversion is required.
 - 12-hour vs 24-hour: Register B bit 1 determines hour format; 12-hour mode requires PM-bit handling.
 - Century register unreliability: some BIOSes expose it, some do not, and some hardcode it incorrectly.
@@ -36,6 +36,8 @@ Current direction is:
 - normalize RTC data immediately after reading
 - handle UIP, BCD/binary, and 12h/24h correctly inside the time subsystem
 - keep CMOS access isolated to timekeeping code
+- use a single RTC field read with a final UIP recheck in the current implementation
+- treat double-read-and-compare as optional future hardening, not a current requirement
 
 ### Notes
 The earlier discussion included a stronger "read once at boot, then never touch CMOS again" position. That is no longer the current design direction. The current architecture in `Time.md` allows periodic RTC resynchronization for wall time while keeping monotonic time independent.
