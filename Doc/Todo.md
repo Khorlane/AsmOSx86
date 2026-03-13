@@ -19,4 +19,4 @@
 [x] TD-017 Standardize the repo's Bochs configuration and run scripts on the active Bochs 3.0 installation.
 [x] TD-018 Document console shutdown semantics and create an authoritative console command doc.
 [x] TD-019 Investigate Bochs-on-Windows host exit `0xC0000005` after guest soft power-off.
-[ ] TD-020 Align shutdown code/messages with the documented real-hardware-first shutdown contract.
+[x] TD-020 Align shutdown code/messages with the documented real-hardware-first shutdown contract.

@@ -40,7 +40,7 @@ String  CnStartMsg1,"AsmOSx86 - A Hobbyist Operating System in x86 Assembly"
 String  CnStartMsg2,"Console (Session 0)"
 String  CnStartMsg3,"Initialization started"
 String  CnShutdown1,"AsmOSx86 shutting down system..."
-String  CnShutdown2,"Shutdown complete."
+String  CnShutdown2,"System halted. It is now safe to power off."
 String  CnDelayMsg1,"Delay test start (2000ms 2 seconds)"
 String  CnDelayMsg2,"Delay test end"
 
@@ -379,14 +379,16 @@ CnDoCmdShutdown:
   lea   eax,[CnShutdown2]               ; Print 2nd
   mov   [pCnLogMsg],eax                 ;  shutdown
   call  CnLogIt                         ;  message
-  mov   ax,0x2000                       ; select Bochs power-control port
-  mov   dx,0xB004                       ;  "soft power off" value
-  out   dx,ax                           ;  write value to port
-  mov   dx,0x604                        ; Alternate ACPI 
-  out   dx,ax                           ;  poweroff port
-  cli                                   ; Fallback behavior
-  hlt                                   ;  if above fails
-  ret                                   ; Never reached
+  mov   eax,3000                        ; Leave final message visible briefly
+  call  TimerSpinDelayMs                ;  before optional power-off request
+  mov   ax,0x2000                       ; Optional environment-specific
+  mov   dx,0xB004                       ;  Bochs/ACPI soft-power-off request
+  out   dx,ax                           ;  if supported by the runtime
+  mov   dx,0x604                        ; Alternate ACPI-compatible port
+  out   dx,ax                           ;  for environments that honor it
+  cli                                   ; Canonical shutdown state on real
+  hlt                                   ;  386-class hardware: stop forever
+  ret                                   ; Never reached; does not return
 
 CnDoCmdTime:
   call  TimeTmPrint

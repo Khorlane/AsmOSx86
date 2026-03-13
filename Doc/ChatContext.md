@@ -62,3 +62,4 @@ Use:
 - 2026-03-13: Completed `TD-016` by moving `Put2Dec` from `Time.asm` to `Utility.asm`; `Uptime.asm` now uses the generic helper directly.
 - 2026-03-13: Completed `TD-017`; standardized the repo on Bochs 3.0 by updating `AsmOSx86.bxrc` and the PowerShell run scripts, and verified that build/run succeeds with the current installation.
 - 2026-03-13: Completed `TD-018`; added `Doc/Console.md` as the authoritative console-command behavior doc and defined shutdown semantics real-hardware-first, with emulator power-off treated as optional convenience.
+- 2026-03-13: Completed `TD-020`; aligned `Console.asm` shutdown strings/comments with the documented real-hardware-first contract while keeping emulator power-off requests as optional pre-halt attempts.
