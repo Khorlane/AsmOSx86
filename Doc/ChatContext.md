@@ -20,6 +20,8 @@ Use:
 - The boot-stage string format difference is intentional.
 - Active kernel interfaces prefer documented memory-based contracts over register-based contracts.
 - Registers are treated as scratch unless a routine explicitly documents otherwise.
+- `Doc/Time.md` is the authoritative current time contract; `Doc/TimeDesign.md` preserves design rationale and decision history.
+- `Put2Dec` is now owned by `Utility.asm` as a generic formatting helper instead of `Time.asm`.
 
 ## Collaboration Notes
 - Review for alignment is useful even when no fixes are needed.
@@ -31,6 +33,7 @@ Use:
 - Treat project consistency as important, even when subsystem boundaries differ.
 - When docs drift from code, update the docs to match current behavior unless a deliberate refactor is planned.
 - Future-state ideas should be documented as intended direction, not described as current implementation.
+- Prefer repo-level tool/config policy over machine-local defaults when environment drift has already caused issues.
 
 ## Next Resume Checklist
 - Confirm which files are active source of truth.
@@ -50,3 +53,10 @@ Use:
 - 2026-03-12: Completed `TD-007`; removed stale `CStrToStr`-oriented language from `Doc/Utility.md`.
 - 2026-03-12: Added `TD-009` to revisit whether wall time should stay lazily initialized or be explicitly initialized during boot.
 - 2026-03-12: Added `TD-010` for future `Uptime.asm` cleanup so it follows the project memory-based interface model.
+- 2026-03-13: Reviewed `Doc/Time.md`, `Doc/TimeDesign.md`, `Time.asm`, and `Timer.asm` for inconsistencies before changing behavior.
+- 2026-03-13: Reworked `Doc/TimeDesign.md` into a design-record style document that preserves discussion history while clearly marking current decisions.
+- 2026-03-13: Completed `TD-012`, `TD-013`, and `TD-014`; the time docs now distinguish authoritative spec vs design record, describe the current wall-time API, and explicitly document the current midnight/date limitation.
+- 2026-03-13: Added `TD-011` for the real wall-time midnight rollover fix and left it open as a behavior/design task.
+- 2026-03-13: Added `.gitattributes` with `* text=auto eol=lf` so line-ending behavior is defined at the repo level instead of relying on local Git defaults.
+- 2026-03-13: Completed `TD-016` by moving `Put2Dec` from `Time.asm` to `Utility.asm`; `Uptime.asm` now uses the generic helper directly.
+- 2026-03-13: Completed `TD-017`; standardized the repo on Bochs 3.0 by updating `AsmOSx86.bxrc` and the PowerShell run scripts, and verified that build/run succeeds with the current installation.
