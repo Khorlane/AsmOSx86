@@ -93,6 +93,7 @@ TimeCent        db 0
 TimeStatB       db 0
 TimeTmp         db 0                    ; temp byte for CMOS reads (century, etc.)
 TimePmBit       db 0                    ; temp: PM bit staging for hour conversion
+TimeMonthDays   db 31,28,31,30,31,30,31,31,30,31,30,31
 
 ;---------------------------------------------------------------------------------------------------
 ; Wall time state
@@ -152,14 +153,17 @@ TimeNow3:
   mov   ecx,TIME_PIT_HZ
   div   ecx                             ; EAX=seconds_add,EDX=rem
   mov   [WallRemTicks],edx
-  ; WallSecDay = (WallSecDay + seconds_add) % 86400
+  ; Advance sec-of-day and carry whole-day rollover into the calendar date.
   mov   ebx,[WallSecDay]
   add   ebx,eax
   mov   eax,ebx
   xor   edx,edx
   mov   ecx,TIME_DAY_SEC
-  div   ecx                             ; EDX=sec_of_day
+  div   ecx                             ; EAX=days_add,EDX=sec_of_day
   mov   [WallSecDay],edx
+  test  eax,eax
+  jz    TimeNow4
+  call  TimeAddDays
 TimeNow4:
   ; Derive H:M:S from WallSecDay into TimeHour/Min/Sec
   mov   eax,[WallSecDay]
@@ -308,6 +312,84 @@ TimeReadCmos3:
   add   eax,ebx                         ; 2000 + YY
   mov   [TimeYear],ax
 TimeReadCmos4:
+  ret
+
+;---------------------------------------------------------------------------------------------------
+; TimeAddDays - advance the current calendar date by EAX days
+;---------------------------------------------------------------------------------------------------
+TimeAddDays:
+  test  eax,eax
+  jz    TimeAddDays4
+TimeAddDays1:
+  call  TimeDaysInMonth                 ; AL = days in current month
+  mov   dl,[TimeDay]
+  inc   dl                              ; candidate next day
+  cmp   dl,al
+  jbe   TimeAddDays3
+  mov   dl,1
+  mov   bl,[TimeMon]
+  inc   bl
+  cmp   bl,13
+  jb    TimeAddDays2
+  mov   bl,1
+  mov   cx,[TimeYear]
+  inc   cx
+  mov   [TimeYear],cx
+TimeAddDays2:
+  mov   [TimeMon],bl
+TimeAddDays3:
+  mov   [TimeDay],dl
+  dec   eax
+  jnz   TimeAddDays1
+TimeAddDays4:
+  ret
+
+;---------------------------------------------------------------------------------------------------
+; TimeDaysInMonth - return AL = number of days in the current month/year
+;---------------------------------------------------------------------------------------------------
+TimeDaysInMonth:
+  movzx ebx,byte[TimeMon]
+  dec   ebx
+  mov   al,[TimeMonthDays+ebx]
+  cmp   byte[TimeMon],2
+  jne   TimeDaysInMonth2
+  call  TimeIsLeapYear
+  test  al,al
+  jz    TimeDaysInMonth1
+  mov   al,29
+  ret
+TimeDaysInMonth1:
+  mov   al,28
+TimeDaysInMonth2:
+  ret
+
+;---------------------------------------------------------------------------------------------------
+; TimeIsLeapYear - return AL = 1 if TimeYear is leap, else 0
+;---------------------------------------------------------------------------------------------------
+TimeIsLeapYear:
+  movzx eax,word[TimeYear]
+  xor   edx,edx
+  mov   ecx,4
+  div   ecx
+  test  edx,edx
+  jnz   TimeIsLeapYear1
+  movzx eax,word[TimeYear]
+  xor   edx,edx
+  mov   ecx,100
+  div   ecx
+  test  edx,edx
+  jnz   TimeIsLeapYear2
+  movzx eax,word[TimeYear]
+  xor   edx,edx
+  mov   ecx,400
+  div   ecx
+  test  edx,edx
+  jnz   TimeIsLeapYear1
+TimeIsLeapYear2:
+  mov   al,1
+  ret
+TimeIsLeapYear1:
+  xor   al,al
   ret
 
 ;---------------------------------------------------------------------------------------------------

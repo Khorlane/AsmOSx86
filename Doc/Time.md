@@ -191,13 +191,17 @@ Without breaking existing code.
   4. Accumulates fractional ticks and converts whole ticks into seconds
      using `TIME_PIT_HZ`.
   5. Advances `WallSecDay` modulo 86400.
-  6. Derives `TimeHour`, `TimeMin`, and `TimeSec` from `WallSecDay`.
+  6. Advances the calendar date when `WallSecDay` crosses midnight.
+  7. Derives `TimeHour`, `TimeMin`, and `TimeSec` from `WallSecDay`.
 
 - To limit drift, `TimeNow` enforces a resynchronization policy:
   - If more than `TIME_RSYNC_SEC` seconds have elapsed since the last
     synchronization, it calls `TimeSync` again.
   - This keeps wall time aligned with the RTC without the cost of frequent
     CMOS reads.
+
+- Between RTC resynchronizations, wall date and wall time remain coherent
+  across midnight rollover.
 
 ### Summary
 - **CMOS RTC**: authoritative wall-time source.
