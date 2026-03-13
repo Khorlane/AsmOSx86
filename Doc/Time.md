@@ -119,10 +119,14 @@ Examples:
 - Wall time may jump
 
 ### Exported Interface
-- `TimeSync`
-- `TimeNow`
-- `TimeFmtHms`
-- `TimeTmPrint`
+- Public API:
+  - `TimeDtPrint`
+  - `TimeTmPrint`
+- Internal `Time.asm` routines:
+  - `TimeSync`
+  - `TimeNow`
+  - `TimeFmtHms`
+  - `TimeFmtYmd`
 
 ---
 

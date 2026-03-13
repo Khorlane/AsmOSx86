@@ -10,3 +10,9 @@
 [ ] TD-008 Replace the `Doc/CallGraph.md` placeholder with a current call graph or a scoped initial version.
 [ ] TD-009 Decide whether wall time should remain lazily initialized or be explicitly initialized during kernel boot.
 [ ] TD-010 Refactor `Uptime.asm` to follow the project memory-based interface model instead of register-based contracts and `pusha`/`popa` preservation.
+[ ] TD-011 Resolve the wall-time midnight rollover inconsistency so `Time.asm` keeps date and time coherent between RTC resyncs.
+[ ] TD-012 Reconcile `Doc/TimeDesign.md` RTC-read guidance with the actual `TimeReadCmos` implementation, or strengthen the implementation to match the documented double-read approach.
+[x] TD-013 Update `Doc/Time.md` to reflect the full wall-time callable surface, including date formatting/printing routines, or explicitly mark those routines as internal.
+[ ] TD-014 Clarify in `Doc/TimeDesign.md` that the current wall-time model interpolates time-of-day between resyncs but does not currently advance the calendar date independently of RTC resync.
+[ ] TD-015 Align `Time.asm` and `Timer.asm` code comments with the actual implementation and current time architecture docs.
+[ ] TD-016 Decide how to remove or formalize `Uptime.asm`'s dependency on `TimePut2Dec` so low-level formatting ownership is explicit.
