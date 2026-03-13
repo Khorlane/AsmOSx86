@@ -11,7 +11,7 @@ Use:
 ## Current Source Of Truth
 - Kernel source of truth: `Kernel.asm` plus the separately included module files.
 - `Kernel.All.asm` is not part of the active workflow and should be ignored.
-- `Floppy.asm` is a stub only and is not ready for inclusion.
+- `Floppy.asm` contains partial standalone code but is not part of the active workflow and is not ready for inclusion.
 - `Doc/Todo.md` is the active tracker for doc/code alignment and follow-up design items.
 
 ## Current Architecture Notes
@@ -43,7 +43,7 @@ Use:
 
 ## Session Notes
 - 2026-03-12: `Kernel.All.asm` explicitly removed from consideration.
-- 2026-03-12: `Floppy.asm` marked as stub, not ready for inclusion.
+- 2026-03-12: `Floppy.asm` marked as inactive/non-integrated, not ready for inclusion.
 - 2026-03-12: Confirmed kernel string ABI is length-prefixed `Str`; boot loaders intentionally use null-terminated BIOS strings.
 - 2026-03-12: Added `Doc/Todo.md` to track doc/code inconsistencies and follow-up design work.
 - 2026-03-12: Completed `TD-001` and `TD-002`; `Doc/String.md` and the string section in `Doc/Abi.md` now match the real kernel `Str` contract.
@@ -56,7 +56,7 @@ Use:
 - 2026-03-13: Reviewed `Doc/Time.md`, `Doc/TimeDesign.md`, `Time.asm`, and `Timer.asm` for inconsistencies before changing behavior.
 - 2026-03-13: Reworked `Doc/TimeDesign.md` into a design-record style document that preserves discussion history while clearly marking current decisions.
 - 2026-03-13: Completed `TD-012`, `TD-013`, and `TD-014`; the time docs now distinguish authoritative spec vs design record, describe the current wall-time API, and explicitly document the current midnight/date limitation.
-- 2026-03-13: Added `TD-011` for the real wall-time midnight rollover fix and left it open as a behavior/design task.
+- 2026-03-13: Completed `TD-011`; `Time.asm` now advances day rollover so wall date/time stays coherent between RTC resyncs.
 - 2026-03-13: Added `.gitattributes` with `* text=auto eol=lf` so line-ending behavior is defined at the repo level instead of relying on local Git defaults.
 - 2026-03-13: Completed `TD-016` by moving `Put2Dec` from `Time.asm` to `Utility.asm`; `Uptime.asm` now uses the generic helper directly.
 - 2026-03-13: Completed `TD-017`; standardized the repo on Bochs 3.0 by updating `AsmOSx86.bxrc` and the PowerShell run scripts, and verified that build/run succeeds with the current installation.
