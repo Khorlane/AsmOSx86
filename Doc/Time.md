@@ -118,6 +118,12 @@ Examples:
 - Resync snaps wall baseline to CMOS
 - Wall time may jump
 
+### Initialization Policy (Current)
+- Wall time is lazily initialized on first use.
+- The kernel does not perform a dedicated boot-time wall-clock initialization step.
+- This is intentional: console is expected to become available as early as practical and normally causes wall time to be initialized very early in startup.
+- `TimerInit` is the only required prerequisite before wall time is used.
+
 ### Exported Interface
 - Public API:
   - `TimeDtPrint`
@@ -202,6 +208,8 @@ Without breaking existing code.
 
 - Between RTC resynchronizations, wall date and wall time remain coherent
   across midnight rollover.
+- In normal boot flow, this first-use initialization happens early because
+  console startup/logging is an early wall-time consumer by design.
 
 ### Summary
 - **CMOS RTC**: authoritative wall-time source.

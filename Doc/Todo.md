@@ -8,7 +8,7 @@
 [x] TD-006 Update `Doc/KernelCtx.md` to match current module-local globals and current kernel-owned shared state.
 [x] TD-007 Update `Doc/Utility.md` to match the routines that actually exist in `Utility.asm`.
 [ ] TD-008 Replace the `Doc/CallGraph.md` placeholder with a current call graph or a scoped initial version.
-[ ] TD-009 Decide whether wall time should remain lazily initialized or be explicitly initialized during kernel boot.
+[x] TD-009 Decide whether wall time should remain lazily initialized or be explicitly initialized during kernel boot.
 [ ] TD-010 Refactor `Uptime.asm` to follow the project memory-based interface model instead of register-based contracts and `pusha`/`popa` preservation.
 [x] TD-011 Resolve the wall-time midnight rollover inconsistency so `Time.asm` keeps date and time coherent between RTC resyncs.
 [x] TD-012 Reconcile `Doc/TimeDesign.md` RTC-read guidance with the actual `TimeReadCmos` implementation, or strengthen the implementation to match the documented double-read approach.

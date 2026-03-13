@@ -163,3 +163,31 @@ No final architecture-wide lock-in was made here, but the current preference is:
 
 ### Notes
 This remains guidance rather than a current contract. `Time.md` should define the public semantics; this section preserves the reasoning behind how those semantics can remain 386-safe.
+
+## Topic 5 - Wall-Time Initialization Point
+
+### Status
+Decided guidance.
+
+### Discussion
+Two boot-time options were considered:
+1. explicitly initialize wall time during kernel boot with a dedicated `TimeSync`
+2. keep wall time lazily initialized on first use
+
+The main tradeoff discussed was boot-contract size versus explicitness:
+- explicit boot initialization makes wall-time availability more obvious
+- lazy initialization keeps `Kernel.asm` simpler and lets `Time.asm` own its own first-use setup
+
+Project-specific context matters here:
+- console is intended to start as early as practical in boot
+- console logging/display is one of the earliest real wall-time consumers
+- `TimerInit` already runs before console startup, so the only hard prerequisite for wall-time initialization is already satisfied
+
+### Decision
+Current direction is:
+- keep wall time lazily initialized on first use
+- do not add a dedicated boot-time `TimeSync` step
+- rely on early console startup to cause wall time to become valid very early in normal boot flow
+
+### Notes
+Revisit this only if some subsystem must depend on valid wall time before early console/logging runs.

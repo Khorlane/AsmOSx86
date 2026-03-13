@@ -49,7 +49,13 @@ Current behavior:
 - wall time becomes initialized on demand through `TimeNow`
 - `TimeNow` calls `TimeSync` if wall-time state is not yet valid
 
-This lazy initialization behavior is part of the current implementation.
+This lazy initialization behavior is intentional, not accidental.
+
+Current design intent:
+- `TimerInit` is the only required prerequisite before wall time is used
+- the kernel does not perform a separate boot-time `TimeSync`
+- console is intended to start as early as practical in boot
+- early console logging/display is expected to trigger first wall-time use very early in startup
 
 ---
 
@@ -77,5 +83,6 @@ This document should not claim that all subsystems forbid lazy init.
 
 - `Kernel.asm` owns the active boot order
 - current boot order is `TimerInit`, `VdInit`, `KbInit`, `CnInit`
-- wall time currently initializes lazily on first use
+- wall time intentionally initializes lazily on first use
+- console is designed to come up early, so first wall-time use normally happens very early in boot
 - `UptimeInit` is not part of the active kernel boot path today
