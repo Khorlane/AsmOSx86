@@ -30,6 +30,30 @@ pStr1            dd 0                   ; Source string pointer
 pStr2            dd 0                   ; Destination string pointer
 
 ;------------------------------------------------------------------------------
+; Put2Dec
+;   Entry:
+;     AL  = value 0..99
+;     EDI = destination buffer
+;   Exit:
+;     [EDI]   = tens ASCII digit
+;     [EDI+1] = ones ASCII digit
+;     EDI    += 2
+;   Clobbers:
+;     AL, AH, BL
+;------------------------------------------------------------------------------
+Put2Dec:
+  xor   ah,ah
+  mov   bl,10
+  div   bl                              ; AL=tens,AH=ones
+  add   al,'0'
+  mov   [edi],al
+  mov   al,ah
+  add   al,'0'
+  mov   [edi+1],al
+  add   edi,2
+  ret
+
+;------------------------------------------------------------------------------
 ; StrCopy
 ; Copies a length-prefixed string from [pStr1] to [pStr2].
 ; pStr1 and pStr2 are global variables set before call.

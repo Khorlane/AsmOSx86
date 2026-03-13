@@ -15,4 +15,4 @@
 [x] TD-013 Update `Doc/Time.md` to reflect the full wall-time callable surface, including date formatting/printing routines, or explicitly mark those routines as internal.
 [x] TD-014 Clarify in `Doc/TimeDesign.md` that the current wall-time model interpolates time-of-day between resyncs but does not currently advance the calendar date independently of RTC resync.
 [ ] TD-015 Align `Time.asm` and `Timer.asm` code comments with the actual implementation and current time architecture docs.
-[ ] TD-016 Decide how to remove or formalize `Uptime.asm`'s dependency on `TimePut2Dec` so low-level formatting ownership is explicit.
+[x] TD-016 Decide how to remove or formalize `Uptime.asm`'s dependency on `TimePut2Dec` so low-level formatting ownership is explicit.

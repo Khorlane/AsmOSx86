@@ -252,18 +252,18 @@ TimeUptimeFmtHms1:
   mov   al,dl                           ; AL=hours (0..99)
   mov   edi,ebp                         ; EDI = String base
   add   edi,2                           ; Skip length word
-  call  TimePut2Dec                     ; HH
+  call  Put2Dec                         ; HH
   mov   al,':'
   mov   [edi],al
   inc   edi
   mov   eax,ebx
   mov   al,al
-  call  TimePut2Dec                     ; MM
+  call  Put2Dec                         ; MM
   mov   al,':'
   mov   [edi],al
   inc   edi
   mov   eax,ecx
   mov   al,al
-  call  TimePut2Dec                     ; SS
+  call  Put2Dec                         ; SS
   popa
   ret

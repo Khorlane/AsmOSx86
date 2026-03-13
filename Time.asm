@@ -345,17 +345,17 @@ TimeFmtHms:
   mov   edi,ebx
   add   edi,2
   mov   al,[TimeHour]
-  call  TimePut2Dec
+  call  Put2Dec
   mov   al,':'
   mov   [edi],al
   inc   edi
   mov   al,[TimeMin]
-  call  TimePut2Dec
+  call  Put2Dec
   mov   al,':'
   mov   [edi],al
   inc   edi
   mov   al,[TimeSec]
-  call  TimePut2Dec
+  call  Put2Dec
   ret
 
 ;---------------------------------------------------------------------------------------------------
@@ -371,12 +371,12 @@ TimeFmtYmd:
   mov   [edi],al
   inc   edi
   mov   al,[TimeMon]                    ; MM
-  call  TimePut2Dec
+  call  Put2Dec
   mov   al,'-'
   mov   [edi],al
   inc   edi
   mov   al,[TimeDay]                    ; DD
-  call  TimePut2Dec
+  call  Put2Dec
   ret
 
 ;---------------------------------------------------------------------------------------------------
@@ -424,21 +424,6 @@ TimeNormalizeHour1:
   jne   TimeNormalizeHour2
   add   al,12                           ; PM add 12
 TimeNormalizeHour2:
-  ret
-
-;---------------------------------------------------------------------------------------------------
-; TimePut2Dec - AL=0..99,EDI=dest,writes two digits,EDI+=2
-;---------------------------------------------------------------------------------------------------
-TimePut2Dec:
-  xor   ah,ah
-  mov   bl,10
-  div   bl                              ; AL=tens,AH=ones
-  add   al,'0'
-  mov   [edi],al
-  mov   al,ah
-  add   al,'0'
-  mov   [edi+1],al
-  add   edi,2
   ret
 
 ;---------------------------------------------------------------------------------------------------
