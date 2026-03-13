@@ -16,3 +16,4 @@
 [x] TD-014 Clarify in `Doc/TimeDesign.md` that the current wall-time model interpolates time-of-day between resyncs but does not currently advance the calendar date independently of RTC resync.
 [ ] TD-015 Align `Time.asm` and `Timer.asm` code comments with the actual implementation and current time architecture docs.
 [x] TD-016 Decide how to remove or formalize `Uptime.asm`'s dependency on `TimePut2Dec` so low-level formatting ownership is explicit.
+[x] TD-017 Standardize the repo's Bochs configuration and run scripts on the active Bochs 3.0 installation.

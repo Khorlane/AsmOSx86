@@ -71,7 +71,7 @@ try {
   Write-Host "--------------------------------"
   Wait-ForKey
 
-  $BochsExe = "C:\Program Files\Bochs-2.8\bochs.exe"
+  $BochsExe = "C:\Program Files\Bochs-3.0\bochs.exe"
   $BochsCfg = "C:\Projects\AsmOSx86\AsmOSx86.bxrc"
 
   if (-not (Test-Path -LiteralPath $BochsExe -PathType Leaf)) {
