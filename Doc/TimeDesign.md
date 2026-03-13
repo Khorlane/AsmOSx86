@@ -77,6 +77,11 @@ Current direction:
 ### Notes
 The current implementation documented in `Time.md` uses wall time as calendar state plus seconds-since-midnight interpolation, not a pure epoch-seconds model. The epoch-seconds approach remains a viable future design option, but it is not the current authoritative representation.
 
+Current limitation:
+- between RTC resynchronizations, `Time.asm` advances time-of-day from monotonic ticks
+- the calendar date is not independently incremented when `WallSecDay` wraps past midnight
+- as a result, the displayed date can remain stale until the next RTC resync even while the displayed time-of-day has already crossed into the new day
+
 ## Topic 3 - Ownership And Layering
 
 ### Status
