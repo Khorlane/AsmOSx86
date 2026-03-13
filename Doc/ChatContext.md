@@ -21,6 +21,7 @@ Use:
 - Active kernel interfaces prefer documented memory-based contracts over register-based contracts.
 - Registers are treated as scratch unless a routine explicitly documents otherwise.
 - `Doc/Time.md` is the authoritative current time contract; `Doc/TimeDesign.md` preserves design rationale and decision history.
+- `Doc/Console.md` is the authoritative console-command behavior doc; shutdown semantics are defined real-hardware-first, with controlled halt as the core contract.
 - `Put2Dec` is now owned by `Utility.asm` as a generic formatting helper instead of `Time.asm`.
 
 ## Collaboration Notes
@@ -60,3 +61,4 @@ Use:
 - 2026-03-13: Added `.gitattributes` with `* text=auto eol=lf` so line-ending behavior is defined at the repo level instead of relying on local Git defaults.
 - 2026-03-13: Completed `TD-016` by moving `Put2Dec` from `Time.asm` to `Utility.asm`; `Uptime.asm` now uses the generic helper directly.
 - 2026-03-13: Completed `TD-017`; standardized the repo on Bochs 3.0 by updating `AsmOSx86.bxrc` and the PowerShell run scripts, and verified that build/run succeeds with the current installation.
+- 2026-03-13: Completed `TD-018`; added `Doc/Console.md` as the authoritative console-command behavior doc and defined shutdown semantics real-hardware-first, with emulator power-off treated as optional convenience.
