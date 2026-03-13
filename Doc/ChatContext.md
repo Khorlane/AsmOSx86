@@ -22,6 +22,7 @@ Use:
 - Registers are treated as scratch unless a routine explicitly documents otherwise.
 - `Doc/Time.md` is the authoritative current time contract; `Doc/TimeDesign.md` preserves design rationale and decision history.
 - `Doc/Console.md` is the authoritative console-command behavior doc; shutdown semantics are defined real-hardware-first, with controlled halt as the core contract.
+- `Doc/CallGraph.md` is now a curated cross-source-file call map focused on subsystem coupling, not an exhaustive local helper graph.
 - `Put2Dec` is now owned by `Utility.asm` as a generic formatting helper instead of `Time.asm`.
 
 ## Collaboration Notes
@@ -63,3 +64,4 @@ Use:
 - 2026-03-13: Completed `TD-017`; standardized the repo on Bochs 3.0 by updating `AsmOSx86.bxrc` and the PowerShell run scripts, and verified that build/run succeeds with the current installation.
 - 2026-03-13: Completed `TD-018`; added `Doc/Console.md` as the authoritative console-command behavior doc and defined shutdown semantics real-hardware-first, with emulator power-off treated as optional convenience.
 - 2026-03-13: Completed `TD-020`; aligned `Console.asm` shutdown strings/comments with the documented real-hardware-first contract while keeping emulator power-off requests as optional pre-halt attempts.
+- 2026-03-13: Completed `TD-008`; replaced the `Doc/CallGraph.md` placeholder with a curated cross-source-file call map aimed at reverse caller lookup and subsystem dependency review.
