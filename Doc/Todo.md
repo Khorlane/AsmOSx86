@@ -18,3 +18,4 @@
 [x] TD-016 Decide how to remove or formalize `Uptime.asm`'s dependency on `TimePut2Dec` so low-level formatting ownership is explicit.
 [x] TD-017 Standardize the repo's Bochs configuration and run scripts on the active Bochs 3.0 installation.
 [ ] TD-018 Examine behavior when shutdown console command is processed.
+[x] TD-019 Investigate Bochs-on-Windows host exit `0xC0000005` after guest soft power-off.

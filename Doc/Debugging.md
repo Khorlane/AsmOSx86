@@ -61,3 +61,34 @@ A Hobbyist Operating System in x86 Assembly
 10:39:22
 10:39:23
 ```  
+
+## Bochs Shutdown On Windows
+### Symptom
+Guest shutdown appeared to work, but PowerShell reported:
+```
+Write-Error: Bochs exited with code -1073741819.
+```
+
+Bochs itself logged:
+```
+[ACPI  ] ACPI control: soft power off
+[SIM   ] quit_sim called with exit code 1
+```
+
+### Conclusion
+- This was not an AsmOSx86 shutdown bug.
+- The guest successfully issued the Bochs/ACPI soft-power-off request.
+- The host-side `bochs.exe` process appeared to crash on exit when the display backend was left to Bochs auto-selection.
+
+### Working Fix
+Explicitly set the display backend in `AsmOSx86.bxrc`:
+```
+display_library: win32
+```
+
+With `display_library: win32` set explicitly, the guest shutdown path still powered off Bochs and PowerShell returned cleanly without the access-violation exit code.
+
+### Notes
+- Treat this as a Bochs-on-Windows environment/configuration issue, not an OS-kernel bug.
+- If this regression returns, compare explicit `display_library` choices before changing shutdown code.
+- The current config also points the Bochs log at `c:\Download\bochsout.txt`; if that path does not exist, Bochs falls back to `stderr`.
