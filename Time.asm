@@ -17,7 +17,8 @@
 ;   - Use TimeWall (Time*)  for: timestamps,logs,human-readable clock display.
 ;
 ; Ownership (LOCKED-IN)
-;   - All wall time logic lives in Time.asm; monotonic lives in Timer/Uptime” (or similar).
+;   - All wall time logic lives in Time.asm.
+;   - Monotonic time lives in Timer.asm / Uptime.asm.
 ;   - The kernel MUST NOT read CMOS or PIT directly.
 ;   - CMOS,PIT,resync,and future IRQ handling are internal details.
 ;
@@ -25,18 +26,20 @@
 ;   - Requires Timer.asm contract:
 ;       TimerInit
 ;       TimerNowTicks     ; returns EDX:EAX ticks (PIT input ticks)
-;   - Requires Kernel working storage:
-;       String  TimeStr,"XXXXXXXX"   ; payload 8 chars
 ;
 ; Resync Policy (B,locked-in for now)
 ;   - TimeNow will resync wall baseline every 60 seconds of monotonic time.
 ;   - Resync reads CMOS once and snaps wall baseline (wall may jump).
 ;
-; Exported
+; Public API
+;   TimeDtPrint
+;   TimeTmPrint
+;
+; Internal
 ;   TimeSync
 ;   TimeNow
 ;   TimeFmtHms
-;   TimeTmPrint
+;   TimeFmtYmd
 ;**************************************************************************************************
 
 [bits 32]
@@ -107,14 +110,15 @@ WallSyncHi      dd 0
 WallSyncValid   db 0
 
 ;---------------------------------------------------------------------------------------------------
-; Uptime baseline (boot ticks)
+; Legacy time storage
+;   Reserved / unused in current wall-time implementation.
 ;---------------------------------------------------------------------------------------------------
 BootLo          dd 0
 BootHi          dd 0
 BootValid       db 0
 
 ;---------------------------------------------------------------------------------------------------
-; TimeNow - advance wall time using monotonic ticks and sync with CMOS as needed
+; TimeNow - advance wall date/time from monotonic ticks and resync with CMOS as needed
 ;---------------------------------------------------------------------------------------------------
 TimeNow:
   cmp   byte[WallSyncValid],1
@@ -217,7 +221,7 @@ TimeSync:
 ;   Notes:
 ;     - Handles BCD or binary RTC based on RTC_STATUSB (RTC_BCD bit).
 ;     - Handles 12h vs 24h using TimeNormalizeHour (RTC_24H bit).
-;     - Reads CMOS twice-stable: waits for UIP=0, reads fields, verifies UIP still 0.
+;     - Uses a single RTC field read after UIP=0, then verifies UIP stayed clear.
 ;---------------------------------------------------------------------------------------------------
 TimeReadCmos:
   call  TimeWaitNotUip                  ; Wait until RTC not updating (UIP=0)
@@ -315,7 +319,14 @@ TimeReadCmos4:
   ret
 
 ;---------------------------------------------------------------------------------------------------
-; TimeAddDays - advance the current calendar date by EAX days
+; TimeAddDays
+;   Entry:
+;     EAX = number of whole days to add
+;     TimeDay/TimeMon/TimeYear = current calendar date
+;   Exit:
+;     TimeDay/TimeMon/TimeYear advanced by EAX days
+;   Clobbers:
+;     EAX, AL, BL, CX, DL
 ;---------------------------------------------------------------------------------------------------
 TimeAddDays:
   test  eax,eax
@@ -345,7 +356,14 @@ TimeAddDays4:
   ret
 
 ;---------------------------------------------------------------------------------------------------
-; TimeDaysInMonth - return AL = number of days in the current month/year
+; TimeDaysInMonth
+;   Entry:
+;     TimeMon  = month 1..12
+;     TimeYear = full year
+;   Exit:
+;     AL = number of days in the current month
+;   Clobbers:
+;     AL, EBX
 ;---------------------------------------------------------------------------------------------------
 TimeDaysInMonth:
   movzx ebx,byte[TimeMon]
@@ -364,7 +382,13 @@ TimeDaysInMonth2:
   ret
 
 ;---------------------------------------------------------------------------------------------------
-; TimeIsLeapYear - return AL = 1 if TimeYear is leap, else 0
+; TimeIsLeapYear
+;   Entry:
+;     TimeYear = full year
+;   Exit:
+;     AL = 1 if leap year, else 0
+;   Clobbers:
+;     EAX, ECX, EDX
 ;---------------------------------------------------------------------------------------------------
 TimeIsLeapYear:
   movzx eax,word[TimeYear]
@@ -397,7 +421,7 @@ TimeIsLeapYear1:
 ;---------------------------------------------------------------------------------------------------
 
 ;---------------------------------------------------------------------------------------------------
-; TimeTmPrint - prints wall time (HH:MM:SS)
+; TimeTmPrint - public wall-time API: prints current wall time (HH:MM:SS)
 ;---------------------------------------------------------------------------------------------------
 TimeTmPrint:
   call  TimeNow
@@ -409,7 +433,7 @@ TimeTmPrint:
   ret
 
 ;---------------------------------------------------------------------------------------------------
-; TimeDtPrint - prints wall time (YYYY-MM-DD)
+; TimeDtPrint - public wall-time API: prints current wall date (YYYY-MM-DD)
 ;---------------------------------------------------------------------------------------------------
 TimeDtPrint:
   call  TimeNow
@@ -421,7 +445,14 @@ TimeDtPrint:
   ret
 
 ;---------------------------------------------------------------------------------------------------
-; TimeFmtHms - EBX=String,formats current TimeHour/Min/Sec as "HH:MM:SS"
+; TimeFmtHms
+;   Entry:
+;     EBX = destination Str
+;     TimeHour/TimeMin/TimeSec = current wall clock time
+;   Exit:
+;     Destination payload updated to "HH:MM:SS"
+;   Clobbers:
+;     AL, EDI
 ;---------------------------------------------------------------------------------------------------
 TimeFmtHms:
   mov   edi,ebx
@@ -441,7 +472,14 @@ TimeFmtHms:
   ret
 
 ;---------------------------------------------------------------------------------------------------
-; TimeFmtYmd - Formats DateStr with current date/time as "YYYY-MM-DD"
+; TimeFmtYmd
+;   Entry:
+;     EBX = destination Str (currently ignored; routine writes DateStr directly)
+;     TimeYear/TimeMon/TimeDay = current wall clock date
+;   Exit:
+;     DateStr payload updated to "YYYY-MM-DD"
+;   Clobbers:
+;     AL, AX, EAX, EDX, EDI
 ;---------------------------------------------------------------------------------------------------
 TimeFmtYmd:
   mov   ebx,DateStr
@@ -466,7 +504,13 @@ TimeFmtYmd:
 ;---------------------------------------------------------------------------------------------------
 
 ;---------------------------------------------------------------------------------------------------
-; TimeBcdToBin - AL=BCD,returns AL=binary
+; TimeBcdToBin
+;   Entry:
+;     AL = packed BCD value
+;   Exit:
+;     AL = binary value
+;   Clobbers:
+;     AL, BL, EBX
 ;---------------------------------------------------------------------------------------------------
 TimeBcdToBin:
   mov   bl,al
@@ -478,7 +522,13 @@ TimeBcdToBin:
   ret
 
 ;---------------------------------------------------------------------------------------------------
-; TimeCmosReadReg - AL=register,returns AL=value
+; TimeCmosReadReg
+;   Entry:
+;     AL = CMOS register index
+;   Exit:
+;     AL = CMOS register value
+;   Clobbers:
+;     AL, DX
 ;---------------------------------------------------------------------------------------------------
 TimeCmosReadReg:
   mov   dx,CMOS_ADDR
@@ -489,7 +539,14 @@ TimeCmosReadReg:
   ret
 
 ;---------------------------------------------------------------------------------------------------
-; TimeNormalizeHour - AL=hour (maybe PM bit in 12h),returns AL=0..23
+; TimeNormalizeHour
+;   Entry:
+;     AL        = RTC hour value (may include PM bit in 12h mode)
+;     TimeStatB = RTC status B format flags
+;   Exit:
+;     AL = normalized 24-hour value 0..23
+;   Clobbers:
+;     AL, BL
 ;---------------------------------------------------------------------------------------------------
 TimeNormalizeHour:
   mov   bl,[TimeStatB]
@@ -509,7 +566,15 @@ TimeNormalizeHour2:
   ret
 
 ;---------------------------------------------------------------------------------------------------
-; TimePut4Dec - AX=0..9999,EDI=dest,writes four digits,EDI+=4
+; TimePut4Dec
+;   Entry:
+;     AX  = value 0..9999
+;     EDI = destination buffer
+;   Exit:
+;     [EDI..EDI+3] = four ASCII decimal digits
+;     EDI         += 4
+;   Clobbers:
+;     EAX, EDX, BL, EBX
 ;---------------------------------------------------------------------------------------------------
 TimePut4Dec:
   movzx eax,ax                          ; IMPORTANT: use only AX (clear upper bits)
@@ -539,7 +604,11 @@ TimePut4Dec:
   ret
 
 ;---------------------------------------------------------------------------------------------------
-; TimeWaitNotUip - wait until RTC not updating
+; TimeWaitNotUip
+;   Exit:
+;     RTC UIP flag observed clear
+;   Clobbers:
+;     AL, DX
 ;---------------------------------------------------------------------------------------------------
 TimeWaitNotUip:
   mov   al,RTC_STATUSA

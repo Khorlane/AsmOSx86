@@ -32,7 +32,7 @@ PIT_HZ          equ 1193182
 ;--------------------------------------------------------------------------------------------------
 ; Working storage (kept local to Timer.asm)
 ;--------------------------------------------------------------------------------------------------
-TimerReload     dw 0                     ; PIT divisor (0 means 65536)
+TimerReload     dw 0                     ; PIT reload value used for wrap math
 TimerLastCnt    dw 0                     ; last latched counter value
 TimerFirstRead  db 1                     ; first TimerNowTicks read after init
 TimerTicksLo    dd 0                     ; 64-bit accumulated ticks (low)
@@ -47,7 +47,7 @@ TimerTmpTicks   dd 0                     ; delay: delta ticks (32-bit)
 
 ;--------------------------------------------------------------------------------------------------
 ; TimerInit - initialize PIT channel 0 for stable polling
-;   Programs PIT ch0 mode 2 with divisor = 0 (65536).
+;   Programs PIT ch0 mode 2 and loads reload value 0xFFFF.
 ;--------------------------------------------------------------------------------------------------
 TimerInit:
   mov   al,PIT_MODE2_CH0                ; PIT ch0 mode2
@@ -84,6 +84,8 @@ TimerLatchCount0:
 ; TimerNowTicks - get monotonic tick counter
 ;   Returns:
 ;     EDX:EAX = 64-bit accumulated PIT input ticks
+;   Notes:
+;     First call after TimerInit seeds the baseline and returns zero.
 ;--------------------------------------------------------------------------------------------------
 TimerNowTicks:
   call  TimerLatchCount0                ; AX = current count
@@ -131,7 +133,9 @@ TimerNowTicks5:
 ; TimerSpinDelayMs - busy-wait delay using TimerNowTicks
 ;   EAX = milliseconds
 ;   Uses: ticks = round(ms*1193182/1000)
-;   Note: clamps very large ms to avoid DIV overflow on 386.
+;   Notes:
+;     - Busy-waits until the deadline is reached.
+;     - Clamps very large ms to avoid DIV overflow on 386.
 ;--------------------------------------------------------------------------------------------------
 TimerSpinDelayMs:
   ; Clamp ms to avoid div overflow (ms <= ~3,598,000 is safe)
