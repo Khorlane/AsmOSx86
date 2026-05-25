@@ -3,7 +3,7 @@
 ;   Time support (RTC + PIT)
 ;   - CMOS read for baseline wall clock (YYYY-MM-DD HH:MM:SS)
 ;   - PIT polled ticks for monotonic elapsed time (no IRQ)
-;   - 386-safe (no 64-bit instructions; uses EDX:EAX pairs)
+;   - 386-safe (no 64-bit instructions; uses Hi/Lo dword pairs)
 ;
 ; TIME CONTRACTS — MONOTONIC (UPTIME) vs WALL (CALENDAR)
 ;
@@ -25,7 +25,7 @@
 ; Dependencies
 ;   - Requires Timer.asm contract:
 ;       TimerInit
-;       TimerNowTicks     ; returns EDX:EAX ticks (PIT input ticks)
+;       TimerNowTicks     ; outputs TimerOutTicksHi:TimerOutTicksLo
 ;
 ; Resync Policy (B,locked-in for now)
 ;   - TimeNow will resync wall baseline every 60 seconds of monotonic time.
@@ -126,9 +126,9 @@ TimeNow:
   call  TimeSync
   jmp   TimeNow4
 TimeNow1:
-  call  TimerNowTicks                   ; EDX:EAX = mono_now
-  mov   esi,eax                         ; now_lo
-  mov   edi,edx                         ; now_hi
+  call  TimerNowTicks                   ; TimerOutTicksHi:TimerOutTicksLo = mono_now
+  mov   esi,[TimerOutTicksLo]           ; now_lo
+  mov   edi,[TimerOutTicksHi]           ; now_hi
   ; since_sync = mono_now - WallSync
   mov   eax,esi
   mov   edx,edi
@@ -202,7 +202,9 @@ TimeSync:
   mov   al,[TimeSec]
   add   ecx,eax
   mov   [WallSecDay],ecx
-  call  TimerNowTicks                   ; EDX:EAX = now
+  call  TimerNowTicks                   ; TimerOutTicksHi:TimerOutTicksLo = now
+  mov   eax,[TimerOutTicksLo]
+  mov   edx,[TimerOutTicksHi]
   mov   [WallSyncLo],eax
   mov   [WallSyncHi],edx
   mov   [WallLastLo],eax

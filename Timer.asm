@@ -4,12 +4,14 @@
 ;
 ;   Kernel-facing contract:
 ;     TimerInit
-;     TimerNowTicks        ; returns EDX:EAX = monotonic PIT input ticks (1/1193182s)
-;     TimerSpinDelayMs     ; EAX = ms, busy-wait using TimerNowTicks
+;     TimerLatchCount0     ; TimerLatchCnt = current PIT down-counter
+;     TimerNowTicks        ; TimerOutTicksHi:TimerOutTicksLo = monotonic PIT input ticks
+;     TimerSpinDelayMs     ; TimerDelayMs = delay duration in milliseconds
 ;
 ;   Notes:
-;     - 386-safe (no 64-bit instructions; 64-bit values returned in EDX:EAX)
+;     - 386-safe (no 64-bit instructions; 64-bit values stored as Hi/Lo dwords)
 ;     - Uses PIT ch0 down-counter + wrap tracking to build a monotonic tick counter.
+;     - Registers are scratch only; persistent inputs/outputs use Timer* globals.
 ;**************************************************************************************************
 
 [bits 32]
@@ -34,11 +36,14 @@ PIT_HZ          equ 1193182
 ;--------------------------------------------------------------------------------------------------
 TimerReload     dw 0                     ; PIT reload value used for wrap math
 TimerLastCnt    dw 0                     ; last latched counter value
+TimerLatchCnt   dw 0                     ; output: current latched PIT count
 TimerFirstRead  db 1                     ; first TimerNowTicks read after init
+TimerPad0       db 0                     ; keep dword alignment friendly
+TimerDelayMs    dd 0                     ; input: delay duration in milliseconds
 TimerTicksLo    dd 0                     ; 64-bit accumulated ticks (low)
 TimerTicksHi    dd 0                     ; 64-bit accumulated ticks (high)
-TimerRetLo      dd 0                     ; return staging (low)
-TimerRetHi      dd 0                     ; return staging (high)
+TimerOutTicksLo dd 0                     ; output: monotonic ticks low dword
+TimerOutTicksHi dd 0                     ; output: monotonic ticks high dword
 TimerStartLo    dd 0                     ; delay: start ticks (low)
 TimerStartHi    dd 0                     ; delay: start ticks (high)
 TimerDeadLo     dd 0                     ; delay: deadline ticks (low)
@@ -63,11 +68,14 @@ TimerInit:
   xor   eax,eax                         ; Clear accumulator
   mov   [TimerTicksLo],eax              ;  low
   mov   [TimerTicksHi],eax              ;  high
+  mov   [TimerOutTicksLo],eax           ; Clear output low
+  mov   [TimerOutTicksHi],eax           ; Clear output high
   ret                                   ; Return to caller
 
 ;--------------------------------------------------------------------------------------------------
-; TimerLatchCount0 - latch and read PIT channel 0 count into AX
-;   Returns AX = current down-counter value (latched)
+; TimerLatchCount0 - latch and read PIT channel 0 count
+;   Output:
+;     TimerLatchCnt = current down-counter value
 ;--------------------------------------------------------------------------------------------------
 TimerLatchCount0:
   mov   dx,PIT_CMD                      ; PIT command port
@@ -78,24 +86,27 @@ TimerLatchCount0:
   mov   ah,al                           ; Save low in AH temporarily
   in    al,dx                           ; Read high byte
   xchg  ah,al                           ; AX = hi:lo
+  mov   [TimerLatchCnt],ax              ; Store latched count
   ret                                   ; Return to caller
 
 ;--------------------------------------------------------------------------------------------------
 ; TimerNowTicks - get monotonic tick counter
-;   Returns:
-;     EDX:EAX = 64-bit accumulated PIT input ticks
+;   Output:
+;     TimerOutTicksLo = low 32 bits of accumulated PIT input ticks
+;     TimerOutTicksHi = high 32 bits of accumulated PIT input ticks
 ;   Notes:
-;     First call after TimerInit seeds the baseline and returns zero.
+;     First call after TimerInit seeds the baseline and returns zero in TimerOutTicksLo/Hi.
 ;--------------------------------------------------------------------------------------------------
 TimerNowTicks:
-  call  TimerLatchCount0                ; AX = current count
-  mov   bx,ax                           ; BX = curr
+  call  TimerLatchCount0                ; TimerLatchCnt = current count
+  mov   bx,[TimerLatchCnt]              ; BX = curr
   cmp   byte[TimerFirstRead],1          ; First read?
   jne   TimerNowTicks1                  ;  No
   mov   [TimerLastCnt],bx               ;  Yes: seed last count
   mov   byte[TimerFirstRead],0          ;  Clear flag
   xor   eax,eax
-  xor   edx,edx
+  mov   [TimerOutTicksLo],eax           ; output lo = 0
+  mov   [TimerOutTicksHi],eax           ; output hi = 0
   jmp   TimerNowTicks5                  ; Return zero ticks
 TimerNowTicks1:
   ; Compute delta = (last - curr) with wrap handling on down-counter.
@@ -124,14 +135,17 @@ TimerNowTicks4:
   mov   eax,[TimerTicksHi]              ; EAX = hi
   adc   eax,0                           ; hi += carry
   mov   [TimerTicksHi],eax              ; store hi
-  mov   eax,[TimerTicksLo]              ; return lo
-  mov   edx,[TimerTicksHi]              ; return hi
+  mov   eax,[TimerTicksLo]              ; load lo
+  mov   [TimerOutTicksLo],eax           ; output lo
+  mov   eax,[TimerTicksHi]              ; load hi
+  mov   [TimerOutTicksHi],eax           ; output hi
 TimerNowTicks5:
   ret                                   ; Return to caller
 
 ;--------------------------------------------------------------------------------------------------
 ; TimerSpinDelayMs - busy-wait delay using TimerNowTicks
-;   EAX = milliseconds
+;   Input:
+;     TimerDelayMs = milliseconds
 ;   Uses: ticks = round(ms*1193182/1000)
 ;   Notes:
 ;     - Busy-waits until the deadline is reached.
@@ -139,6 +153,7 @@ TimerNowTicks5:
 ;--------------------------------------------------------------------------------------------------
 TimerSpinDelayMs:
   ; Clamp ms to avoid div overflow (ms <= ~3,598,000 is safe)
+  mov   eax,[TimerDelayMs]              ; milliseconds
   cmp   eax,3600000                     ; Cap at ~1 hour
   jbe   TimerSpinDelayMs1               ;  ok
   mov   eax,3600000                     ;  clamp
@@ -152,7 +167,9 @@ TimerSpinDelayMs1:
   div   ecx                             ; EAX=ticks (32-bit),EDX=remainder
   mov   [TimerTmpTicks],eax             ; ticks lo (persist across calls)
   ; start = TimerNowTicks
-  call  TimerNowTicks                   ; EDX:EAX=start
+  call  TimerNowTicks                   ; TimerOutTicksHi:TimerOutTicksLo=start
+  mov   eax,[TimerOutTicksLo]
+  mov   edx,[TimerOutTicksHi]
   mov   [TimerStartLo],eax
   mov   [TimerStartHi],edx
   ; deadline = start + ticks
@@ -163,7 +180,9 @@ TimerSpinDelayMs1:
   mov   [TimerDeadLo],eax
   mov   [TimerDeadHi],edx
 TimerSpinDelayMs2:
-  call  TimerNowTicks                   ; EDX:EAX=now
+  call  TimerNowTicks                   ; TimerOutTicksHi:TimerOutTicksLo=now
+  mov   eax,[TimerOutTicksLo]
+  mov   edx,[TimerOutTicksHi]
   mov   ecx,[TimerDeadHi]               ; deadline hi
   cmp   edx,ecx                         ; compare hi
   jb    TimerSpinDelayMs2               ; now.hi < deadline.hi

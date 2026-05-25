@@ -339,6 +339,7 @@ CnDoCmdDelay:
   call  VdPutStr
   call  CnCrLf
   mov   eax,2000
+  mov   [TimerDelayMs],eax
   call  TimerSpinDelayMs
   call  TimeTmPrint
   call  CnSpace
@@ -380,6 +381,7 @@ CnDoCmdShutdown:
   mov   [pCnLogMsg],eax                 ;  shutdown
   call  CnLogIt                         ;  message
   mov   eax,3000                        ; Leave final message visible briefly
+  mov   [TimerDelayMs],eax
   call  TimerSpinDelayMs                ;  before optional power-off request
   mov   ax,0x2000                       ; Optional environment-specific
   mov   dx,0xB004                       ;  Bochs/ACPI soft-power-off request
