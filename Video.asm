@@ -64,6 +64,9 @@ VdPad1           dw 0
 VdWorkCol        dw 0
 VdWorkPad2       dw 0
 VdWorkCount      dd 0
+pVdWorkStr       dd 0                    ; work: current String payload pointer
+VdWorkLen        dw 0                    ; work: remaining String payload bytes
+VdWorkPad3       dw 0
 VdCurRow         dw 0
 VdCurCol         dw 0
 VdColorBack      db  0                  ; Background color (00h - 0Fh)
@@ -72,17 +75,12 @@ VdColorAttr      db  0                  ; Combination of background and foregrou
 
 ;------------------------------------------------------------------------------
 ; VdInit
-; Initializes the video output and input cursor state.
-;
-; Output (memory):
-;   VdOutCurRow = 1    ; Output region row set to 1 (1-based)
-;   VdOutCurCol = 1    ; Output region column set to 1 (1-based)
-;   VdInCurCol  = 1    ; "Input-style" column set to 1 (1-based)
-;
+;   Output:
+;     Initializes video output cursor, input cursor, current cursor position,
+;     and default color attribute.
 ; Notes:
-; - Should be called once at system startup or reset.
-; - Ensures video cursor state is in a known, clean state.
-; - Row 1, Col 1 maps to VGA offset 0.
+;     Calls VdClear.
+;     Row/Col state is 1-based.
 ;------------------------------------------------------------------------------
 VdInit:
   mov   ax,1
@@ -100,20 +98,30 @@ VdInit:
 
 ;------------------------------------------------------------------------------
 ; VdPutStr
-; Input (memory):
-;   pVdStr -> String [u16 len][bytes...]
+;   Input:
+;     pVdStr = Str pointer [u16 len][payload]
+;   Output:
+;     Writes each payload byte through VdPutChar.
+;   Notes:
+;     Uses pVdWorkStr and VdWorkLen as memory-backed loop state because
+;     VdPutChar is allowed to clobber all registers.
 ;------------------------------------------------------------------------------
 VdPutStr:
   mov   esi,[pVdStr]
   mov   ax,[esi]
-  movzx ecx,ax
+  mov   [VdWorkLen],ax
   add   esi,2
+  mov   [pVdWorkStr],esi
 VdPutStrNext:
-  test  ecx,ecx
+  mov   ax,[VdWorkLen]
+  test  ax,ax
   jz    VdPutStrDone
+  mov   esi,[pVdWorkStr]
   mov   al,[esi]
   inc   esi
-  dec   ecx
+  mov   [pVdWorkStr],esi
+  dec   ax
+  mov   [VdWorkLen],ax
   mov   [VdInCh],al
   call  VdPutChar
   jmp   VdPutStrNext
@@ -121,14 +129,14 @@ VdPutStrDone:
   ret
 
 ;------------------------------------------------------------------------------
-; VdPutChar (output region only: rows 1..24)
-; Input (memory):
-;   VdInCh = byte
-;
-; Control chars supported:
-;   0x0D CR: col=1 (1-based)
-;   0x0A LF: row++ with scroll inside output region (rows 1..24)
-;   0x08 BS: move left, erase char, move left (within row)
+; VdPutChar
+;   Input:
+;     VdInCh = character/control byte to write
+;   Output:
+;     Updates VdOutCurRow/VdOutCurCol and writes to output region.
+;   Notes:
+;     Handles CR, LF, BS, printable characters, and output scrolling.
+;     Output region is rows 1..24.
 ;------------------------------------------------------------------------------
 VdPutChar:
   mov   al,[VdInCh]
@@ -194,15 +202,15 @@ VdPutCharBSDone:
   ret
 
 ;------------------------------------------------------------------------------
-; VdInPutChar ("input-style" char write at row = VdCurRow)
-; Input:
-;   VdInCh
-;   VdCurRow must already be set by caller to the target row (1..25)
-;
-; Stops at right edge (no scroll).
-;
+; VdInPutChar
+;   Input:
+;     VdInCh   = character to write
+;     VdCurRow = target input row, 1..25
+;   Output:
+;     Writes character at VdCurRow/VdInCurCol, advances VdInCurCol,
+;     updates VdCurCol, and updates the hardware cursor.
 ; Notes:
-; - VdInCurCol is 1-based and clamps at 80.
+;     Stops at the right edge; does not scroll.
 ;------------------------------------------------------------------------------
 VdInPutChar:
   mov   ax,[VdInCurCol]
@@ -222,13 +230,12 @@ VdInPutCharDone:
 
 ;------------------------------------------------------------------------------
 ; VdInBackspaceVisual
-; - Moves left one column (if possible)
-; - Overwrites with space
-; - Cursor remains at erased position
-;
+;   Output:
+;     If VdInCurCol > 1, moves one column left, overwrites with a space,
+;     and leaves the hardware cursor at the erased position.
 ; Notes:
-; - VdInCurCol is 1-based; cannot backspace past column 1.
-; - Writes on row = VdCurRow (set by caller).
+;     Uses VdCurRow as the target input row.
+;     VdInCurCol is 1-based and cannot move before column 1.
 ;------------------------------------------------------------------------------
 VdInBackspaceVisual:
   mov   ax,[VdInCurCol]
@@ -248,11 +255,12 @@ VdInBackspaceVisualDone:
 
 ;------------------------------------------------------------------------------
 ; VdInClearLine
-; Clears the current "input-style" line at row = VdCurRow and sets InCurCol=1
-;
-; IMPORTANT:
-; - Do not use AX/EAX as the loop counter across CALL boundaries.
-; - VdInCurCol is 1-based.
+;   Output:
+;     Clears the current input-style row VdCurRow and resets VdInCurCol/VdCurCol
+;     to column 1.
+;   Notes:
+;     Uses VdWorkCol as memory-backed loop state because calls clobber registers.
+;     VdInCurCol is 1-based.
 ;------------------------------------------------------------------------------
 VdInClearLine:
   mov   ax,1
@@ -285,17 +293,16 @@ VdInClearLineDone:
 
 ;------------------------------------------------------------------------------
 ; VdWriteOutCharAtCursor
-; Writes the character in VdInCh to the VGA text buffer at the current output
-; region position (row = VdOutCurRow, col = VdOutCurCol) with the default attribute.
-;
-; Input (memory):
-;   VdInCh        = Character to write (byte)
-;   VdOutCurRow   = Output row (1-based, 1..24)
-;   VdOutCurCol   = Output column (1-based, 1..80)
-;
+;   Input:
+;     VdInCh      = character to write
+;     VdOutCurRow = output row, 1-based, 1..24
+;     VdOutCurCol = output column, 1-based, 1..80
+;     VdColorAttr = VGA text attribute
+;   Output:
+;     Writes character/attribute cell to VGA text memory.
 ; Notes:
-;   - Does not advance the cursor or modify VdOutCurRow/VdOutCurCol.
-;   - Row 1, Col 1 maps to VGA offset 0.
+;     Does not advance VdOutCurRow/VdOutCurCol.
+;     Row 1, Col 1 maps to VGA offset 0.
 ;------------------------------------------------------------------------------
 VdWriteOutCharAtCursor:
   mov   ax,[VdOutCurRow]
@@ -316,17 +323,16 @@ VdWriteOutCharAtCursor:
 
 ;------------------------------------------------------------------------------
 ; VdWriteInCharAtCursor
-; Writes the character in VdInCh to the VGA text buffer at:
-;   row = VdCurRow, col = VdInCurCol
-;
-; Input (memory):
-;   VdInCh      = Character to write (byte)
-;   VdCurRow    = Target row (1-based, 1..25)
-;   VdInCurCol  = Target column (1-based, 1..80)
-;
+;   Input:
+;     VdInCh      = character to write
+;     VdCurRow    = target row, 1-based, 1..25
+;     VdInCurCol  = target column, 1-based, 1..80
+;     VdColorAttr = VGA text attribute
+;   Output:
+;     Writes character/attribute cell to VGA text memory.
 ; Notes:
-;   - Does not advance the cursor or modify VdInCurCol.
-;   - Row 1, Col 1 maps to VGA offset 0.
+;     Does not advance VdInCurCol.
+;     Row 1, Col 1 maps to VGA offset 0.
 ;------------------------------------------------------------------------------
 VdWriteInCharAtCursor:
   mov   ax,[VdCurRow]
@@ -347,11 +353,12 @@ VdWriteInCharAtCursor:
 
 ;------------------------------------------------------------------------------
 ; VdScrollOutputRegion
-; Scroll output region rows 1..24 up by one line; clear row 24.
-;
+;   Output:
+;     Scrolls output region rows 1..24 up by one line and clears row 24.
 ; Notes:
-; - Copies rows 2..24 over rows 1..23 (23 rows).
-; - Clears row 24.
+;     Copies rows 2..24 over rows 1..23.
+;     Uses VdWorkCount and VdWorkCol as memory-backed loop state.
+;     Clears row 24 using VdColorAttr.
 ;------------------------------------------------------------------------------
 VdScrollOutputRegion:
   mov   eax,(VD_OUT_MAX_ROW - 1) * 160    ; 23 rows * 160 bytes/row
@@ -394,11 +401,12 @@ VdScrollDone:
 
 ;------------------------------------------------------------------------------
 ; VdClear
-; Clears the entire screen (all rows and columns) by writing spaces with the default attribute.
-;
+;   Output:
+;     Clears all 25 rows and 80 columns using spaces and VdColorAttr.
+;     Resets VdCurRow/VdCurCol, VdOutCurRow/VdOutCurCol, and VdInCurCol to 1.
+;     Updates the hardware cursor through VdSetCursor.
 ; Notes:
-; - Resets output cursor positions to row=1, col=1 (1-based).
-; - Resets VdInCurCol to 1 (1-based).
+;     Uses registers as local loop scratch only.
 ;------------------------------------------------------------------------------
 VdClear:
   mov   edi,VGA_TEXT_BASE
@@ -420,18 +428,16 @@ VdClearLoop:
 
 ;------------------------------------------------------------------------------
 ; VdSetCursor
-; Sets the hardware VGA text cursor to a specific screen position.
-;
-; Input (memory):
-;   VdCurRow = desired row (1..25)
-;   VdCurCol = desired col (1..80)
-;
+;   Input:
+;     VdCurRow = desired row, 1-based, 1..25
+;     VdCurCol = desired column, 1-based, 1..80
+;   Output:
+;     Programs the VGA hardware text cursor.
+;     VdInCurCol = VdCurCol.
 ; Notes:
-; - Row,Col ordering (row first, then col)
-; - Row 1, Col 1 maps to VGA offset 0
-; - Programs the VGA hardware cursor via ports 0x3D4/0x3D5
-; - Does NOT decide "input row" vs "output row" here; it only sets hardware
-;   cursor and tracks the current "input-style" column in VdInCurCol.
+;     Row,Col ordering is row first, then column.
+;     Row 1, Col 1 maps to VGA offset 0.
+;     Invalid row/column enters a halt loop.
 ;------------------------------------------------------------------------------
 VdSetCursor:
   mov   ax,[VdCurRow]                   ; Load desired row
@@ -480,9 +486,16 @@ VdSetCursorPanicHang:
   hlt
   jmp   VdSetCursorPanicHang
 
-;--------------------------------------------------------------------------------------------------
-; Set Color Attribute
-;--------------------------------------------------------------------------------------------------
+;------------------------------------------------------------------------------
+; VdSetColorAttr
+;   Input:
+;     VdColorBack = background color nibble 0..15
+;     VdColorFore = foreground color nibble 0..15
+;   Output:
+;     VdColorAttr = combined VGA text attribute byte.
+;   Notes:
+;     Clears EAX and EBX before combining nibbles to avoid stale high bits.
+;------------------------------------------------------------------------------
 VdSetColorAttr:
   xor   eax,eax                           ; Clear full
   xor   ebx,ebx                           ;  regs (avoid garbage OR)
