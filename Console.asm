@@ -51,6 +51,7 @@ String  CnCmdDelay,    "Delay"
 String  CnCmdHelp,     "Help"
 String  CnCmdShutdown, "Shutdown"
 String  CnCmdTime,     "Time"
+String  CnCmdUptime,   "Uptime"
 
 ; Console Command Table and Handlers
 align 4
@@ -60,6 +61,7 @@ CnCmdTable:
   dd CnCmdHelp,     CnDoCmdHelp
   dd CnCmdShutdown, CnDoCmdShutdown
   dd CnCmdTime,     CnDoCmdTime
+  dd CnCmdUptime,   CnDoCmdUptime
 CnCmdTableEnd:
 CnCmdTableCount equ (CnCmdTableEnd-CnCmdTable)/8
 
@@ -418,4 +420,13 @@ CnDoCmdShutdown:
 CnDoCmdTime:
   call  TimeTmPrint
   call  CnCrLf
+  ret
+
+;------------------------------------------------------------------------------
+; CnDoCmdUptime
+;   Output:
+;     Prints current uptime plus CRLF.
+;------------------------------------------------------------------------------
+CnDoCmdUptime:
+  call  UptimePrint
   ret

@@ -73,6 +73,7 @@ IDT2:
 %include "Keyboard.asm"
 %include "Time.asm"
 %include "Timer.asm"
+%include "Uptime.asm"
 %include "Utility.asm"
 %include "Video.asm"
 
@@ -99,6 +100,7 @@ FlushCS:
 
   ; Initialize subsystems
   call  TimerInit                       ; Initialize timer
+  call  UptimeInit                      ; Initialize uptime
   call  VdInit                          ; Initialize video
   call  KbInit                          ; Initialize keyboard
   call  CnInit                          ; Initialize console

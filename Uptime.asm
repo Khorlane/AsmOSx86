@@ -30,7 +30,6 @@
 ;   - 386-safe: no 64-bit instructions.
 ;   - Registers are scratch only.
 ;   - Persistent inputs/outputs use Uptime* globals.
-;   - This file is not currently included by Kernel.asm.
 ;**************************************************************************************************
 
 [bits 32]
