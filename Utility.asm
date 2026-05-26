@@ -19,7 +19,8 @@
 ;   - Subsystem-specific logic
 ;
 ; Notes (LOCKED-IN)
-;   - All routines are ABI-compliant and preserve registers unless stated.
+;   - All routines use memory-contract inputs/outputs unless stated.
+;   - Registers are scratch only; callers must not expect preservation.
 ;   - Callers must supply valid pointers and buffers per each routine’s contract.
 ;**************************************************************************************************
 
@@ -28,20 +29,25 @@
 align 4
 pStr1            dd 0                   ; Source string pointer
 pStr2            dd 0                   ; Destination string pointer
+pPut2DecDst      dd 0                   ; input/output: destination payload pointer
+Put2DecVal       db 0                   ; input: value 0..99
+Put2DecPad0      db 0,0,0               ; alignment padding
 
 ;------------------------------------------------------------------------------
 ; Put2Dec
-;   Entry:
-;     AL  = value 0..99
-;     EDI = destination buffer
-;   Exit:
-;     [EDI]   = tens ASCII digit
-;     [EDI+1] = ones ASCII digit
-;     EDI    += 2
+;   Input:
+;     Put2DecVal  = value 0..99
+;     pPut2DecDst = destination payload pointer
+;   Output:
+;     [pPut2DecDst original]   = tens ASCII digit
+;     [pPut2DecDst original+1] = ones ASCII digit
+;     pPut2DecDst += 2
 ;   Clobbers:
-;     AL, AH, BL
+;     AL, AH, BL, EDI
 ;------------------------------------------------------------------------------
 Put2Dec:
+  mov   edi,[pPut2DecDst]
+  mov   al,[Put2DecVal]
   xor   ah,ah
   mov   bl,10
   div   bl                              ; AL=tens,AH=ones
@@ -51,6 +57,7 @@ Put2Dec:
   add   al,'0'
   mov   [edi+1],al
   add   edi,2
+  mov   [pPut2DecDst],edi
   ret
 
 ;------------------------------------------------------------------------------

@@ -96,6 +96,18 @@ TimeCent        db 0
 TimeStatB       db 0
 TimeTmp         db 0                    ; temp byte for CMOS reads (century, etc.)
 TimePmBit       db 0                    ; temp: PM bit staging for hour conversion
+TimeCmosReg     db 0                    ; input: CMOS register index
+TimeCmosVal     db 0                    ; output: CMOS register value
+TimeBcdIn       db 0                    ; input: packed BCD value
+TimeBcdOut      db 0                    ; output: binary value
+TimeHourRaw     db 0                    ; input: raw RTC hour value
+TimeHourNorm    db 0                    ; output: normalized 24-hour value
+TimeDaysAdd     dd 0                    ; input/work: number of whole days to add
+pTimeFmtDst     dd 0                    ; input: destination Str pointer for TimeFmt* routines
+pTimePut4DecDst dd 0                    ; input/output: destination payload pointer
+TimePut4DecVal  dw 0                    ; input: value 0..9999
+TimeMonthLen    db 0                    ; output: days in current month
+TimeLeapOut     db 0                    ; output: 1 if leap year, else 0
 TimeMonthDays   db 31,28,31,30,31,30,31,31,30,31,30,31
 
 ;---------------------------------------------------------------------------------------------------
@@ -167,6 +179,7 @@ TimeNow3:
   mov   [WallSecDay],edx
   test  eax,eax
   jz    TimeNow4
+  mov   [TimeDaysAdd],eax
   call  TimeAddDays
 TimeNow4:
   ; Derive H:M:S from WallSecDay into TimeHour/Min/Sec
@@ -228,31 +241,49 @@ TimeSync:
 TimeReadCmos:
   call  TimeWaitNotUip                  ; Wait until RTC not updating (UIP=0)
   mov   al,RTC_STATUSB                  ; Read Status B (format flags)
+  mov   [TimeCmosReg],al
   call  TimeCmosReadReg
+  mov   al,[TimeCmosVal]
   mov   [TimeStatB],al
   mov   al,RTC_SEC                      ; Read seconds
+  mov   [TimeCmosReg],al
   call  TimeCmosReadReg
+  mov   al,[TimeCmosVal]
   mov   [TimeSec],al
   mov   al,RTC_MIN                      ; Read minutes
+  mov   [TimeCmosReg],al
   call  TimeCmosReadReg
+  mov   al,[TimeCmosVal]
   mov   [TimeMin],al
   mov   al,RTC_HOUR                     ; Read hours (may include PM bit in 12h mode)
+  mov   [TimeCmosReg],al
   call  TimeCmosReadReg
+  mov   al,[TimeCmosVal]
   mov   [TimeHour],al
   mov   al,RTC_DAY                      ; Read day of month
+  mov   [TimeCmosReg],al
   call  TimeCmosReadReg
+  mov   al,[TimeCmosVal]
   mov   [TimeDay],al
   mov   al,RTC_MON                      ; Read month
+  mov   [TimeCmosReg],al
   call  TimeCmosReadReg
+  mov   al,[TimeCmosVal]
   mov   [TimeMon],al
   mov   al,RTC_YEAR                     ; Read year (00..99)
+  mov   [TimeCmosReg],al
   call  TimeCmosReadReg
+  mov   al,[TimeCmosVal]
   mov   [TimeCent],al                   ; Temporarily stash YY in TimeCent (byte)
   mov   al,RTC_CENTURY                  ; Read century (e.g. 20)
+  mov   [TimeCmosReg],al
   call  TimeCmosReadReg
+  mov   al,[TimeCmosVal]
   mov   [TimeTmp],al                    ; TEMP byte storage (see note below)
   mov   al,RTC_STATUSA                  ; Verify UIP didn't flip during reads
+  mov   [TimeCmosReg],al
   call  TimeCmosReadReg
+  mov   al,[TimeCmosVal]
   test  al,RTC_UIP
   jnz   TimeReadCmos                    ; If updating started, retry
   ; If RTC provides BCD (RTC_BCD bit == 0), convert fields BCD->binary.
@@ -260,36 +291,52 @@ TimeReadCmos:
   test  al,RTC_BCD
   jnz   TimeReadCmos1                   ; If RTC_BCD=1 => already binary
   mov   al,[TimeSec]                    ; SEC
+  mov   [TimeBcdIn],al
   call  TimeBcdToBin
+  mov   al,[TimeBcdOut]
   mov   [TimeSec],al
   mov   al,[TimeMin]                    ; MIN
+  mov   [TimeBcdIn],al
   call  TimeBcdToBin
+  mov   al,[TimeBcdOut]
   mov   [TimeMin],al
   mov   al,[TimeHour]                   ; HOUR (preserve PM bit if present)
   mov   ah,al
   and   ah,080h                         ; PM bit
   mov   [TimePmBit],ah                  ; stage PM bit (calls clobber regs)
   and   al,07Fh
+  mov   [TimeBcdIn],al
   call  TimeBcdToBin
+  mov   al,[TimeBcdOut]
   mov   ah,[TimePmBit]
   or    al,ah
   mov   [TimeHour],al
   mov   al,[TimeDay]                    ; DAY
+  mov   [TimeBcdIn],al
   call  TimeBcdToBin
+  mov   al,[TimeBcdOut]
   mov   [TimeDay],al
   mov   al,[TimeMon]                    ; MON
+  mov   [TimeBcdIn],al
   call  TimeBcdToBin
+  mov   al,[TimeBcdOut]
   mov   [TimeMon],al
   mov   al,[TimeCent]                   ; YY (stored in TimeCent temporarily)
+  mov   [TimeBcdIn],al
   call  TimeBcdToBin
+  mov   al,[TimeBcdOut]
   mov   [TimeCent],al                   ; TimeCent now holds YY in binary
   mov   al,[TimeTmp]                     ; CENTURY
+  mov   [TimeBcdIn],al
   call  TimeBcdToBin
+  mov   al,[TimeBcdOut]
   mov   [TimeTmp],al                     ; temp now holds CC in binary
 TimeReadCmos1:
   ; Normalize hour to 24h if needed
   mov   al,[TimeHour]
+  mov   [TimeHourRaw],al
   call  TimeNormalizeHour
+  mov   al,[TimeHourNorm]
   mov   [TimeHour],al
   ; Build full year: TimeYear = (CC*100 + YY) if CC present, else 19/20 pivot + YY
   xor   eax,eax
@@ -322,19 +369,22 @@ TimeReadCmos4:
 
 ;---------------------------------------------------------------------------------------------------
 ; TimeAddDays
-;   Entry:
-;     EAX = number of whole days to add
+;   Input:
+;     TimeDaysAdd = number of whole days to add
 ;     TimeDay/TimeMon/TimeYear = current calendar date
-;   Exit:
-;     TimeDay/TimeMon/TimeYear advanced by EAX days
+;   Output:
+;     TimeDay/TimeMon/TimeYear advanced by TimeDaysAdd days
+;     TimeDaysAdd = 0 after all requested days are applied
 ;   Clobbers:
 ;     EAX, AL, BL, CX, DL
 ;---------------------------------------------------------------------------------------------------
 TimeAddDays:
+  mov   eax,[TimeDaysAdd]
   test  eax,eax
   jz    TimeAddDays4
 TimeAddDays1:
-  call  TimeDaysInMonth                 ; AL = days in current month
+  call  TimeDaysInMonth                 ; TimeMonthLen = days in current month
+  mov   al,[TimeMonthLen]
   mov   dl,[TimeDay]
   inc   dl                              ; candidate next day
   cmp   dl,al
@@ -352,18 +402,20 @@ TimeAddDays2:
   mov   [TimeMon],bl
 TimeAddDays3:
   mov   [TimeDay],dl
+  mov   eax,[TimeDaysAdd]
   dec   eax
+  mov   [TimeDaysAdd],eax
   jnz   TimeAddDays1
 TimeAddDays4:
   ret
 
 ;---------------------------------------------------------------------------------------------------
 ; TimeDaysInMonth
-;   Entry:
+;   Input:
 ;     TimeMon  = month 1..12
 ;     TimeYear = full year
-;   Exit:
-;     AL = number of days in the current month
+;   Output:
+;     TimeMonthLen = number of days in the current month
 ;   Clobbers:
 ;     AL, EBX
 ;---------------------------------------------------------------------------------------------------
@@ -371,24 +423,28 @@ TimeDaysInMonth:
   movzx ebx,byte[TimeMon]
   dec   ebx
   mov   al,[TimeMonthDays+ebx]
+  mov   [TimeMonthLen],al
   cmp   byte[TimeMon],2
   jne   TimeDaysInMonth2
-  call  TimeIsLeapYear
+  call  TimeIsLeapYear                  ; TimeLeapOut = 1 if leap year
+  mov   al,[TimeLeapOut]
   test  al,al
   jz    TimeDaysInMonth1
   mov   al,29
+  mov   [TimeMonthLen],al
   ret
 TimeDaysInMonth1:
   mov   al,28
+  mov   [TimeMonthLen],al
 TimeDaysInMonth2:
   ret
 
 ;---------------------------------------------------------------------------------------------------
 ; TimeIsLeapYear
-;   Entry:
+;   Input:
 ;     TimeYear = full year
-;   Exit:
-;     AL = 1 if leap year, else 0
+;   Output:
+;     TimeLeapOut = 1 if leap year, else 0
 ;   Clobbers:
 ;     EAX, ECX, EDX
 ;---------------------------------------------------------------------------------------------------
@@ -413,9 +469,11 @@ TimeIsLeapYear:
   jnz   TimeIsLeapYear1
 TimeIsLeapYear2:
   mov   al,1
+  mov   [TimeLeapOut],al
   ret
 TimeIsLeapYear1:
   xor   al,al
+  mov   [TimeLeapOut],al
   ret
 
 ;---------------------------------------------------------------------------------------------------
@@ -427,7 +485,8 @@ TimeIsLeapYear1:
 ;---------------------------------------------------------------------------------------------------
 TimeTmPrint:
   call  TimeNow
-  mov   ebx,TimeStr
+  mov   eax,TimeStr
+  mov   [pTimeFmtDst],eax
   call  TimeFmtHms
   mov   eax,TimeStr
   mov   [pVdStr],eax
@@ -439,7 +498,8 @@ TimeTmPrint:
 ;---------------------------------------------------------------------------------------------------
 TimeDtPrint:
   call  TimeNow
-  mov   ebx,DateStr
+  mov   eax,DateStr
+  mov   [pTimeFmtDst],eax
   call  TimeFmtYmd
   mov   eax,DateStr
   mov   [pVdStr],eax
@@ -448,56 +508,71 @@ TimeDtPrint:
 
 ;---------------------------------------------------------------------------------------------------
 ; TimeFmtHms
-;   Entry:
-;     EBX = destination Str
+;   Input:
+;     pTimeFmtDst = destination Str
 ;     TimeHour/TimeMin/TimeSec = current wall clock time
-;   Exit:
+;   Output:
 ;     Destination payload updated to "HH:MM:SS"
 ;   Clobbers:
 ;     AL, EDI
 ;---------------------------------------------------------------------------------------------------
 TimeFmtHms:
-  mov   edi,ebx
+  mov   edi,[pTimeFmtDst]
   add   edi,2
+  mov   [pPut2DecDst],edi
   mov   al,[TimeHour]
+  mov   [Put2DecVal],al
   call  Put2Dec
+  mov   edi,[pPut2DecDst]
   mov   al,':'
   mov   [edi],al
   inc   edi
+  mov   [pPut2DecDst],edi
   mov   al,[TimeMin]
+  mov   [Put2DecVal],al
   call  Put2Dec
+  mov   edi,[pPut2DecDst]
   mov   al,':'
   mov   [edi],al
   inc   edi
+  mov   [pPut2DecDst],edi
   mov   al,[TimeSec]
+  mov   [Put2DecVal],al
   call  Put2Dec
   ret
 
 ;---------------------------------------------------------------------------------------------------
 ; TimeFmtYmd
-;   Entry:
-;     EBX = destination Str (currently ignored; routine writes DateStr directly)
+;   Input:
+;     pTimeFmtDst = destination Str
 ;     TimeYear/TimeMon/TimeDay = current wall clock date
-;   Exit:
-;     DateStr payload updated to "YYYY-MM-DD"
+;   Output:
+;     Destination payload updated to "YYYY-MM-DD"
 ;   Clobbers:
 ;     AL, AX, EAX, EDX, EDI
 ;---------------------------------------------------------------------------------------------------
 TimeFmtYmd:
-  mov   ebx,DateStr
-  mov   edi,ebx
+  mov   edi,[pTimeFmtDst]
   add   edi,2                           ; Skip length word
+  mov   [pTimePut4DecDst],edi
   mov   ax,[TimeYear]                   ; YYYY
+  mov   [TimePut4DecVal],ax
   call  TimePut4Dec
+  mov   edi,[pTimePut4DecDst]
   mov   al,'-'
   mov   [edi],al
   inc   edi
+  mov   [pPut2DecDst],edi
   mov   al,[TimeMon]                    ; MM
+  mov   [Put2DecVal],al
   call  Put2Dec
+  mov   edi,[pPut2DecDst]
   mov   al,'-'
   mov   [edi],al
   inc   edi
+  mov   [pPut2DecDst],edi
   mov   al,[TimeDay]                    ; DD
+  mov   [Put2DecVal],al
   call  Put2Dec
   ret
 
@@ -507,50 +582,55 @@ TimeFmtYmd:
 
 ;---------------------------------------------------------------------------------------------------
 ; TimeBcdToBin
-;   Entry:
-;     AL = packed BCD value
-;   Exit:
-;     AL = binary value
+;   Input:
+;     TimeBcdIn = packed BCD value
+;   Output:
+;     TimeBcdOut = binary value
 ;   Clobbers:
 ;     AL, BL, EBX
 ;---------------------------------------------------------------------------------------------------
 TimeBcdToBin:
+  mov   al,[TimeBcdIn]
   mov   bl,al
   and   al,0Fh
   shr   bl,4
   movzx ebx,bl
   imul  ebx,10
   add   al,bl
+  mov   [TimeBcdOut],al
   ret
 
 ;---------------------------------------------------------------------------------------------------
 ; TimeCmosReadReg
-;   Entry:
-;     AL = CMOS register index
-;   Exit:
-;     AL = CMOS register value
+;   Input:
+;     TimeCmosReg = CMOS register index
+;   Output:
+;     TimeCmosVal = CMOS register value
 ;   Clobbers:
 ;     AL, DX
 ;---------------------------------------------------------------------------------------------------
 TimeCmosReadReg:
+  mov   al,[TimeCmosReg]
   mov   dx,CMOS_ADDR
   or    al,CMOS_NMI                     ; NMI off while reading
   out   dx,al
   mov   dx,CMOS_DATA
   in    al,dx
+  mov   [TimeCmosVal],al
   ret
 
 ;---------------------------------------------------------------------------------------------------
 ; TimeNormalizeHour
-;   Entry:
-;     AL        = RTC hour value (may include PM bit in 12h mode)
-;     TimeStatB = RTC status B format flags
-;   Exit:
-;     AL = normalized 24-hour value 0..23
+;   Input:
+;     TimeHourRaw = RTC hour value, may include PM bit in 12h mode
+;     TimeStatB   = RTC status B format flags
+;   Output:
+;     TimeHourNorm = normalized 24-hour value 0..23
 ;   Clobbers:
 ;     AL, BL
 ;---------------------------------------------------------------------------------------------------
 TimeNormalizeHour:
+  mov   al,[TimeHourRaw]
   mov   bl,[TimeStatB]
   test  bl,RTC_24H
   jnz   TimeNormalizeHour2
@@ -565,21 +645,23 @@ TimeNormalizeHour1:
   jne   TimeNormalizeHour2
   add   al,12                           ; PM add 12
 TimeNormalizeHour2:
+  mov   [TimeHourNorm],al
   ret
 
 ;---------------------------------------------------------------------------------------------------
 ; TimePut4Dec
-;   Entry:
-;     AX  = value 0..9999
-;     EDI = destination buffer
-;   Exit:
-;     [EDI..EDI+3] = four ASCII decimal digits
-;     EDI         += 4
+;   Input:
+;     TimePut4DecVal  = value 0..9999
+;     pTimePut4DecDst = destination payload pointer
+;   Output:
+;     [pTimePut4DecDst original..original+3] = four ASCII decimal digits
+;     pTimePut4DecDst += 4
 ;   Clobbers:
-;     EAX, EDX, BL, EBX
+;     AL, AX, EAX, EDX, BL, EBX, EDI
 ;---------------------------------------------------------------------------------------------------
 TimePut4Dec:
-  movzx eax,ax                          ; IMPORTANT: use only AX (clear upper bits)
+  mov   edi,[pTimePut4DecDst]
+  movzx eax,word[TimePut4DecVal]
   xor   edx,edx
   mov   ebx,1000
   div   ebx                             ; EAX=thousands,EDX=rem
@@ -603,18 +685,21 @@ TimePut4Dec:
   add   al,'0'
   mov   [edi+1],al
   add   edi,2
+  mov   [pTimePut4DecDst],edi
   ret
 
 ;---------------------------------------------------------------------------------------------------
 ; TimeWaitNotUip
-;   Exit:
-;     RTC UIP flag observed clear
+;   Output:
+;     Returns only after RTC UIP flag is observed clear.
 ;   Clobbers:
 ;     AL, DX
 ;---------------------------------------------------------------------------------------------------
 TimeWaitNotUip:
   mov   al,RTC_STATUSA
+  mov   [TimeCmosReg],al
   call  TimeCmosReadReg
+  mov   al,[TimeCmosVal]
   test  al,RTC_UIP
   jnz   TimeWaitNotUip
   ret
