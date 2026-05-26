@@ -1,45 +1,36 @@
 ;**************************************************************************************************
 ; Uptime.asm
-;   Uptime reporting (monotonic / TimeMono)
+;   Uptime reporting using monotonic Timer ticks.
 ;
-;   Display Format:
-;     "UP YY:DDD:HH:MM:SS"
+; Display Format:
+;   "UP YY:DDD:HH:MM:SS"
 ;
-;   Semantics (LOCKED-IN):
-;     - Uptime measures monotonic time since UptimeInit.
-;     - The uptime baseline is captured exactly when UptimeInit
-;       is called (not at boot by default).
-;     - This allows the kernel to define “uptime start” explicitly.
+; Semantics:
+;   - Uptime measures monotonic elapsed time since UptimeInit.
+;   - Uptime is based only on TimerNowTicks / TimerOutTicksLo/Hi.
+;   - Uptime is unaffected by wall-time resync or CMOS changes.
 ;
-;   Initialization Rules:
-;     - Kernel MUST call TimerInit before UptimeInit.
-;     - Kernel SHOULD call UptimeInit during early boot.
-;     - If UptimeNow / UptimePrint is called before UptimeInit,
-;       the uptime subsystem will lazily initialize itself
-;       using the current monotonic tick as the baseline.
+; Kernel-facing contract:
+;   UptimeInit
+;     Captures the monotonic tick baseline.
 ;
-;   Kernel-Facing Contract:
-;     UptimeInit
-;       - Captures the monotonic tick baseline.
-;       - Defines the start of uptime measurement.
+;   UptimeNow
+;     UptimeOutSec = uptime seconds since UptimeInit.
 ;
-;     UptimeNow
-;       - Returns EAX = uptime seconds since UptimeInit.
-;       - Uses monotonic time only (never wall time).
+;   UptimeFmtYdhms
+;     Input:
+;       UptimeFmtSec = seconds to format.
+;     Output:
+;       UptimeStr payload updated as "UP YY:DDD:HH:MM:SS".
 ;
-;     UptimePrint
-;       - Formats and prints uptime as "UP YY:DDD:HH:MM:SS".
-;       - Always prints via CnPrint (thus always ends with CrLf).
+;   UptimePrint
+;     Updates and prints UptimeStr through VdPutStr plus CnCrLf.
 ;
-;   Requires:
-;     TimerNowTicks      ; EDX:EAX = monotonic PIT ticks
-;     CnPrint            ; EBX = String, prints + CrLf
-;     UptimeStr          ; String  UptimeStr,"UP 00:000:00:00:00"
-;
-;   Design Guarantees:
-;     - Uptime never goes backward.
-;     - Uptime is unaffected by wall-time resync or CMOS changes.
-;     - Formatting limits and rollover policy are local to Uptime.asm.
+; Notes:
+;   - 386-safe: no 64-bit instructions.
+;   - Registers are scratch only.
+;   - Persistent inputs/outputs use Uptime* globals.
+;   - This file is not currently included by Kernel.asm.
 ;**************************************************************************************************
 
 [bits 32]
@@ -53,217 +44,183 @@ UP_SEC_HOUR     equ 3600
 UP_SEC_DAY      equ 86400
 UP_SEC_YEAR     equ 31536000
 
-section .data
 String  UptimeStr,"UP YY:DDD:HH:MM:SS"
-UptimeBaseLo    dd 0
-UptimeBaseHi    dd 0
-UptimeRetSec    dd 0                    ; staged return (seconds)
+UptimeBaseLo       dd 0                 ; baseline ticks low
+UptimeBaseHi       dd 0                 ; baseline ticks high
+UptimeOutSec       dd 0                 ; output: uptime seconds
+UptimeFmtSec       dd 0                 ; input: seconds to format
+UptimeYears        dd 0                 ; work: total years
+UptimeDays         dd 0                 ; work: day-of-year 0..364
+UptimeHours        db 0                 ; work: hour 0..23
+UptimeMinutes      db 0                 ; work: minute 0..59
+UptimeSeconds      db 0                 ; work: second 0..59
+UptimeInitDone     db 0                 ; 1 once baseline is captured
+UptimePad0         db 0                 ; alignment padding
+UptimePut3DecVal   dd 0                 ; input: value 0..999
+pUptimePut3DecDst  dd 0                 ; input/output: destination payload pointer
 
-section .text
 ;--------------------------------------------------------------------------------------------------
-; UptimeInit - capture baseline ticks (uptime starts here)
+; UptimeInit
+;   Output:
+;     UptimeBaseLo/UptimeBaseHi = current monotonic tick baseline.
+;     UptimeInitDone = 1.
+;   Notes:
+;     Calls TimerNowTicks twice: first to prime, second for baseline.
 ;--------------------------------------------------------------------------------------------------
 UptimeInit:
-  pusha                                 ; Save registers
   call  TimerNowTicks                   ; Prime TimerNowTicks
-  call  TimerNowTicks                   ; Stable read
-  mov   [UptimeBaseLo],eax              ; Save baseline ticks
+  call  TimerNowTicks                   ; Stable baseline read
+  mov   eax,[TimerOutTicksLo]
+  mov   edx,[TimerOutTicksHi]
+  mov   [UptimeBaseLo],eax
   mov   [UptimeBaseHi],edx
-  popa                                  ; Restore registers
+  mov   byte[UptimeInitDone],1
   ret
 
 ;--------------------------------------------------------------------------------------------------
-; UptimeNow - returns uptime seconds since UptimeInit
-;   Returns:
-;     EAX=seconds
+; UptimeNow
+;   Output:
+;     UptimeOutSec = uptime seconds since UptimeInit.
+;   Notes:
+;     Lazily calls UptimeInit if no baseline has been captured yet.
 ;--------------------------------------------------------------------------------------------------
 UptimeNow:
-  pusha                                 ; Save registers
-  call  TimerNowTicks                   ; EDX:EAX=now ticks
+  cmp   byte[UptimeInitDone],1
+  je    UptimeNow1
+  call  UptimeInit
+UptimeNow1:
+  call  TimerNowTicks
+  mov   eax,[TimerOutTicksLo]
+  mov   edx,[TimerOutTicksHi]
   sub   eax,[UptimeBaseLo]
-  sbb   edx,[UptimeBaseHi]              ; EDX:EAX=delta ticks
+  sbb   edx,[UptimeBaseHi]              ; delta ticks in local scratch
   mov   ecx,UP_PIT_HZ
-  div   ecx                             ; EAX=seconds,EDX=remainder
-  mov   [UptimeRetSec],eax              ; stage return (POPA will clobber regs)
-  popa
-  mov   eax,[UptimeRetSec]
+  div   ecx                             ; quotient seconds, remainder ticks
+  mov   [UptimeOutSec],eax
   ret
 
 ;--------------------------------------------------------------------------------------------------
-; UptimePut2Dec - write two decimal digits
-;   AL=value 0..99
-;   EDI=dest
-;--------------------------------------------------------------------------------------------------
-UptimePut2Dec:
-  push  eax                             ; Save eax
-  push  ebx                             ; Save ebx
-  xor   ah,ah
-  mov   bl,10
-  div   bl                              ; AL=tens,AH=ones
-  add   al,'0'
-  mov   [edi],al
-  mov   al,ah
-  add   al,'0'
-  mov   [edi+1],al
-  add   edi,2
-  pop   ebx
-  pop   eax
-  ret
-
-;--------------------------------------------------------------------------------------------------
-; UptimePut3Dec - write three decimal digits
-;   EAX=value 0..999
-;   EDI=dest
+; UptimePut3Dec
+;   Input:
+;     UptimePut3DecVal  = value 0..999
+;     pUptimePut3DecDst = destination payload pointer
+;   Output:
+;     [pUptimePut3DecDst original..original+2] = three ASCII decimal digits.
+;     pUptimePut3DecDst += 3.
+;   Clobbers:
+;     AL, EAX, EDX, EBX, EDI
 ;--------------------------------------------------------------------------------------------------
 UptimePut3Dec:
-  push  eax                             ; Save eax
-  push  ebx                             ; Save ebx
-  push  edx                             ; Save edx
+  mov   edi,[pUptimePut3DecDst]
+  mov   eax,[UptimePut3DecVal]
   xor   edx,edx
   mov   ebx,100
-  div   ebx                             ; EAX=hundreds,EDX=rem
+  div   ebx                             ; quotient hundreds, remainder
   add   al,'0'
   mov   [edi],al
   inc   edi
   mov   eax,edx
   xor   edx,edx
   mov   ebx,10
-  div   ebx                             ; EAX=tens,EDX=ones
+  div   ebx                             ; quotient tens, remainder ones
   add   al,'0'
   mov   [edi],al
   mov   al,dl
   add   al,'0'
   mov   [edi+1],al
   add   edi,2
-  pop   edx
-  pop   ebx
-  pop   eax
+  mov   [pUptimePut3DecDst],edi
   ret
 
 ;--------------------------------------------------------------------------------------------------
-; UptimeFmtYdhms - fill UptimeStr payload with "UP YY:DDD:HH:MM:SS"
+; UptimeFmtYdhms
 ;   Input:
-;     EAX=uptime seconds
+;     UptimeFmtSec = uptime seconds to format.
+;   Output:
+;     UptimeStr payload updated to "UP YY:DDD:HH:MM:SS".
+;   Notes:
+;     Years are displayed modulo 100.
+;     Days are day-of-year style 000..364 using 365-day years.
+;     Uses Put2Dec and UptimePut3Dec through memory-contract variables.
 ;--------------------------------------------------------------------------------------------------
 UptimeFmtYdhms:
-  pusha                                 ; Save registers
-  mov   esi,eax                         ; ESI=total seconds
-  mov   eax,esi
+  mov   eax,[UptimeFmtSec]
   xor   edx,edx
   mov   ebx,UP_SEC_YEAR
-  div   ebx                             ; EAX=years_total,EDX=rem_year
-  mov   ebp,eax                         ; EBP=years_total
-  mov   esi,edx                         ; ESI=rem_year
-  mov   eax,ebp
+  div   ebx                             ; quotient years_total, remainder year
+  mov   [UptimeYears],eax
+  mov   eax,edx
+  xor   edx,edx
+  mov   ebx,UP_SEC_DAY
+  div   ebx                             ; quotient DDD, remainder day
+  mov   [UptimeDays],eax
+  mov   eax,edx
+  xor   edx,edx
+  mov   ebx,UP_SEC_HOUR
+  div   ebx                             ; quotient HH, remainder hour
+  mov   [UptimeHours],al
+  mov   eax,edx
+  xor   edx,edx
+  mov   ebx,UP_SEC_MIN
+  div   ebx                             ; quotient MM, remainder SS
+  mov   [UptimeMinutes],al
+  mov   [UptimeSeconds],dl
+  mov   edi,UptimeStr
+  add   edi,5                           ; payload + 3, points to YY
+  mov   eax,[UptimeYears]
   xor   edx,edx
   mov   ebx,100
   div   ebx                             ; EDX=YY
-  mov   ebp,edx                         ; EBP=YY (0..99)
-  mov   eax,esi
-  xor   edx,edx
-  mov   ebx,UP_SEC_DAY
-  div   ebx                             ; EAX=DDD,EDX=rem_day
-  mov   ecx,eax                         ; ECX=DDD
-  mov   esi,edx                         ; ESI=rem_day
-  mov   eax,esi
-  xor   edx,edx
-  mov   ebx,UP_SEC_HOUR
-  div   ebx                             ; EAX=HH,EDX=rem_hour
-  mov   esi,eax                         ; ESI=HH
-  mov   edi,edx                         ; EDI=rem_hour
-  mov   eax,edi
-  xor   edx,edx
-  mov   ebx,UP_SEC_MIN
-  div   ebx                             ; EAX=MM,EDX=SS
-  mov   ebx,eax                         ; EBX=MM
-  ; EDX=SS
-  mov   edi,UptimeStr
-  add   edi,5                           ; Payload+3 ("UP ")
-  mov   eax,ebp                         ; YY
-  mov   al,al
-  call  UptimePut2Dec
+  mov   al,dl
+  mov   [Put2DecVal],al
+  mov   [pPut2DecDst],edi
+  call  Put2Dec
+  mov   edi,[pPut2DecDst]
   mov   al,':'
   mov   [edi],al
   inc   edi
-  mov   eax,ecx                         ; DDD
+  mov   eax,[UptimeDays]
+  mov   [UptimePut3DecVal],eax
+  mov   [pUptimePut3DecDst],edi
   call  UptimePut3Dec
+  mov   edi,[pUptimePut3DecDst]
   mov   al,':'
   mov   [edi],al
   inc   edi
-  mov   eax,esi                         ; HH
-  mov   al,al
-  call  UptimePut2Dec
+  mov   al,[UptimeHours]
+  mov   [Put2DecVal],al
+  mov   [pPut2DecDst],edi
+  call  Put2Dec
+  mov   edi,[pPut2DecDst]
   mov   al,':'
   mov   [edi],al
   inc   edi
-  mov   eax,ebx                         ; MM
-  mov   al,al
-  call  UptimePut2Dec
+  mov   al,[UptimeMinutes]
+  mov   [Put2DecVal],al
+  mov   [pPut2DecDst],edi
+  call  Put2Dec
+  mov   edi,[pPut2DecDst]
   mov   al,':'
   mov   [edi],al
   inc   edi
-  mov   eax,edx                         ; SS
-  mov   al,al
-  call  UptimePut2Dec
-  popa
+  mov   al,[UptimeSeconds]
+  mov   [Put2DecVal],al
+  mov   [pPut2DecDst],edi
+  call  Put2Dec
   ret
 
 ;--------------------------------------------------------------------------------------------------
-; UptimePrint - print uptime string (always +CrLf via CnPrint)
+; UptimePrint
+;   Output:
+;     Updates UptimeStr and prints it through VdPutStr plus CnCrLf.
 ;--------------------------------------------------------------------------------------------------
 UptimePrint:
-  pusha
-  call  UptimeNow                       ; EAX=seconds
-  call  UptimeFmtYdhms                  ; Fill UptimeStr payload
-  mov   ebx,UptimeStr
-  call  CnPrint
-  popa
-  ret
-
-;---------------------------------------------------------------------------------------------------
-; TimeUptimeFmtHms - EBX=String,formats uptime "HH:MM:SS" (hours mod 100)
-;---------------------------------------------------------------------------------------------------
-TimeUptimeFmtHms:
-  pusha                                 ; Save registers
-  mov   ebp,ebx                         ; Save dest String
-  cmp   byte[BootValid],1
-  je    TimeUptimeFmtHms1
-TimeUptimeFmtHms1:
-  call  TimerNowTicks                   ; EDX:EAX = now
-  sub   eax,[BootLo]
-  sbb   edx,[BootHi]                    ; EDX:EAX = uptime_ticks
-  mov   ecx,TIME_PIT_HZ
-  div   ecx                             ; EAX=uptime_seconds,EDX=rem
-  xor   edx,edx
-  mov   ecx,3600
-  div   ecx                             ; EAX=hours_total,EDX=rem3600
-  mov   esi,eax                         ; hours_total
-  mov   edi,edx                         ; rem3600
-  mov   eax,edi
-  xor   edx,edx
-  mov   ecx,60
-  div   ecx                             ; EAX=minutes,EDX=seconds
-  mov   ebx,eax                         ; minutes
-  mov   ecx,edx                         ; seconds
-  mov   eax,esi
-  xor   edx,edx
-  mov   edi,100
-  div   edi                             ; EDX=hours_mod100
-  mov   al,dl                           ; AL=hours (0..99)
-  mov   edi,ebp                         ; EDI = String base
-  add   edi,2                           ; Skip length word
-  call  Put2Dec                         ; HH
-  mov   al,':'
-  mov   [edi],al
-  inc   edi
-  mov   eax,ebx
-  mov   al,al
-  call  Put2Dec                         ; MM
-  mov   al,':'
-  mov   [edi],al
-  inc   edi
-  mov   eax,ecx
-  mov   al,al
-  call  Put2Dec                         ; SS
-  popa
+  call  UptimeNow
+  mov   eax,[UptimeOutSec]
+  mov   [UptimeFmtSec],eax
+  call  UptimeFmtYdhms
+  mov   eax,UptimeStr
+  mov   [pVdStr],eax
+  call  VdPutStr
+  call  CnCrLf
   ret
