@@ -29,17 +29,13 @@ KBD_DATA_PORT   equ 0x60
 
 ;------------------------------------------------------------------------------
 ; KbInit
-; Initializes keyboard state variables.
-;
-; Output (memory):
-;   KbModShift    = 0   ; Shift modifier cleared
-;   KbOutHasKey   = 0   ; No key event pending
-;   KbOutType     = KEY_NONE ; Output type set to none
-;   KbOutChar     = 0   ; Output character cleared
-;
+;   Output:
+;     KbModShift  = 0
+;     KbOutHasKey = 0
+;     KbOutType   = KEY_NONE
+;     KbOutChar   = 0
 ; Notes:
-; - Should be called once at system startup or reset.
-; - Ensures keyboard state is in a known, clean state.
+;     Initializes keyboard state to a known idle state.
 ;------------------------------------------------------------------------------
 KbInit:
   xor   eax,eax
@@ -51,16 +47,15 @@ KbInit:
 
 ;------------------------------------------------------------------------------
 ; KbGetKey
-; Reads a key event from the keyboard hardware and decodes it.
-; 
-; Output (memory):
-;   KbOutHasKey = 1 if a key event is available, 0 otherwise
-;   KbOutType   = KEY_CHAR, KEY_ENTER, KEY_BACKSPACE, or KEY_NONE
-;   KbOutChar   = ASCII value if KEY_CHAR, undefined otherwise
-;
+;   Output:
+;     KbOutHasKey = 1 if a key event is available, 0 otherwise
+;     KbOutType   = KEY_CHAR, KEY_ENTER, KEY_BACKSPACE, or KEY_NONE
+;     KbOutChar   = ASCII value if KEY_CHAR, 0 otherwise
+;     KbModShift  = updated shift state when shift make/break is seen
 ; Notes:
-; - Handles shift state and translates scancodes to ASCII.
-; - Does not rely on register values across CALL boundaries.
+;     Polls the keyboard controller once.
+;     Handles shift state and translates scancodes to ASCII.
+;     Registers are scratch only.
 ;------------------------------------------------------------------------------
 KbGetKey:
   xor   eax,eax
