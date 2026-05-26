@@ -62,8 +62,13 @@ Put2Dec:
 
 ;------------------------------------------------------------------------------
 ; StrCopy
-; Copies a length-prefixed string from [pStr1] to [pStr2].
-; pStr1 and pStr2 are global variables set before call.
+;   Input:
+;     pStr1 = source Str pointer
+;     pStr2 = destination Str pointer
+;   Output:
+;     Destination Str receives source length word and payload bytes.
+;   Clobbers:
+;     CX, ESI, EDI
 ;------------------------------------------------------------------------------
 StrCopy:
   mov   esi,[pStr1]        ; Source pointer
@@ -75,10 +80,12 @@ StrCopy:
 
 ;------------------------------------------------------------------------------
 ; StrTrim
-; Input:
-;   pStr1 -> Str
-; Output:
-;   Leading + trailing spaces removed
+;   Input:
+;     pStr1 = Str pointer
+;   Output:
+;     Leading and trailing spaces removed in-place.
+;   Notes:
+;     Calls StrTrimLead and StrTrimTrail.
 ;------------------------------------------------------------------------------
 StrTrim:
   call  StrTrimLead
@@ -87,18 +94,19 @@ StrTrim:
 
 ;------------------------------------------------------------------------------
 ; StrTrimLead
-; Input:
-;   pStr1 -> Str [u16 len][bytes...]
-; Output:
-;   Leading spaces removed in-place (payload compacted, len updated)
-; Clobbers: EAX,ECX,ESI,EDI
+;   Input:
+;     pStr1 = Str pointer
+;   Output:
+;     Leading spaces removed in-place.
+;     String length word is updated.
+;   Clobbers:
+;     EAX, ECX, ESI, EDI
 ;------------------------------------------------------------------------------
 StrTrimLead:
   mov   edi,[pStr1]                     ; EDI = Str
   movzx ecx,word[edi]                  ; ECX = len
   test  ecx,ecx
   jz    StrTrimLeadDone
-
   lea   esi,[edi+2]                    ; ESI = payload
   xor   eax,eax                        ; EAX = skip count
 StrTrimLeadScan:
@@ -126,11 +134,13 @@ StrTrimLeadDone:
   ret
 ;------------------------------------------------------------------------------
 ; StrTrimTrail
-; Input:
-;   pStr1 -> Str
-; Output:
-;   Trailing spaces removed by reducing len
-; Clobbers: ECX,ESI,EDI
+;   Input:
+;     pStr1 = Str pointer
+;   Output:
+;     Trailing spaces removed in-place.
+;     String length word is updated.
+;   Clobbers:
+;     ECX, ESI, EDI
 ;------------------------------------------------------------------------------
 StrTrimTrail:
   mov   edi,[pStr1]                     ; EDI = Str

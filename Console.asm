@@ -65,16 +65,11 @@ CnCmdTableCount equ (CnCmdTableEnd-CnCmdTable)/8
 
 ;------------------------------------------------------------------------------
 ; Console
-; Main console loop for AsmOSx86.
-;
-; Behavior:
-; - Continuously reads a line of user input using CnReadLine.
-; - Echoes input on the bottom row of the screen.
-; - Intended as the primary user interaction loop.
-;
+;   Output:
+;     Reads completed command lines, logs them, trims them, and dispatches commands.
 ; Notes:
-; - Each iteration waits for and processes a full line of input.
-; - Output is displayed immediately; command processing can be added as needed.
+;     Uses pCnLogMsg and pStr1 as memory-backed call inputs after CnReadLine
+;     reports a completed line through CnOutHasLine.
 ;------------------------------------------------------------------------------
 Console:
   call  CnReadLine                      ; non-blocking line editor
@@ -93,14 +88,12 @@ ConsoleDone:
 
 ;------------------------------------------------------------------------------
 ; CnInit
-; Initializes the console input state.
-;
-; Output (memory):
-;   CnCmdLineLen = 0                        ; Input length cleared
-;
+;   Output:
+;     Initializes console input state, command buffer metadata, video color,
+;     cursor position, and startup log messages.
 ; Notes:
-; - Should be called once at system startup or reset.
-; - Ensures the console input buffer is in a known, clean state.
+;     Sets pCnCmdLine, CnCmdMaxLen, CnCmdLineLen, VdCurRow, and VdCurCol.
+;     Uses pCnLogMsg as the memory-backed input to CnLogIt.
 ;------------------------------------------------------------------------------
 CnInit:
   mov   al,Black                        ; Background
@@ -121,36 +114,36 @@ CnInit:
   mov   [VdCurCol],ax                   ;  column to 1
   call  VdSetCursor                     ; Update cursor position
   ; Log startup messages
-  lea  eax,[CnStartMsg1]
-  mov  [pCnLogMsg],eax
-  call CnLogIt
-  lea  eax,[CnStartMsg2]
-  mov  [pCnLogMsg],eax
-  call CnLogIt
-  lea  eax,[CnStartMsg3]
-  mov  [pCnLogMsg],eax
-  call CnLogIt
+  lea   eax,[CnStartMsg1]
+  mov   [pCnLogMsg],eax
+  call  CnLogIt
+  lea   eax,[CnStartMsg2]
+  mov   [pCnLogMsg],eax
+  call  CnLogIt
+  lea   eax,[CnStartMsg3]
+  mov   [pCnLogMsg],eax
+  call  CnLogIt
   ret
 
 ;------------------------------------------------------------------------------
-; CnCrLf - Outputs a carriage return and line feed to the console
-; Output:
-;   Calls VdPutStr to print CRLF sequence
+; CnCrLf
+;   Output:
+;     Prints CRLF through VdPutStr.
 ; Notes:
-; - Used to move the cursor to the beginning of the next line in the console
+;     Sets pVdStr to CrLf before calling VdPutStr.
 ;------------------------------------------------------------------------------
 CnCrLf:
-  lea   eax,[CrLf]        
-  mov   [pVdStr],eax         
-  call  VdPutStr   
+  lea   eax,[CrLf]
+  mov   [pVdStr],eax
+  call  VdPutStr
   ret
 
 ;------------------------------------------------------------------------------
-; CnSpace -  Outputs a space character to the console
-; Output:
-;   Calls VdPutStr to print space character
+; CnSpace
+;   Output:
+;     Prints one space through VdPutStr.
 ; Notes:
-; - Used to insert a space in the console output
+;     Sets pVdStr to Space1 before calling VdPutStr.
 ;------------------------------------------------------------------------------
 CnSpace:
   lea   eax,[Space1]
@@ -160,35 +153,34 @@ CnSpace:
 
 ;------------------------------------------------------------------------------
 ; CnReadLine
-; Reads a line of user input from the console with editing support.
-;
-; Behavior:
-;   - Accepts character input, handles backspace and enter keys.
-;   - Supports editing the input line before submission.
-;   - Stores the input as a length-prefixed string at [pCnCmdLine].
-;
-; Output (memory):
-;   [pCnCmdLine]   = Length-prefixed input string (Str format)
-;   CnCmdLineLen  = Number of characters entered
-;
+;   Input:
+;     pCnCmdLine   = destination command-line Str buffer
+;     CnCmdMaxLen  = maximum payload length
+;     CnRlActive   = 1 if an input line is already being edited, 0 otherwise
+;   Output:
+;     pCnCmdLine target receives committed Str length and payload on Enter.
+;     CnCmdLineLen = current edit length while editing.
+;     CnOutHasLine = 1 when a full line was submitted this call, else 0.
+;     CnRlActive   = 0 after Enter, 1 while editing.
 ; Notes:
-; - Uses KbGetKey for keyboard input and VdInPutChar for display.
-; - Follows column alignment and PascalCase coding standards (LOCKED-IN).
+;     Non-blocking line editor. Polls timer and keyboard once per call.
+;     Uses KbGetKey output variables and VdIn* routines for visual editing.
+;     Registers are scratch only across all calls.
 ;------------------------------------------------------------------------------
 CnReadLine:
-  mov   byte[CnOutHasLine],0           ; default: no completed line
-  cmp   byte[CnRlActive],1             ; already editing a line?
+  mov   byte[CnOutHasLine],0            ; default: no completed line
+  cmp   byte[CnRlActive],1              ; already editing a line?
   je    CnReadLinePoll
-  mov   byte[CnRlActive],1             ; begin new line
+  mov   byte[CnRlActive],1              ; begin new line
   xor   ax,ax
-  mov   [CnCmdLineLen],ax              ; reset input length
-  call  VdInClearLine                  ; clear input row,InCurCol=1
+  mov   [CnCmdLineLen],ax               ; reset input length
+  call  VdInClearLine                   ; clear input row,InCurCol=1
 CnReadLinePoll:
-  call  TimerNowTicks                  ; keep accumulator updated
-  call  KbGetKey                       ; poll keyboard once
+  call  TimerNowTicks                   ; keep accumulator updated
+  call  KbGetKey                        ; poll keyboard once
   mov   al,[KbOutHasKey]
   test  al,al
-  jz    CnReadLineDone                 ; no key -> return immediately
+  jz    CnReadLineDone                  ; no key -> return immediately
   mov   al,[KbOutType]
   cmp   al,KEY_CHAR
   je    CnReadLineOnChar
@@ -209,7 +201,7 @@ CnReadLineOnChar:
   mov   [esi+2+ecx],al
   inc   cx
   mov   [CnCmdLineLen],cx
-  mov   [VdInCh],al
+  mov   [VdInCh],al                     ; visual char input
   call  VdInPutChar
   jmp   CnReadLineDone
 CnReadLineOnBackspace:
@@ -224,20 +216,22 @@ CnReadLineOnBackspace:
 CnReadLineOnEnter:
   mov   esi,[pCnCmdLine]
   mov   ax,[CnCmdLineLen]
-  mov   [esi],ax                       ; commit Str length
-  mov   byte[CnOutHasLine],1           ; signal: line ready
-  mov   byte[CnRlActive],0             ; go idle (next call starts new line)
-  call  VdInClearLine                  ; clear the input row after submit
+  mov   [esi],ax                        ; commit Str length
+  mov   byte[CnOutHasLine],1            ; signal: line ready
+  mov   byte[CnRlActive],0              ; go idle (next call starts new line)
+  call  VdInClearLine                   ; clear the input row after submit
 CnReadLineDone:
   ret
 
-; -----------------------------------------------------------------------------
-; CnLogIt - Logs a message with timestamp to the console
-; Output: None
-; Notes:
-; - Uses TimeDtPrint and TimeTmPrint for timestamping
-; - Outputs the message pointed to by pCnLogMsg
-; -----------------------------------------------------------------------------
+;------------------------------------------------------------------------------
+; CnLogIt
+;   Input:
+;     pCnLogMsg = Str pointer to message payload to print after timestamp
+;   Output:
+;     Writes "YYYY-MM-DD HH:MM:SS <message>" plus CRLF to the console.
+;   Notes:
+;     Uses TimeDtPrint, TimeTmPrint, VdPutStr, and CnCrLf.
+;------------------------------------------------------------------------------
 CnLogIt:
   call  TimeDtPrint
   call  CnSpace
@@ -251,14 +245,15 @@ CnLogIt:
 
 ;------------------------------------------------------------------------------
 ; CnCmdDispatch
-; Dispatches the command in CnCmdLine by searching CnCmdTable entries:
-;   dd CnCmdNameStr,CnCmdHandler
-; Match policy:
-;   - exact match, case-insensitive, length must match
-; On match:
-;   - Calls the handler
-; On no match:
-;   - Just returns
+;   Input:
+;     CnCmdLine = command line Str to match
+;     CnCmdTable/CnCmdTableCount = command table and entry count
+;   Output:
+;     Calls matching command handler if found; otherwise returns.
+;   Notes:
+;     Uses CnTmpLen, pCnTmpInput, pCnTmpTable, and CnTmpCount as
+;     memory-backed dispatch state.
+;     Comparison is exact, case-insensitive, and length must match.
 ;------------------------------------------------------------------------------
 CnCmdDispatch:
   lea   eax,[CnCmdLine]                 ; EAX = input Str
@@ -326,11 +321,22 @@ CnCmdDispatchDone:
 ; Each handler corresponds to a command in CnCmdTable.
 ; Handlers perform specific actions based on the command invoked.
 ;------------------------------------------------------------------------------
+;------------------------------------------------------------------------------
+; CnDoCmdDate
+;   Output:
+;     Prints current wall date plus CRLF.
+;------------------------------------------------------------------------------
 CnDoCmdDate:
   call  TimeDtPrint
   call  CnCrLf
   ret
 
+;------------------------------------------------------------------------------
+; CnDoCmdDelay
+;   Output:
+;     Prints start timestamp/message, waits about 2000ms, then prints end
+;     timestamp/message.
+;------------------------------------------------------------------------------
 CnDoCmdDelay:
   call  TimeTmPrint
   call  CnSpace
@@ -349,6 +355,13 @@ CnDoCmdDelay:
   call  CnCrLf
   ret
 
+;------------------------------------------------------------------------------
+; CnDoCmdHelp
+;   Output:
+;     Prints each command name in CnCmdTable, one per line.
+;   Notes:
+;     Uses pCnCmdTable and CnHelpCnt as memory-backed loop state.
+;------------------------------------------------------------------------------
 CnDoCmdHelp:
   mov   eax,CnCmdTable
   mov   [pCnCmdTable],eax
@@ -373,6 +386,11 @@ CnDoCmdHelpLoop:
 CnDoCmdHelpDone:
   ret
 
+;------------------------------------------------------------------------------
+; CnDoCmdShutdown
+;   Output:
+;     Logs shutdown messages, waits briefly, attempts soft power-off, then halts.
+;------------------------------------------------------------------------------
 CnDoCmdShutdown:
   lea   eax,[CnShutdown1]               ; Print 1st
   mov   [pCnLogMsg],eax                 ;  shutdown
@@ -392,6 +410,11 @@ CnDoCmdShutdown:
   hlt                                   ;  386-class hardware: stop forever
   ret                                   ; Never reached; does not return
 
+;------------------------------------------------------------------------------
+; CnDoCmdTime
+;   Output:
+;     Prints current wall time plus CRLF.
+;------------------------------------------------------------------------------
 CnDoCmdTime:
   call  TimeTmPrint
   call  CnCrLf
