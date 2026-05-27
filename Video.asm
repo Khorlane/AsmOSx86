@@ -116,12 +116,12 @@ VdPutStrNext:
   mov   ax,[VdWorkLen]
   test  ax,ax
   jz    VdPutStrDone
+  dec   ax
+  mov   [VdWorkLen],ax
   mov   esi,[pVdWorkStr]
   mov   al,[esi]
   inc   esi
   mov   [pVdWorkStr],esi
-  dec   ax
-  mov   [VdWorkLen],ax
   mov   [VdInCh],al
   call  VdPutChar
   jmp   VdPutStrNext
