@@ -64,10 +64,11 @@ If a routine “feels like” it belongs somewhere else, it probably does.
 
 All Utility routines **must follow the global ABI**:
 
-- Preserve all general registers (`pusha` / `popa`)
-- If a return value would be clobbered by `popa`, it must be:
-  - staged in memory
-  - restored after `popa`
+- Registers are scratch working state
+- Callers must not assume registers survive a `call`
+- Utility routines must not use `pusha` / `popa` as the default pattern
+- Stable inputs and outputs must be passed through documented memory variables
+- Any register-based exception must be explicitly documented in that routine’s contract
 
 Utility routines must be **safe to call from anywhere**.
 
@@ -78,7 +79,7 @@ Utility routines must be **safe to call from anywhere**.
 Utility routines **must respect canonical string formats**:
 
 - **CStr** = NUL-terminated string
-- **Str** = length-prefixed OS string (`dw total_bytes`)
+- **Str** = length-prefixed OS string (`dw payload_length`)
 
 Utility code must:
 - never assume Str payloads are NUL-terminated

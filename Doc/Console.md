@@ -16,7 +16,9 @@ Use `Console.asm` for implementation details.
 
 ## Console Role
 
-The console is the primary interactive shell for the current kernel.
+The console is the kernel/operator interface for the current system.
+
+It is used for startup messages, diagnostics, built-in kernel commands, and controlled shutdown. It should be treated as an operator console, not as the future userland shell or standard user session interface.
 
 Current boot flow brings the console up early in startup, after timer, video, and keyboard initialization.
 
@@ -26,6 +28,7 @@ The active command set currently includes:
 - `Help`
 - `Shutdown`
 - `Time`
+- `Uptime`
 
 ---
 
@@ -81,8 +84,6 @@ If no command matches, the console currently does nothing and simply returns to 
 
 #### Current Implementation Notes
 - `Console.asm` currently attempts Bochs/ACPI-oriented power-off port writes before halting.
-- `Console.asm` currently logs `Shutdown complete.` before the final outcome is knowable.
-- That wording is not the desired long-term contract and should be treated as an implementation-alignment issue, not as the authoritative shutdown meaning.
 
 ---
 

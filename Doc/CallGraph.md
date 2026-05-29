@@ -50,6 +50,10 @@ These are useful starting points, but the main purpose of this document is the c
   - called by:
     - `Kernel.asm` -> `MainLoop`
 
+- `CnCrLf`
+  - called by:
+    - `Uptime.asm` -> `UptimePrint`
+
 ### `Keyboard.asm`
 
 - `KbInit`
@@ -86,12 +90,21 @@ These are useful starting points, but the main purpose of this document is the c
     - `Time.asm`    -> `TimeSync`
     - `Uptime.asm`  -> `UptimeInit`
     - `Uptime.asm`  -> `UptimeNow`
-    - `Uptime.asm`  -> `UptimePrint`
 
 - `TimerSpinDelayMs`
   - called by:
     - `Console.asm` -> `CnDoCmdDelay`
     - `Console.asm` -> `CnDoCmdShutdown`
+
+### `Uptime.asm`
+
+- `UptimeInit`
+  - called by:
+    - `Kernel.asm` -> `Stage3`
+
+- `UptimePrint`
+  - called by:
+    - `Console.asm` -> `CnDoCmdUptime`
 
 ### `Utility.asm`
 
@@ -132,6 +145,7 @@ These are useful starting points, but the main purpose of this document is the c
     - `Console.asm` -> `CnDoCmdHelp`
     - `Time.asm`    -> `TimeTmPrint`
     - `Time.asm`    -> `TimeDtPrint`
+    - `Uptime.asm`  -> `UptimePrint`
 
 - `VdInClearLine`
   - called by:
@@ -159,6 +173,7 @@ Important indirect handler entries:
 - `Console.asm` -> `CnDoCmdHelp`
 - `Console.asm` -> `CnDoCmdShutdown`
 - `Console.asm` -> `CnDoCmdTime`
+- `Console.asm` -> `CnDoCmdUptime`
 
 This matters because command handlers may appear to have no direct textual caller other than the table-driven dispatch path.
 
@@ -170,12 +185,14 @@ This matters because command handlers may appear to have no direct textual calle
   - `Console.asm`
   - `Keyboard.asm`
   - `Timer.asm`
+  - `Uptime.asm`
   - `Video.asm`
 
 - `Console.asm` depends directly on:
   - `Keyboard.asm`
   - `Time.asm`
   - `Timer.asm`
+  - `Uptime.asm`
   - `Utility.asm`
   - `Video.asm`
 
@@ -185,9 +202,10 @@ This matters because command handlers may appear to have no direct textual calle
   - `Video.asm`
 
 - `Uptime.asm` depends directly on:
+  - `Console.asm`
   - `Timer.asm`
   - `Utility.asm`
-  - `Console.asm`
+  - `Video.asm`
 
 ---
 

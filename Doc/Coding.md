@@ -127,9 +127,11 @@ Used when ownership is clear:
 
 ## 5. Register Discipline
 
-- Preserve registers unless explicitly documented otherwise
-- `pusha` / `popa` used consistently for public routines
-- Stage return values if `popa` would clobber them
+- Registers are scratch working state
+- Callers must not assume registers survive a `call`
+- Callees do not preserve registers unless a routine explicitly documents an exception
+- Do not use `pusha` / `popa` as the default public routine pattern
+- Stable inputs and outputs must be passed through documented memory variables
 
 ---
 

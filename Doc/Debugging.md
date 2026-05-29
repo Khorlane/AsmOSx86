@@ -1,6 +1,6 @@
 # Debugging Notes
 ## Time and Timer
-To tell if resync is occuring add the following lines:  
+To tell if resync is occurring add the following lines:
 ### Early in Kernel.asm
 ```
   ;-----------------------------------------
@@ -9,7 +9,7 @@ To tell if resync is occuring add the following lines:
   mov   ecx,20                          ; Print time ~20 times
 TimeTestLoop:
   call  TimeTmPrint                     ; HH:MM:SS (wall time)
-  mov   eax,1000                        ; Delay
+  mov   dword[TimerDelayMs],1000        ; Delay
   call  TimerSpinDelayMs                ;  1 second
   loop  TimeTestLoop
 ```
@@ -21,19 +21,18 @@ TIME_RSYNC_SEC  equ 5
 ```
 Add debug string
 ```
-; Temp for debugging start
-TimeResyncStr   dw  3                   ; length = 3 bytes (2 payload + length word)
-                db  '*',0Dh,0Ah         ; "*" + CrLf
+TimeResyncStr   dw  3                   ; payload length = 3 bytes
+                db  '*',0Dh,0Ah
 ; Temp for debugging end
 ```
 If re-sync occurs, TimeSync will fire and read the CMOS clock
 ```
 TimeSync:
-  pusha
   call  TimeReadCmos                    ; updates TimeHour/Min/Sec
   ; Temp for debugging start
-  mov   ebx,TimeResyncStr               ; Resync marker
-  call  CnPrint                         ; Print "*" + CrLf
+  lea   eax,[TimeResyncStr]
+  mov   [pVdStr],eax
+  call  VdPutStr
   ; Temp for debugging end
 
   xor   eax,eax

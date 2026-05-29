@@ -21,10 +21,11 @@ Current initialization order in `Kernel.asm`:
 1. Load GDT and reload code/data segment state
 2. Load an empty IDT
 3. `TimerInit`
-4. `VdInit`
-5. `KbInit`
-6. `CnInit`
-7. Enter the main console loop
+4. `UptimeInit`
+5. `VdInit`
+6. `KbInit`
+7. `CnInit`
+8. Enter the main console loop
 
 This is the active source-of-truth sequence.
 
@@ -33,6 +34,7 @@ This is the active source-of-truth sequence.
 ## Current Dependency Notes
 
 - `TimerInit` must occur before timer-backed services are used.
+- `UptimeInit` must occur after timer initialization.
 - `VdInit` must occur before normal kernel screen output is relied on.
 - `KbInit` must occur before keyboard polling is used.
 - `CnInit` occurs after timer, video, and keyboard initialization.
@@ -59,14 +61,6 @@ Current design intent:
 
 ---
 
-## Uptime Initialization Behavior
-
-`UptimeInit` is not part of the current active kernel initialization path.
-
-`Uptime.asm` exists as a subsystem, but it is not currently included by `Kernel.asm`.
-
----
-
 ## Early-Use Rule
 
 Current code allows limited lazy initialization for wall time through `Time.asm`.
@@ -82,7 +76,7 @@ This document should not claim that all subsystems forbid lazy init.
 ## Summary
 
 - `Kernel.asm` owns the active boot order
-- current boot order is `TimerInit`, `VdInit`, `KbInit`, `CnInit`
+- current subsystem boot order is `TimerInit`, `UptimeInit`, `VdInit`, `KbInit`, `CnInit`
 - wall time intentionally initializes lazily on first use
 - console is designed to come up early, so first wall-time use normally happens very early in boot
-- `UptimeInit` is not part of the active kernel boot path today
+- uptime is explicitly initialized during early boot, after `TimerInit`

@@ -55,15 +55,15 @@ This separation is deliberate and permanent.
 
 ### Exported Interface
 - `TimerInit`
-- `TimerNowTicks`  
-  - Returns `EDX:EAX = monotonic PIT input ticks`
+- `TimerNowTicks`
+  - Updates `TimerOutTicksHi:TimerOutTicksLo` with monotonic PIT input ticks
 - `TimerSpinDelayMs`
   - Busy-wait delay using monotonic ticks
 
 ### Characteristics
 - 386-safe
 - No interrupts
-- 64-bit tick accumulation using `EDX:EAX`
+- 64-bit tick accumulation
 - PIT channel 0 programmed in mode 2
 
 ### Delay Accuracy
@@ -89,7 +89,7 @@ Implemented using 32-bit math with remainder handling.
 ### Exported Interface
 - `UptimeInit`
 - `UptimeNow`
-  - Returns `EAX = uptime seconds`
+  - Returns uptime seconds
 - `UptimePrint`
 
 ### Display Format (LOCKED-IN)

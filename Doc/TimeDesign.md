@@ -152,7 +152,6 @@ The follow-up discussion asked whether full 64-bit state would leak complexity a
 Suggested encapsulation model from the discussion:
 - keep hi/lo globals private to the time subsystem
 - expose narrow routines such as increment, read, compare, and diff helpers
-- treat `EDX:EAX` as the public register-level time value
 - avoid direct timestamp arithmetic outside scheduler/time code
 
 ### Decision
