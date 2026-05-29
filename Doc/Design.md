@@ -1,4 +1,4 @@
-# AsmOSx86 High-Level Design and Concept Documentx
+# AsmOSx86 High-Level Design and Concept Document
 
 ## 1. Purpose
 

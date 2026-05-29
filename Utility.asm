@@ -9,8 +9,8 @@
 ;     - Are safe to call from early boot and core kernel code
 ;
 ; Contains
-;   - Data conversion helpers (e.g. CStr → Str)
-;   - Generic formatting or manipulation routines
+;   - Decimal formatting helpers such as Put2Dec
+;   - Kernel Str copy and trim helpers
 ;   - Pure helper logic with no side effects beyond documented outputs
 ;
 ; Does NOT contain
