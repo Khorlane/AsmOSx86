@@ -22,6 +22,7 @@ Current major included kernel components are:
 Config.asm
 Console.asm
 Keyboard.asm
+Kc.asm
 Time.asm
 Timer.asm
 Uptime.asm
@@ -39,10 +40,15 @@ The current kernel provides:
 - VGA text-mode output
 - keyboard polling
 - command-line console
+- initial memory-backed Kernel Call dispatcher
+- initial tested Kernel Calls:
+  - `KcTmGetUptime`
+  - `KcVdWriteStr`
 - simple built-in commands:
   - `Date`
   - `Delay`
   - `Help`
+  - `KcTest`
   - `Shutdown`
   - `Time`
   - `Uptime`
@@ -307,6 +313,15 @@ KcTable
 KcTableCount
 ```
 
+Current implementation status:
+
+```text
+Kc.asm exists and is included in the kernel.
+The current dispatcher is table-driven and uses global memory-backed Kc fields.
+The first tested calls are KcTmGetUptime and KcVdWriteStr.
+The operator-console KcTest command exercises both calls through KcDispatch.
+```
+
 The exact mechanism can evolve.
 
 Early mechanism:
@@ -419,6 +434,14 @@ KcResult1       - Result value 1
 
 KcDispatch      - Dispatch requested kernel call
 KcValidate      - Validate call number, arguments, caller/task state
+KcLookup        - Resolve call number to handler through KcTable
+```
+
+Current tested calls:
+
+```text
+KcTmGetUptime   - Return monotonic uptime seconds in KcResult0
+KcVdWriteStr    - Write a kernel Str through the video subsystem
 ```
 
 ### Filesystem — `KcFs*`
@@ -545,6 +568,7 @@ Current commands:
 Date
 Delay
 Help
+KcTest
 Shutdown
 Time
 Uptime
@@ -559,6 +583,7 @@ The console also acts as a convenient proof point for the memory-contract ABI:
 - keyboard output uses `KbOut*`
 - delay uses `TimerDelayMs`
 - uptime prints through `UptimePrint`
+- `KcTest` exercises `KcDispatch`, `KcVdWriteStr`, and `KcTmGetUptime`
 
 Future userland input/output should use separate `KcKb*` and `KcVd*` services tied to logical task/session state.
 
@@ -697,18 +722,25 @@ memory-contract ABI enforced in included kernel files
 
 ### Phase 2 — Kernel Call Interface skeleton
 
-Add:
+Current status: started and smoke-tested.
+
+Implemented so far:
 
 ```text
+Kc.asm
 KcNumber
 KcStatus
 KcArg*
 KcResult*
 KcDispatch
+KcValidate
+KcLookup
 small KcTable
+KcTmGetUptime
+KcVdWriteStr
 ```
 
-Initial calls can be invoked internally with `call KcDispatch`.
+The current test path invokes calls internally with `call KcDispatch` through the operator-console `KcTest` command.
 
 ### Phase 3 — Simple user program arena
 
@@ -1429,4 +1461,4 @@ It uses a memory-contract ABI internally and should expose future user/kernel se
 
 The kernel remains fixed in memory. User programs live above the kernel. If multiple user programs fit in memory, context switching only changes CPU/task state. Swapping is optional and only needed when runnable tasks cannot all remain resident.
 
-The current console, timer, wall-time, uptime, keyboard, video, and utility subsystems form the practical base for the next step: a small kernel-call dispatcher and a first controlled user program.
+The current console, timer, wall-time, uptime, keyboard, video, utility, and initial kernel-call subsystems form the practical base for the next step: moving from a tested in-kernel `KcDispatch` path toward a first controlled user program.

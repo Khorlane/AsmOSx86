@@ -76,6 +76,7 @@ IDT2:
 %include "Uptime.asm"
 %include "Utility.asm"
 %include "Video.asm"
+%include "Kc.asm"
 
 ;--------------------------------------------------------------------------------------------------
 ; Kernel Entry Point

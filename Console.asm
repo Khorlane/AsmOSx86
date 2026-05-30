@@ -43,12 +43,14 @@ String  CnShutdown1,"AsmOSx86 shutting down system..."
 String  CnShutdown2,"System halted. It is now safe to power off."
 String  CnDelayMsg1,"Delay test start (2000ms 2 seconds)"
 String  CnDelayMsg2,"Delay test end"
-
+String  CnKcTestMsg1,"KcTest: KcVdWriteStr dispatch OK"
+String  CnKcTestMsg2,"KcTest: KcTmGetUptime dispatch result:"
 
 ; ----- Console commands -----
 String  CnCmdDate,     "Date"
 String  CnCmdDelay,    "Delay"
 String  CnCmdHelp,     "Help"
+String  CnCmdKcTest,   "KcTest"
 String  CnCmdShutdown, "Shutdown"
 String  CnCmdTime,     "Time"
 String  CnCmdUptime,   "Uptime"
@@ -59,6 +61,7 @@ CnCmdTable:
   dd CnCmdDate,     CnDoCmdDate
   dd CnCmdDelay,    CnDoCmdDelay
   dd CnCmdHelp,     CnDoCmdHelp
+  dd CnCmdKcTest,   CnDoCmdKcTest
   dd CnCmdShutdown, CnDoCmdShutdown
   dd CnCmdTime,     CnDoCmdTime
   dd CnCmdUptime,   CnDoCmdUptime
@@ -429,4 +432,34 @@ CnDoCmdTime:
 ;------------------------------------------------------------------------------
 CnDoCmdUptime:
   call  UptimePrint
+  ret
+
+;------------------------------------------------------------------------------
+; CnDoCmdKcTest
+;   Output:
+;     Exercises the current Kernel Call dispatcher from the operator console.
+;   Notes:
+;     Tests KcVdWriteStr and KcTmGetUptime using memory-backed Kc fields.
+;------------------------------------------------------------------------------
+CnDoCmdKcTest:
+  mov   dword[KcNumber],KcVdWriteStr
+  lea   eax,[CnKcTestMsg1]
+  mov   [KcArg0],eax
+  call  KcDispatch
+  call  CnCrLf
+  mov   dword[KcNumber],KcVdWriteStr
+  lea   eax,[CnKcTestMsg2]
+  mov   [KcArg0],eax
+  call  KcDispatch
+  call  CnCrLf
+  mov   dword[KcNumber],KcTmGetUptime
+  call  KcDispatch
+  mov   eax,[KcResult0]
+  mov   [UptimeFmtSec],eax
+  call  UptimeFmtYdhms
+  mov   dword[KcNumber],KcVdWriteStr
+  mov   eax,UptimeStr
+  mov   [KcArg0],eax
+  call  KcDispatch
+  call  CnCrLf
   ret
