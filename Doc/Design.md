@@ -136,7 +136,160 @@ The kernel should remain fixed in memory. User programs should live above the ke
 
 ---
 
-## 5. Kernel Residency Principle
+## 5. Build and Run Workflow
+
+This section describes the repository scripts. If this document disagrees with the scripts, the scripts are authoritative.
+
+AsmOSx86 builds as flat binary components and runs from a 1.44 MB floppy image named `floppy.img`.
+
+Bochs runs the image through `AsmOSx86.bxrc`.
+
+### Tool Roles
+
+```text
+NASM      assembles flat binary files
+fsutil    creates the 1.44 MB floppy image
+ImDisk    mounts floppy.img for FAT12 file copy/inspection
+Bochs     runs the bootable floppy image
+```
+
+### Core Build Scripts
+
+`BuildBoot1.ps1`
+
+- deletes old `Boot1.bin` and `Boot1.lst`
+- assembles `Boot1.asm`
+- writes `Boot1.bin` and `Boot1.lst`
+
+```text
+nasm -f bin Boot1.asm -o Boot1.bin -l Boot1.lst
+```
+
+`BuildBoot2.ps1`
+
+- deletes old `Boot2.bin` and `Boot2.lst`
+- assembles `Boot2.asm`
+- writes `Boot2.bin` and `Boot2.lst`
+- accepts `noexit` when called by wrapper scripts
+
+```text
+nasm -f bin Boot2.asm -o Boot2.bin -l Boot2.lst
+```
+
+`BuildKernel.ps1`
+
+- deletes old `Kernel.bin` and `Kernel.lst`
+- assembles `Kernel.asm`
+- writes `Kernel.bin` and `Kernel.lst`
+- accepts `noexit` when called by wrapper scripts
+
+```text
+nasm -f bin Kernel.asm -o Kernel.bin -l Kernel.lst
+```
+
+### Boot Sector Image Script
+
+`BuildWriteBoot1.ps1`
+
+- verifies `Boot1.bin` exists and is exactly 512 bytes
+- creates or overwrites `floppy.img`
+- verifies `floppy.img` is exactly 1,474,560 bytes
+- writes `Boot1.bin` to offset 0
+- verifies the boot signature at bytes 510-511 is `55 AA`
+
+The script uses `fsutil.exe file createnew` to create the floppy image. It does not copy `Boot2.bin` or `Kernel.bin` into the FAT12 filesystem.
+
+### FAT12 Copy and Inspection Scripts
+
+`BuildCopy.ps1`
+
+- verifies `floppy.img`, `Boot2.bin`, and `Kernel.bin` exist
+- mounts `floppy.img` through `imdisk.exe`
+- uses the first free drive letter
+- copies `Boot2.bin` to `BOOT2.BIN`
+- copies `Kernel.bin` to `KERNEL.BIN`
+- verifies both files exist on the mounted image
+- unmounts the image, using forced detach as a fallback if needed
+
+`BuildFloppyDir.ps1`
+
+- mounts `floppy.img` read-only as `A:`
+- lists the image root directory
+- unmounts the image
+
+`BuildFloppyDelAll.ps1`
+
+- verifies `floppy.img` exists
+- asks for confirmation
+- mounts `floppy.img` read-write as `A:`
+- deletes all root-directory files
+- lists the directory after deletion
+- unmounts the image
+
+### Run Script
+
+`AsmOSx86Run.ps1`
+
+- prompts before launch
+- verifies Bochs exists at `C:\Program Files\Bochs-3.0\bochs.exe`
+- verifies the config exists at `C:\Projects\AsmOSx86\AsmOSx86.bxrc`
+- runs Bochs with `-q -f AsmOSx86.bxrc`
+- treats Bochs exit code `0` or `1` as acceptable
+
+### Wrapper Scripts
+
+`BuildKernelAndRun.ps1`
+
+```text
+BuildKernel.ps1 noexit
+BuildCopy.ps1
+Bochs using AsmOSx86.bxrc
+```
+
+Use this after a `Kernel.asm` change when `Boot1.bin`, `Boot2.bin`, and `floppy.img` are already valid.
+
+`BuildBoot2KernelAndRun.ps1`
+
+```text
+BuildBoot2.ps1 noexit
+BuildKernel.ps1 noexit
+BuildCopy.ps1
+Bochs using AsmOSx86.bxrc
+```
+
+Use this after a `Boot2.asm` change, or when both the loader and kernel should be rebuilt before running.
+
+### Typical Workflows
+
+After a `Kernel.asm` or included-kernel-file change:
+
+```text
+BuildKernelAndRun.ps1
+```
+
+After a `Boot2.asm` change:
+
+```text
+BuildBoot2KernelAndRun.ps1
+```
+
+After a `Boot1.asm` change:
+
+```text
+BuildBoot1.ps1
+BuildWriteBoot1.ps1
+BuildBoot2KernelAndRun.ps1
+```
+
+To run the existing floppy image without rebuilding:
+
+```text
+AsmOSx86Run.ps1
+```
+
+---
+
+## 6. Kernel Residency Principle
 
 The kernel is resident and permanent.
 
@@ -164,7 +317,7 @@ User programs should not directly access kernel internals or call arbitrary kern
 
 ---
 
-## 6. Userland Concept
+## 7. Userland Concept
 
 Userland will eventually consist of one or more programs loaded above the resident kernel.
 
@@ -194,7 +347,7 @@ The important concept is not the exact address or slot size. The important conce
 
 ---
 
-## 7. Context Switching and Swapping Are Separate
+## 8. Context Switching and Swapping Are Separate
 
 AsmOSx86 should treat context switching and swapping as different operations.
 
@@ -241,7 +394,7 @@ Swapping is memory residency management.
 
 ---
 
-## 8. Future Task Model
+## 9. Future Task Model
 
 A future task table may describe each task known to the kernel.
 
@@ -279,7 +432,7 @@ The design should allow that progression.
 
 ---
 
-## 9. Kernel Call Interface
+## 10. Kernel Call Interface
 
 AsmOSx86 should expose userland-accessible kernel services through a defined Kernel Call Interface.
 
@@ -379,7 +532,7 @@ This keeps names short while still making the service family obvious.
 
 ---
 
-## 10. Kernel Call Design Philosophy
+## 11. Kernel Call Design Philosophy
 
 The Kernel Call Interface should follow the same memory-contract ABI as the rest of the kernel.
 
@@ -416,7 +569,7 @@ The kernel-call boundary is also a protection boundary in design, even before ha
 
 ---
 
-## 11. Candidate Kernel Calls
+## 12. Candidate Kernel Calls
 
 The following list is conceptual. It captures the broad service families AsmOSx86 is likely to need, without locking in exact argument layouts or implementation details.
 
@@ -522,7 +675,7 @@ The first practical implementation should be much smaller than this list. The go
 
 ---
 
-## 12. Current Time Model
+## 13. Current Time Model
 
 AsmOSx86 currently distinguishes two time concepts:
 
@@ -549,7 +702,7 @@ Future scheduler and timeout code should use monotonic time, not wall time.
 
 ---
 
-## 13. Current Console Model
+## 14. Current Console Model
 
 The current console is a kernel/operator console. It should be understood as the fixed operator terminal for the machine, not as userland standard input/output.
 
@@ -589,7 +742,7 @@ Future userland input/output should use separate `KcKb*` and `KcVd*` services ti
 
 ---
 
-## 14. Current Shutdown Semantics
+## 15. Current Shutdown Semantics
 
 The current `Shutdown` command:
 
@@ -612,7 +765,7 @@ On real 386-class hardware, the soft power-off ports may do nothing. The final h
 
 ---
 
-## 15. Keyboard, Video, and Session Device Model
+## 16. Keyboard, Video, and Session Device Model
 
 AsmOSx86 should distinguish physical devices from logical task/session services.
 
@@ -672,7 +825,7 @@ That remains the kernel-side text output path. Future userland display output sh
 
 ---
 
-## 16. Memory Layout Direction
+## 17. Memory Layout Direction
 
 The current concrete base is:
 
@@ -705,7 +858,7 @@ Early experimentation may use fixed user slots. Later versions can use a user me
 
 ---
 
-## 17. Evolution Path
+## 18. Evolution Path
 
 A reasonable development sequence:
 
@@ -794,7 +947,7 @@ sleep/timeouts
 
 ---
 
-## 18. Scheduling, Interrupts, and Runaway Task Policy
+## 19. Scheduling, Interrupts, and Runaway Task Policy
 
 AsmOSx86 should distinguish interrupts from scheduling.
 
@@ -938,7 +1091,7 @@ A task that refuses to cooperate may be terminated.
 
 ---
 
-## 19. Blocking Kernel Calls and Task Readiness
+## 20. Blocking Kernel Calls and Task Readiness
 
 Some Kernel Calls complete immediately. Others may need to wait for a device, file operation, input event, timer, or other external condition.
 
@@ -1076,7 +1229,7 @@ The user program does not need to know whether the service completed immediately
 
 ---
 
-## 20. Kernel Call Communication Area
+## 21. Kernel Call Communication Area
 
 Each user task should have a standard Kernel Call communication area.
 
@@ -1389,7 +1542,7 @@ User sessions receive logical input and logical video services.
 
 ---
 
-## 21. Design Principles
+## 22. Design Principles
 
 ### Keep the kernel resident
 
@@ -1421,7 +1574,7 @@ Do not introduce paging, privilege rings, or preemption before the basic executi
 
 ---
 
-## 22. Non-Goals For Now
+## 23. Non-Goals For Now
 
 AsmOSx86 does not need these immediately:
 
@@ -1453,7 +1606,7 @@ resident kernel + kernel call interface + simple user task
 
 ---
 
-## 23. Working Definition
+## 24. Working Definition
 
 AsmOSx86 is a resident 32-bit protected-mode kernel loaded at `00100000h`.
 

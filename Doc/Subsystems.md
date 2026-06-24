@@ -4,13 +4,15 @@ This document consolidates the current implementation-facing subsystem contracts
 
 Use this file for:
 - current kernel ABI rules
-- current boot/init order
+- current kernel boot/init order
 - current subsystem interfaces and ownership
-- current string, console, time, utility, and `KernelCtx` behavior
+- current kernel string, console, time, utility, and `KernelCtx` behavior
 
 Use `Doc/Design.md` for high-level architecture and future direction.
 Use `Doc/Coding.md` for formatting, naming, commenting, and source-style rules.
 Use the source files themselves for exact implementation details.
+
+Unless a section explicitly says it is about boot-stage code, this document describes the protected-mode kernel.
 
 ---
 
@@ -62,18 +64,26 @@ Hidden coupling is forbidden.
 
 ---
 
-## 2. Kernel String Contracts
+## 2. Boot Stage Boundary
 
-AsmOSx86 uses two string formats at the project level:
+Boot-stage code and kernel code are separate implementation domains.
+
+Boot-stage code:
+
+- `Boot1.asm`
+- `Boot2.asm`
+
+Boot stages run before the protected-mode kernel is established. They may use BIOS services, real-mode assumptions, boot-sector constraints, FAT12 loader logic, and other conventions that do not apply to the kernel.
+
+Boot-stage conventions do not define kernel ABI rules.
+
+### Boot Strings
+
+Boot-stage code may use NUL-terminated strings:
 
 ```text
 CStr = NUL-terminated byte string
-Str  = length-prefixed kernel string
 ```
-
-This split is intentional.
-
-### CStr
 
 Layout:
 
@@ -81,15 +91,19 @@ Layout:
 db 'h','e','l','l','o',0
 ```
 
-Scope:
+This fits small real-mode loader routines and BIOS-style printing that scans for a trailing zero.
 
-- Used by boot-stage code such as `Boot1.asm` and `Boot2.asm`
-- Fits BIOS-style print routines that scan for a trailing zero
-- Not part of the kernel string ABI
+CStr is not part of the protected-mode kernel string ABI.
 
-Kernel routines must not assume CStr input unless explicitly documented.
+---
 
-### Str
+## 3. Kernel String Contracts
+
+The protected-mode kernel uses one internal string format:
+
+```text
+Str = length-prefixed kernel string
+```
 
 Layout:
 
@@ -124,7 +138,7 @@ All kernel `Str` constants should be created with this macro, or must exactly ma
 
 ### Kernel Usage
 
-Kernel routines operate on `Str`, not CStr, unless explicitly documented.
+Kernel routines operate on `Str` unless a routine explicitly documents a different format.
 
 Examples:
 
@@ -138,12 +152,11 @@ The payload is not NUL-terminated and must not be treated as though it were.
 
 | Type | Terminator | Length storage | Length meaning |
 |------|------------|----------------|----------------|
-| CStr | NUL (`0`)  | none           | inferred by scan |
 | Str  | none       | `u16` prefix   | payload bytes |
 
 ---
 
-## 3. Boot and Initialization
+## 4. Kernel Boot and Initialization
 
 `Kernel.asm` owns the top-level initialization sequence.
 
@@ -205,7 +218,7 @@ This document should not claim that all subsystems forbid lazy init.
 
 ---
 
-## 4. Console Subsystem
+## 5. Console Subsystem
 
 ### Console Role
 
@@ -315,7 +328,7 @@ Current implementation notes:
 
 ---
 
-## 5. Keyboard Subsystem
+## 6. Keyboard Subsystem
 
 `Keyboard.asm` owns physical keyboard polling and scancode translation for the current kernel.
 
@@ -359,7 +372,7 @@ KEY_BACKSPACE = 3
 
 ---
 
-## 6. Video Subsystem
+## 7. Video Subsystem
 
 `Video.asm` owns physical VGA text output for the current kernel.
 
@@ -475,7 +488,7 @@ Invalid row/column enters a halt loop.
 
 ---
 
-## 7. Timer, Time, and Uptime
+## 8. Timer, Time, and Uptime
 
 AsmOSx86 treats time as two distinct services with different guarantees and use-cases.
 
@@ -772,7 +785,7 @@ Never mix monotonic and wall-clock domains.
 
 ---
 
-## 8. Utility Module
+## 9. Utility Module
 
 `Utility.asm` is a neutral helper module.
 
@@ -912,7 +925,7 @@ If yes, it belongs somewhere else or should not exist yet.
 
 ---
 
-## 9. KernelCtx
+## 10. KernelCtx
 
 `KernelCtx` is defined in `Kernel.asm`.
 
@@ -993,7 +1006,7 @@ This means `KernelCtx` should not currently be described as the central home for
 
 ---
 
-## 10. Current Subsystem Summary
+## 11. Current Subsystem Summary
 
 Current major kernel components:
 
