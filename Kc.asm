@@ -36,6 +36,7 @@ KC_STATUS_BAD_ARG  equ 2
 ;--------------------------------------------------------------------------------------------------
 KcTmGetUptime      equ 1
 KcVdWriteStr       equ 2
+KcTsYield          equ 3
 
 ;--------------------------------------------------------------------------------------------------
 ; Kernel Call Communication Fields
@@ -60,6 +61,7 @@ align 4
 KcTable:
   dd KcTmGetUptime, KcTmGetUptimeHandler
   dd KcVdWriteStr,  KcVdWriteStrHandler
+  dd KcTsYield,     KcTsYieldHandler
 KcTableEnd:
 KcTableCount equ (KcTableEnd-KcTable)/8
 
@@ -182,4 +184,16 @@ KcVdWriteStrHandler:
   ret
 KcVdWriteStrHandler1:
   mov   dword[KcStatus],KC_STATUS_BAD_ARG
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; KcTsYieldHandler
+;   Output:
+;     KcStatus = KC_STATUS_OK
+;   Notes:
+;     Marks a cooperative scheduling point and lets TaskYield switch stacks.
+;--------------------------------------------------------------------------------------------------
+KcTsYieldHandler:
+  mov   dword[KcStatus],KC_STATUS_OK
+  call  TaskYield
   ret

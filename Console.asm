@@ -52,6 +52,7 @@ String  CnCmdDelay,    "Delay"
 String  CnCmdHelp,     "Help"
 String  CnCmdKcTest,   "KcTest"
 String  CnCmdShutdown, "Shutdown"
+String  CnCmdTaskTest, "TaskTest"
 String  CnCmdTime,     "Time"
 String  CnCmdUptime,   "Uptime"
 
@@ -63,6 +64,7 @@ CnCmdTable:
   dd CnCmdHelp,     CnDoCmdHelp
   dd CnCmdKcTest,   CnDoCmdKcTest
   dd CnCmdShutdown, CnDoCmdShutdown
+  dd CnCmdTaskTest, CnDoCmdTaskTest
   dd CnCmdTime,     CnDoCmdTime
   dd CnCmdUptime,   CnDoCmdUptime
 CnCmdTableEnd:
@@ -462,4 +464,16 @@ CnDoCmdKcTest:
   mov   [KcArg0],eax
   call  KcDispatch
   call  CnCrLf
+  ret
+
+;------------------------------------------------------------------------------
+; CnDoCmdTaskTest
+;   Output:
+;     Starts the cooperative two-task POC.
+;   Notes:
+;     This command intentionally does not return to the console loop.
+;------------------------------------------------------------------------------
+CnDoCmdTaskTest:
+  call  TaskInitTest
+  call  TaskStartTest
   ret

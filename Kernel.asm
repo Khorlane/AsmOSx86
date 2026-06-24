@@ -77,6 +77,7 @@ IDT2:
 %include "Utility.asm"
 %include "Video.asm"
 %include "Kc.asm"
+%include "Task.asm"
 
 ;--------------------------------------------------------------------------------------------------
 ; Kernel Entry Point
