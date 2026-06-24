@@ -1,5 +1,5 @@
 <# 
-BootSectorWrite.ps1
+BuildWriteBoot1.ps1
 Creates a 1.44MB floppy image, verifies size, writes Boot1.bin to boot sector (offset 0),
 then verifies 0x55AA signature at bytes 510-511. Stops on any error/unexpected condition.
 #>
