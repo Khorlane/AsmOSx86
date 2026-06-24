@@ -127,12 +127,120 @@ This is the preferred long-term kernel base.
 Conceptual memory layout:
 
 ```text
-00000000h - 000FFFFFh   low memory, BIOS legacy areas, loader workspace, reserved
 00100000h - KernelEnd   resident AsmOSx86 kernel
 UserBase   - UserLimit  future user memory region or user memory pool
 ```
 
-The kernel should remain fixed in memory. User programs should live above the kernel in a controlled user memory region.
+The kernel remains fixed in memory. User programs should live above the kernel in a controlled user memory region.
+
+Low-memory quick reference:
+
+```text
+00000000h - 000004FFh   IVT/BDA / legacy low memory
+00000500h - 00000FFFh   low-memory reserved fragment
+00001000h - 0008FFFFh   low-memory stack-slot arena, 143 slots of 4K
+00090000h - 0009FFFFh   upper conventional memory, reserved for future explicit use
+000A0000h - 000FFFFFh   classic PC reserved/video/ROM region
+00100000h - KernelEnd   resident AsmOSx86 kernel
+```
+
+Low-memory map:
+
+```text
+higher addresses
++-------------------------------------------------+
+| KernelEnd                                       |
+|                                                 |
+|   Resident kernel image                         |
+|   size: KernelEnd - 00100000h                   |
+|                                                 |
+|   Kernel.asm loaded here                        |
+|   protected-mode resident kernel                |
+|                                                 |
+| 00100000h                                       |
++-------------------------------------------------+
+| 000FFFFFh                                       |
+|                                                 |
+|   System BIOS ROM area                          |
+|   size: 00010000h bytes = 65,536 bytes = 64K    |
+|                                                 |
+| 000F0000h                                       |
++-------------------------------------------------+
+| 000EFFFFh                                       |
+|                                                 |
+|   Adapter ROM / option ROM area                 |
+|   size: 00030000h bytes = 196,608 bytes = 192K  |
+|                                                 |
+| 000C0000h                                       |
++-------------------------------------------------+
+| 000BFFFFh                                       |
+|                                                 |
+|   Color VGA text memory area                    |
+|   size: 00008000h bytes = 32,768 bytes = 32K    |
+|                                                 |
+|   actual 80x25 text page 0 uses:                |
+|   80 * 25 * 2 = 4,000 bytes                     |
+|                                                 |
+| 000B8000h                                       |
++-------------------------------------------------+
+| 000B7FFFh                                       |
+|                                                 |
+|   Video memory / graphics aperture area         |
+|   size: 00018000h bytes = 98,304 bytes = 96K    |
+|                                                 |
+| 000A0000h                                       |
++-------------------------------------------------+
+| 0009FFFFh                                       |
+|                                                 |
+|   Upper conventional memory                     |
+|   size: 00010000h bytes = 65,536 bytes = 64K    |
+|                                                 |
+|   reserved for future explicit use              |
+|                                                 |
+| 00090000h                                       |
++-------------------------------------------------+
+| 00090000h                                       |
+|                                                 |
+|   Stack-slot arena exclusive top                |
+|   size: 0 bytes                                 |
+|                                                 |
++-------------------------------------------------+
+| 0008FFFFh                                       |
+|                                                 |
+|   Low-memory stack-slot arena                   |
+|   size: 0008F000h bytes = 585,728 bytes = 572K  |
+|                                                 |
+|   slot size: 00001000h bytes = 4K               |
+|   slot count: 143                               |
+|                                                 |
+|   slot 0: kernel stack                          |
+|   slot 1: task 1 stack                          |
+|   slot 2: task 2 stack                          |
+|   ...                                           |
+|                                                 |
+|   StackSlotTop(n)    = 00090000h - n*00001000h  |
+|   StackSlotBottom(n) = StackSlotTop(n)-00001000h|
+|   InitialESP(n)      = StackSlotTop(n)          |
+|                                                 |
+| 00001000h                                       |
++-------------------------------------------------+
+| 00000FFFh                                       |
+|                                                 |
+|   Low-memory reserved fragment                  |
+|   size: 00000B00h bytes = 2,816 bytes           |
+|                                                 |
+|   left out of the aligned 4K stack-slot arena   |
+|                                                 |
+| 00000500h                                       |
++-------------------------------------------------+
+| 000004FFh                                       |
+|                                                 |
+|   IVT / BDA / legacy reserved low memory        |
+|   size: 00000500h bytes = 1,280 bytes           |
+|                                                 |
+| 00000000h                                       |
++-------------------------------------------------+
+```
 
 ---
 
