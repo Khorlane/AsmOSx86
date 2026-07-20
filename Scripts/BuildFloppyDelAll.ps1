@@ -5,6 +5,7 @@ Deletes all files from floppy.img (equivalent to DEL *.*) with confirmation.
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$RepoRoot = Split-Path -Parent $PSScriptRoot
 
 function Wait-ForKey {
   Write-Host ""
@@ -18,7 +19,7 @@ function Fail($msg) {
   exit 1
 }
 
-$Image = Join-Path (Get-Location) "floppy.img"
+$Image = Join-Path $RepoRoot "floppy.img"
 $Drive = "A:"
 
 Write-Host "[1/5] Verifying floppy.img..."

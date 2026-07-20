@@ -9,6 +9,7 @@ PowerShell equivalent of BuildBoot2KernelAndRun.bat
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$RepoRoot = Split-Path -Parent $PSScriptRoot
 
 function Wait-ForKey {
   Write-Host ""
@@ -29,7 +30,7 @@ try {
   Write-Host "------------------"
 
   # call BuildBoot2.bat noexit -> BuildBoot2.ps1 noexit
-  & .\BuildBoot2.ps1 noexit
+  & (Join-Path $PSScriptRoot "BuildBoot2.ps1") noexit
   if (-not $?) {
     throw "BuildBoot2.ps1 failed."
   }
@@ -40,7 +41,7 @@ try {
   Write-Host "-------------------"
 
   # call BuildKernel.bat noexit -> BuildKernel.ps1 noexit
-  & .\BuildKernel.ps1 noexit
+  & (Join-Path $PSScriptRoot "BuildKernel.ps1") noexit
   if (-not $?) {
     throw "BuildKernel.ps1 failed."
   }
@@ -51,7 +52,7 @@ try {
   Write-Host "--------------------------------------"
 
   # Replaces DOSBox copy step
-  & .\BuildCopy.ps1
+  & (Join-Path $PSScriptRoot "BuildCopy.ps1")
   if (-not $?) {
     throw "BuildCopy.ps1 failed."
   }
@@ -72,7 +73,7 @@ try {
   Wait-ForKey
 
   $BochsExe = "C:\Program Files\Bochs-3.0\bochs.exe"
-  $BochsCfg = "C:\Projects\AsmOSx86\AsmOSx86.bxrc"
+  $BochsCfg = Join-Path $RepoRoot "AsmOSx86.bxrc"
 
   if (-not (Test-Path -LiteralPath $BochsExe -PathType Leaf)) {
     Fail "Bochs executable not found: $BochsExe"

@@ -263,7 +263,9 @@ Bochs     runs the bootable floppy image
 
 ### Core Build Scripts
 
-`BuildBoot1.ps1`
+Scripts are stored in `Scripts\`. The expected interactive workflow is to change into that folder before running them.
+
+`Scripts\BuildBoot1.ps1`
 
 - deletes old `Boot1.bin` and `Boot1.lst`
 - assembles `Boot1.asm`
@@ -273,7 +275,7 @@ Bochs     runs the bootable floppy image
 nasm -f bin Boot1.asm -o Boot1.bin -l Boot1.lst
 ```
 
-`BuildBoot2.ps1`
+`Scripts\BuildBoot2.ps1`
 
 - deletes old `Boot2.bin` and `Boot2.lst`
 - assembles `Boot2.asm`
@@ -284,7 +286,7 @@ nasm -f bin Boot1.asm -o Boot1.bin -l Boot1.lst
 nasm -f bin Boot2.asm -o Boot2.bin -l Boot2.lst
 ```
 
-`BuildKernel.ps1`
+`Scripts\BuildKernel.ps1`
 
 - deletes old `Kernel.bin` and `Kernel.lst`
 - assembles `Kernel.asm`
@@ -297,7 +299,7 @@ nasm -f bin Kernel.asm -o Kernel.bin -l Kernel.lst
 
 ### Boot Sector Image Script
 
-`BuildWriteBoot1.ps1`
+`Scripts\BuildWriteBoot1.ps1`
 
 - verifies `Boot1.bin` exists and is exactly 512 bytes
 - creates or overwrites `floppy.img`
@@ -309,7 +311,7 @@ The script uses `fsutil.exe file createnew` to create the floppy image. It does 
 
 ### FAT12 Copy and Inspection Scripts
 
-`BuildCopy.ps1`
+`Scripts\BuildCopy.ps1`
 
 - verifies `floppy.img`, `Boot2.bin`, and `Kernel.bin` exist
 - mounts `floppy.img` through `imdisk.exe`
@@ -319,13 +321,13 @@ The script uses `fsutil.exe file createnew` to create the floppy image. It does 
 - verifies both files exist on the mounted image
 - unmounts the image, using forced detach as a fallback if needed
 
-`BuildFloppyDir.ps1`
+`Scripts\BuildFloppyDir.ps1`
 
 - mounts `floppy.img` read-only as `A:`
 - lists the image root directory
 - unmounts the image
 
-`BuildFloppyDelAll.ps1`
+`Scripts\BuildFloppyDelAll.ps1`
 
 - verifies `floppy.img` exists
 - asks for confirmation
@@ -336,32 +338,32 @@ The script uses `fsutil.exe file createnew` to create the floppy image. It does 
 
 ### Run Script
 
-`AsmOSx86Run.ps1`
+`Scripts\AsmOSx86Run.ps1`
 
 - prompts before launch
 - verifies Bochs exists at `C:\Program Files\Bochs-3.0\bochs.exe`
-- verifies the config exists at `C:\Projects\AsmOSx86\AsmOSx86.bxrc`
+- verifies the config exists at the project root as `AsmOSx86.bxrc`
 - runs Bochs with `-q -f AsmOSx86.bxrc`
 - treats Bochs exit code `0` or `1` as acceptable
 
 ### Wrapper Scripts
 
-`BuildKernelAndRun.ps1`
+`Scripts\BuildKernelAndRun.ps1`
 
 ```text
-BuildKernel.ps1 noexit
-BuildCopy.ps1
+.\BuildKernel.ps1 noexit
+.\BuildCopy.ps1
 Bochs using AsmOSx86.bxrc
 ```
 
 Use this after a `Kernel.asm` change when `Boot1.bin`, `Boot2.bin`, and `floppy.img` are already valid.
 
-`BuildBoot2KernelAndRun.ps1`
+`Scripts\BuildBoot2KernelAndRun.ps1`
 
 ```text
-BuildBoot2.ps1 noexit
-BuildKernel.ps1 noexit
-BuildCopy.ps1
+.\BuildBoot2.ps1 noexit
+.\BuildKernel.ps1 noexit
+.\BuildCopy.ps1
 Bochs using AsmOSx86.bxrc
 ```
 
@@ -372,27 +374,31 @@ Use this after a `Boot2.asm` change, or when both the loader and kernel should b
 After a `Kernel.asm` or included-kernel-file change:
 
 ```text
-BuildKernelAndRun.ps1
+cd Scripts
+.\BuildKernelAndRun.ps1
 ```
 
 After a `Boot2.asm` change:
 
 ```text
-BuildBoot2KernelAndRun.ps1
+cd Scripts
+.\BuildBoot2KernelAndRun.ps1
 ```
 
 After a `Boot1.asm` change:
 
 ```text
-BuildBoot1.ps1
-BuildWriteBoot1.ps1
-BuildBoot2KernelAndRun.ps1
+cd Scripts
+.\BuildBoot1.ps1
+.\BuildWriteBoot1.ps1
+.\BuildBoot2KernelAndRun.ps1
 ```
 
 To run the existing floppy image without rebuilding:
 
 ```text
-AsmOSx86Run.ps1
+cd Scripts
+.\AsmOSx86Run.ps1
 ```
 
 ---

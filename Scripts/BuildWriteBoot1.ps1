@@ -6,6 +6,7 @@ then verifies 0x55AA signature at bytes 510-511. Stops on any error/unexpected c
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$RepoRoot = Split-Path -Parent $PSScriptRoot
 
 function Wait-ForKey {
   Write-Host ""
@@ -21,8 +22,8 @@ function Fail([string]$Message) {
 
 try {
   # ---- Config ----
-  $ImagePath = Join-Path (Get-Location) "floppy.img"
-  $BootPath  = Join-Path (Get-Location) "Boot1.bin"
+  $ImagePath = Join-Path $RepoRoot "floppy.img"
+  $BootPath  = Join-Path $RepoRoot "Boot1.bin"
   $ExpectedImageSize = 1474560
   $ExpectedBootSize  = 512
 

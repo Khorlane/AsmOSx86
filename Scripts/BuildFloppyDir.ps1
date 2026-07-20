@@ -4,8 +4,11 @@ function Wait-ForKey {
   [void][System.Console]::ReadKey($true)
 }
 
+$RepoRoot = Split-Path -Parent $PSScriptRoot
+$Image = Join-Path $RepoRoot "floppy.img"
+
 # Mount read-only (file-backed, floppy emulation)
-& imdisk -a -t file -f ".\floppy.img" -m A: -o ro,fd
+& imdisk -a -t file -f $Image -m A: -o ro,fd
 if ($LASTEXITCODE -ne 0) {
   Write-Host "ImDisk mount failed (exit code $LASTEXITCODE)."
   Wait-ForKey

@@ -1,11 +1,13 @@
-<# BuildKernel.ps1
-Assembles Kernel.asm -> Kernel.bin / Kernel.lst
+<# BuildBoot2.ps1
+Assembles Boot2.asm -> Boot2.bin / Boot2.lst
 - If called with "noexit", do NOT pause (for chained scripts)
 - If called with "exit", exit at the end (legacy behavior)
 #>
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$RepoRoot = Split-Path -Parent $PSScriptRoot
+$DidPushLocation = $false
 
 function Wait-ForKey {
   Write-Host ""
@@ -14,16 +16,19 @@ function Wait-ForKey {
 }
 
 try {
+  Push-Location $RepoRoot
+  $DidPushLocation = $true
+
   Write-Host ""
-  Write-Host "-------------------"
-  Write-Host "- Assemble Kernel -"
-  Write-Host "-------------------"
+  Write-Host "------------------"
+  Write-Host "- Assemble Boot2 -"
+  Write-Host "------------------"
   Write-Host ""
 
-  Remove-Item ".\Kernel.bin", ".\Kernel.lst" -Force -ErrorAction SilentlyContinue
+  Remove-Item ".\Boot2.bin", ".\Boot2.lst" -Force -ErrorAction SilentlyContinue
 
-  Write-Host "nasm -f bin Kernel.asm -o Kernel.bin -l Kernel.lst"
-  & nasm -f bin Kernel.asm -o Kernel.bin -l Kernel.lst
+  Write-Host "nasm -f bin Boot2.asm -o Boot2.bin -l Boot2.lst"
+  & nasm -f bin Boot2.asm -o Boot2.bin -l Boot2.lst
 
   if ($LASTEXITCODE -ne 0) {
     throw "nasm failed with exit code $LASTEXITCODE."
@@ -45,4 +50,9 @@ catch {
   Write-Error ("ERROR: " + $_.Exception.Message) -ErrorAction Continue
   Wait-ForKey
   exit 1
+}
+finally {
+  if ($DidPushLocation) {
+    Pop-Location
+  }
 }

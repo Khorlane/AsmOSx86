@@ -9,6 +9,7 @@ Copies Boot2.bin and Kernel.bin to floppy.img using ImDisk.
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$RepoRoot = Split-Path -Parent $PSScriptRoot
 
 function Wait-ForKey {
   Write-Host ""
@@ -58,9 +59,9 @@ function Invoke-ImDisk([string]$ArgumentString) {
 try {
   Write-Host "Running: $PSCommandPath"
 
-  $Image  = Join-Path (Get-Location) "floppy.img"
-  $Boot2  = Join-Path (Get-Location) "Boot2.bin"
-  $Kernel = Join-Path (Get-Location) "Kernel.bin"
+  $Image  = Join-Path $RepoRoot "floppy.img"
+  $Boot2  = Join-Path $RepoRoot "Boot2.bin"
+  $Kernel = Join-Path $RepoRoot "Kernel.bin"
 
   Write-Host "[1/5] Verifying files..."
   foreach ($f in @($Image, $Boot2, $Kernel)) {

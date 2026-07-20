@@ -7,6 +7,7 @@ PowerShell equivalent of AsmOSx86Run.bat
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$RepoRoot = Split-Path -Parent $PSScriptRoot
 
 function Wait-ForKey {
   Write-Host ""
@@ -22,7 +23,7 @@ Write-Host "--------------------------------"
 Wait-ForKey
 
 $BochsExe = "C:\Program Files\Bochs-3.0\bochs.exe"
-$BochsCfg = "C:\Projects\AsmOSx86\AsmOSx86.bxrc"
+$BochsCfg = Join-Path $RepoRoot "AsmOSx86.bxrc"
 
 if (-not (Test-Path -LiteralPath $BochsExe -PathType Leaf)) {
   Write-Error "Bochs executable not found: $BochsExe"

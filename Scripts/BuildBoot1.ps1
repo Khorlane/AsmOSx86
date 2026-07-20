@@ -4,6 +4,8 @@ PowerShell equivalent of BuildBoot1.bat
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$RepoRoot = Split-Path -Parent $PSScriptRoot
+$DidPushLocation = $false
 
 function Wait-ForKey {
   Write-Host ""
@@ -12,6 +14,9 @@ function Wait-ForKey {
 }
 
 try {
+  Push-Location $RepoRoot
+  $DidPushLocation = $true
+
   Write-Host ""
   Write-Host "------------------"
   Write-Host "- Assemble Boot1 -"
@@ -41,4 +46,9 @@ catch {
   Write-Error ("ERROR: " + $_.Exception.Message) -ErrorAction Continue
   Wait-ForKey
   exit 1
+}
+finally {
+  if ($DidPushLocation) {
+    Pop-Location
+  }
 }
