@@ -308,10 +308,16 @@ nasm -f bin Kernel.asm -o Kernel.bin -l Kernel.lst
 - verifies `Boot1.bin` exists and is exactly 512 bytes
 - creates or overwrites `floppy.img`
 - verifies `floppy.img` is exactly 1,474,560 bytes
+- mounts and formats `floppy.img` as FAT
 - writes `Boot1.bin` to offset 0
 - verifies the boot signature at bytes 510-511 is `55 AA`
 
-The script uses `fsutil.exe file createnew` to create the floppy image. It does not copy `Boot2.bin` or `Kernel.bin` into the FAT12 filesystem.
+The script uses `fsutil.exe file createnew` to create the floppy image, ImDisk to mount it, and `format.com /FS:FAT` to initialize the FAT filesystem before writing the custom boot sector. It does not copy `Boot2.bin` or `Kernel.bin` into the FAT12 filesystem.
+
+Future real-hardware workflow note:
+
+- `floppy.img` is intended to remain a standard 1.44 MB FAT12 floppy image that can later be written sector-for-sector to a real floppy, for example with WinImage and a USB floppy drive.
+- The written floppy should preserve sector 0 from `Boot1.bin` and the FAT root files `BOOT2.BIN` and `KERNEL.BIN`.
 
 ### FAT12 Copy and Inspection Scripts
 

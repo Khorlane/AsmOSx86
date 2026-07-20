@@ -14,7 +14,12 @@ $RepoRoot = Split-Path -Parent $PSScriptRoot
 function Wait-ForKey {
   Write-Host ""
   Write-Host "Press any key to continue..."
-  [void][System.Console]::ReadKey($true)
+  try {
+    [void][System.Console]::ReadKey($true)
+  }
+  catch {
+    Write-Host "(No interactive console available; continuing.)"
+  }
 }
 
 function Fail([string]$msg) {
