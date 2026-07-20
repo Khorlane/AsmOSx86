@@ -118,7 +118,7 @@ Used when ownership is clear:
 - `Timer*` → Timer
 - `Time*` → Wall time
 - `Uptime*` → Uptime
-- `Vid*` → Video
+- `Vd*` → Video
 
 ### Kernel-Wide Primitives
 - May be unprefixed if globally applicable

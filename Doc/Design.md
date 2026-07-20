@@ -976,7 +976,8 @@ Current status:
 
 ```text
 bootloader loads kernel
-kernel initializes timer/video/keyboard/console/time/uptime
+kernel initializes timer/uptime/video/keyboard/console
+wall time initializes lazily on first Time* use
 console commands work
 memory-contract ABI enforced in included kernel files
 ```

@@ -245,7 +245,9 @@ The active command set currently includes:
 Date
 Delay
 Help
+KcTest
 Shutdown
+TaskTest
 Time
 Uptime
 ```
@@ -1014,8 +1016,10 @@ Current major kernel components:
 Config.asm
 Console.asm
 Keyboard.asm
+Kc.asm
 Time.asm
 Timer.asm
+Task.asm
 Uptime.asm
 Utility.asm
 Video.asm
