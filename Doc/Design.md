@@ -44,6 +44,9 @@ The current kernel provides:
 - initial tested Kernel Calls:
   - `KcTmGetUptime`
   - `KcVdWriteStr`
+  - `KcTsYield`
+  - `KcTsLoadProgram`
+  - `KcTsExit`
 - simple built-in commands:
   - `Date`
   - `Delay`
@@ -52,6 +55,7 @@ The current kernel provides:
   - `Shutdown`
   - `Time`
   - `Uptime`
+  - `UserTest`
 
 At this stage, AsmOSx86 is still a single resident kernel with an integrated console. Userland does not exist yet.
 
@@ -585,8 +589,8 @@ Current implementation status:
 ```text
 Kc.asm exists and is included in the kernel.
 The current dispatcher is table-driven and uses global memory-backed Kc fields.
-The first tested calls are KcTmGetUptime and KcVdWriteStr.
-The operator-console KcTest command exercises both calls through KcDispatch.
+KcTest exercises KcTmGetUptime and KcVdWriteStr through KcDispatch.
+UserTest exercises KcTsLoadProgram and KcTsExit through KcDispatch.
 ```
 
 The exact mechanism can evolve.
@@ -709,6 +713,9 @@ Current tested calls:
 ```text
 KcTmGetUptime   - Return monotonic uptime seconds in KcResult0
 KcVdWriteStr    - Write a kernel Str through the video subsystem
+KcTsYield       - Cooperative scheduling point
+KcTsLoadProgram - Load a mock user program into a task slot
+KcTsExit        - End the current task with an exit code
 ```
 
 ### Filesystem — `KcFs*`
@@ -839,6 +846,7 @@ KcTest
 Shutdown
 Time
 Uptime
+UserTest
 ```
 
 The console currently lives inside the kernel and should remain reserved for operator control and diagnostics. Userland should not call `Console.asm` routines directly and should not treat the kernel console as its default terminal.
@@ -1006,6 +1014,9 @@ KcLookup
 small KcTable
 KcTmGetUptime
 KcVdWriteStr
+KcTsYield
+KcTsLoadProgram
+KcTsExit
 ```
 
 The current test path invokes calls internally with `call KcDispatch` through the operator-console `KcTest` command.

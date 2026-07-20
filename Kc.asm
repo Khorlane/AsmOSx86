@@ -37,6 +37,8 @@ KC_STATUS_BAD_ARG  equ 2
 KcTmGetUptime      equ 1
 KcVdWriteStr       equ 2
 KcTsYield          equ 3
+KcTsLoadProgram    equ 4
+KcTsExit           equ 5
 
 ;--------------------------------------------------------------------------------------------------
 ; Kernel Call Communication Fields
@@ -62,6 +64,8 @@ KcTable:
   dd KcTmGetUptime, KcTmGetUptimeHandler
   dd KcVdWriteStr,  KcVdWriteStrHandler
   dd KcTsYield,     KcTsYieldHandler
+  dd KcTsLoadProgram,KcTsLoadProgramHandler
+  dd KcTsExit,      KcTsExitHandler
 KcTableEnd:
 KcTableCount equ (KcTableEnd-KcTable)/8
 
@@ -196,4 +200,52 @@ KcVdWriteStrHandler1:
 KcTsYieldHandler:
   mov   dword[KcStatus],KC_STATUS_OK
   call  TaskYield
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; KcTsLoadProgramHandler
+;   Input:
+;     KcArg0 = mock program id.
+;     KcArg1 = task table index to prepare.
+;     KcArg2 = stack slot index to assign.
+;   Output:
+;     KcStatus  = KC_STATUS_OK or KC_STATUS_BAD_ARG
+;     KcResult0 = TaskProgramStatus
+;     KcResult1 = 0
+;   Notes:
+;     Loads a kernel-resident mock program image into the fixed user slot.
+;--------------------------------------------------------------------------------------------------
+KcTsLoadProgramHandler:
+  mov   eax,[KcArg0]
+  mov   [TaskProgramId],eax
+  mov   eax,[KcArg1]
+  mov   [TaskProgramTaskIndex],eax
+  mov   eax,[KcArg2]
+  mov   [TaskProgramStackSlot],eax
+  call  TaskProgramLoad
+  mov   eax,[TaskProgramStatus]
+  mov   [KcResult0],eax
+  mov   dword[KcResult1],0
+  test  eax,eax
+  jnz   KcTsLoadProgramHandler1
+  mov   dword[KcStatus],KC_STATUS_OK
+  ret
+KcTsLoadProgramHandler1:
+  mov   dword[KcStatus],KC_STATUS_BAD_ARG
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; KcTsExitHandler
+;   Input:
+;     KcArg0 = task exit code.
+;   Output:
+;     Does not normally return to the exiting task.
+;   Notes:
+;     Records the exit code and dispatches the next ready task.
+;--------------------------------------------------------------------------------------------------
+KcTsExitHandler:
+  mov   eax,[KcArg0]
+  mov   [TaskExitCode],eax
+  mov   dword[KcStatus],KC_STATUS_OK
+  call  TaskExit
   ret
