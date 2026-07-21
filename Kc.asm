@@ -39,6 +39,9 @@ KcVdWriteStr       equ 2
 KcTsYield          equ 3
 KcTsLoadProgram    equ 4
 KcTsExit           equ 5
+KcFsOpen           equ 6
+KcFsRead           equ 7
+KcFsClose          equ 8
 
 ;--------------------------------------------------------------------------------------------------
 ; Kernel Call Communication Fields
@@ -66,6 +69,9 @@ KcTable:
   dd KcTsYield,     KcTsYieldHandler
   dd KcTsLoadProgram,KcTsLoadProgramHandler
   dd KcTsExit,      KcTsExitHandler
+  dd KcFsOpen,      KcFsOpenHandler
+  dd KcFsRead,      KcFsReadHandler
+  dd KcFsClose,     KcFsCloseHandler
 KcTableEnd:
 KcTableCount equ (KcTableEnd-KcTable)/8
 
@@ -248,4 +254,81 @@ KcTsExitHandler:
   mov   [TaskExitCode],eax
   mov   dword[KcStatus],KC_STATUS_OK
   call  TaskExit
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; KcFsOpenHandler
+;   Input:
+;     KcArg0 = pointer to kernel Str filename.
+;   Output:
+;     KcStatus  = KC_STATUS_OK or KC_STATUS_BAD_ARG
+;     KcResult0 = FS_STATUS_*
+;     KcResult1 = file handle, or 0.
+;--------------------------------------------------------------------------------------------------
+KcFsOpenHandler:
+  mov   eax,[KcArg0]
+  mov   [pFsOpenName],eax
+  call  FsOpen
+  mov   eax,[FsStatus]
+  mov   [KcResult0],eax
+  mov   eax,[FsOpenHandle]
+  mov   [KcResult1],eax
+  mov   eax,[FsStatus]
+  cmp   eax,FS_STATUS_BAD_ARG
+  je    KcFsOpenHandler1
+  mov   dword[KcStatus],KC_STATUS_OK
+  ret
+KcFsOpenHandler1:
+  mov   dword[KcStatus],KC_STATUS_BAD_ARG
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; KcFsReadHandler
+;   Input:
+;     KcArg0 = file handle.
+;     KcArg1 = destination buffer.
+;     KcArg2 = requested byte count.
+;   Output:
+;     KcStatus  = KC_STATUS_OK or KC_STATUS_BAD_ARG
+;     KcResult0 = FS_STATUS_*
+;     KcResult1 = bytes read.
+;--------------------------------------------------------------------------------------------------
+KcFsReadHandler:
+  mov   eax,[KcArg0]
+  mov   [FsReadHandle],eax
+  mov   eax,[KcArg1]
+  mov   [pFsReadBuffer],eax
+  mov   eax,[KcArg2]
+  mov   [FsReadCount],eax
+  call  FsRead
+  mov   eax,[FsStatus]
+  mov   [KcResult0],eax
+  mov   eax,[FsReadBytes]
+  mov   [KcResult1],eax
+  mov   eax,[FsStatus]
+  cmp   eax,FS_STATUS_BAD_ARG
+  je    KcFsReadHandler1
+  mov   dword[KcStatus],KC_STATUS_OK
+  ret
+KcFsReadHandler1:
+  mov   dword[KcStatus],KC_STATUS_BAD_ARG
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; KcFsCloseHandler
+;   Input:
+;     KcArg0 = file handle.
+;   Output:
+;     KcStatus  = KC_STATUS_OK
+;     KcResult0 = FS_STATUS_*
+;     KcResult1 = 0.
+;--------------------------------------------------------------------------------------------------
+KcFsCloseHandler:
+  mov   eax,[KcArg0]
+  mov   [FsCloseHandle],eax
+  call  FsClose
+  mov   eax,[FsStatus]
+  mov   [KcResult0],eax
+  mov   dword[KcResult1],0
+  mov   dword[KcStatus],KC_STATUS_OK
   ret

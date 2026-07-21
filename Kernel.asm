@@ -76,6 +76,7 @@ IDT2:
 %include "Uptime.asm"
 %include "Utility.asm"
 %include "Video.asm"
+%include "Fs.asm"
 %include "Kc.asm"
 %include "Task.asm"
 
@@ -103,6 +104,7 @@ FlushCS:
   ; Initialize subsystems
   call  TimerInit                       ; Initialize timer
   call  UptimeInit                      ; Initialize uptime
+  call  FsInit                          ; Initialize file service
   call  VdInit                          ; Initialize video
   call  KbInit                          ; Initialize keyboard
   call  CnInit                          ; Initialize console
