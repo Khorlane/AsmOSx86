@@ -131,6 +131,10 @@ KcUserDispatch:
   test  esi,esi
   jz    KcUserDispatchDone
   mov   eax,[esi+KC_BLOCK_NUMBER]
+  cmp   eax,KcTsYield
+  je    KcUserDispatchYield
+  cmp   eax,KcTsExit
+  je    KcUserDispatchExit
   mov   [KcNumber],eax
   mov   eax,[esi+KC_BLOCK_ARG0]
   mov   [KcArg0],eax
@@ -155,6 +159,16 @@ KcUserDispatch:
   mov   eax,[KcResult1]
   mov   [esi+KC_BLOCK_RESULT1],eax
 KcUserDispatchDone:
+  ret
+KcUserDispatchYield:
+  mov   dword[esi+KC_BLOCK_STATUS],KC_STATUS_OK
+  call  TaskYield
+  ret
+KcUserDispatchExit:
+  mov   eax,[esi+KC_BLOCK_ARG0]
+  mov   [TaskExitCode],eax
+  mov   dword[esi+KC_BLOCK_STATUS],KC_STATUS_OK
+  call  TaskExit
   ret
 
 ;--------------------------------------------------------------------------------------------------

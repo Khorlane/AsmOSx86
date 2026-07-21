@@ -97,6 +97,7 @@ TaskProgramLoadBase  dd 0               ; work: selected program load base
 TaskProgramHandle    dd 0               ; work: open file handle
 TaskProgramClearPtr   dd 0              ; work: user slot clear pointer
 TaskProgramClearLeft  dd 0              ; work: user slot clear byte count
+TaskProgramDone       dd 0              ; work: 1 when test tasks have exited
 TaskExitCode         dd 0               ; input: current task exit code
 String  TaskProgramExitStr1,"Task 1 exit 0000"
 String  TaskProgramExitStr2,"Task 2 exit 0000"
@@ -413,10 +414,43 @@ TaskProgramInit2:
 ;--------------------------------------------------------------------------------------------------
 ; TaskProgramStart
 ;   Output:
-;     Starts cooperative dispatch of ready tasks and returns when task 0 is selected again.
+;     Starts cooperative dispatch of ready tasks and returns when user-test
+;     tasks 1, 2, and 3 have exited.
 ;--------------------------------------------------------------------------------------------------
 TaskProgramStart:
+  mov   dword[TaskProgramDone],0
+TaskProgramStart1:
   call  TaskYield
+  call  TaskProgramCheckDone
+  mov   eax,[TaskProgramDone]
+  test  eax,eax
+  jz    TaskProgramStart1
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; TaskProgramCheckDone
+;   Output:
+;     TaskProgramDone = 1 when tasks 1, 2, and 3 are EXITED, else 0.
+;--------------------------------------------------------------------------------------------------
+TaskProgramCheckDone:
+  mov   dword[TaskProgramDone],0
+  mov   dword[TaskIndex],1
+  call  TaskGetRecord
+  mov   edi,[pTaskRecord]
+  cmp   dword[edi+TASK_STATE],TASK_STATE_EXITED
+  jne   TaskProgramCheckDoneDone
+  mov   dword[TaskIndex],2
+  call  TaskGetRecord
+  mov   edi,[pTaskRecord]
+  cmp   dword[edi+TASK_STATE],TASK_STATE_EXITED
+  jne   TaskProgramCheckDoneDone
+  mov   dword[TaskIndex],3
+  call  TaskGetRecord
+  mov   edi,[pTaskRecord]
+  cmp   dword[edi+TASK_STATE],TASK_STATE_EXITED
+  jne   TaskProgramCheckDoneDone
+  mov   dword[TaskProgramDone],1
+TaskProgramCheckDoneDone:
   ret
 
 ;--------------------------------------------------------------------------------------------------
