@@ -20,6 +20,7 @@ CN_CMD_MAX_LEN   equ 79                 ; maximum console input length
 align 4
 CnHelpCnt        dd 0                  ; Number of help entries 
 CnTmpCount       dd 0                  ; temp: table entry count
+CnFsTestHandle   dd 0                  ; temp: FsTest file handle
 pCnCmdLine       dd 0                  ; Pointer to command line buffer
 pCnCmdTable      dd 0                  ; Pointer to command table
 pCnLogMsg        dd 0                  ; Pointer to log message
@@ -34,6 +35,8 @@ CnPad2           db 0,0                ; pad to keep alignment friendly
 
 ; Command line buffer as String:
 CnCmdLine: times (2 + CN_CMD_MAX_LEN) db 0
+CnFsTestBuffer:
+  times 32 db 0
 
 ; Strings
 String  CnStartMsg1,"AsmOSx86 - A Hobbyist Operating System in x86 Assembly"
@@ -43,6 +46,12 @@ String  CnShutdown1,"AsmOSx86 shutting down system..."
 String  CnShutdown2,"System halted. It is now safe to power off."
 String  CnDelayMsg1,"Delay test start (2000ms 2 seconds)"
 String  CnDelayMsg2,"Delay test end"
+String  CnFsTestFile,"KERNEL.BIN"
+String  CnFsTestOpenStatus,"FsTest: open status 0000"
+String  CnFsTestOpenHandle,"FsTest: open handle 0000"
+String  CnFsTestReadStatus,"FsTest: read status 0000"
+String  CnFsTestReadBytes,"FsTest: read bytes 0000"
+String  CnFsTestCloseStatus,"FsTest: close status 0000"
 String  CnKcTestMsg1,"KcTest: KcVdWriteStr dispatch OK"
 String  CnKcTestMsg2,"KcTest: KcTmGetUptime dispatch result:"
 String  CnUserTestMsg1,"UserTest: loading Prog1, Prog2, Prog3"
@@ -53,6 +62,7 @@ String  CnUserTestFail,"UserTest: load failed"
 ; ----- Console commands -----
 String  CnCmdDate,     "Date"
 String  CnCmdDelay,    "Delay"
+String  CnCmdFsTest,   "FsTest"
 String  CnCmdHelp,     "Help"
 String  CnCmdKcTest,   "KcTest"
 String  CnCmdShutdown, "Shutdown"
@@ -65,6 +75,7 @@ align 4
 CnCmdTable:
   dd CnCmdDate,     CnDoCmdDate
   dd CnCmdDelay,    CnDoCmdDelay
+  dd CnCmdFsTest,   CnDoCmdFsTest
   dd CnCmdHelp,     CnDoCmdHelp
   dd CnCmdKcTest,   CnDoCmdKcTest
   dd CnCmdShutdown, CnDoCmdShutdown
@@ -438,6 +449,80 @@ CnDoCmdTime:
 ;------------------------------------------------------------------------------
 CnDoCmdUptime:
   call  UptimePrint
+  ret
+
+;------------------------------------------------------------------------------
+; CnDoCmdFsTest
+;   Output:
+;     Opens KERNEL.BIN through KcFsOpen, reads 32 bytes, closes it, and prints
+;     simple status lines.
+;------------------------------------------------------------------------------
+CnDoCmdFsTest:
+  mov   dword[CnFsTestHandle],0
+  mov   dword[KcNumber],KcFsOpen
+  lea   eax,[CnFsTestFile]
+  mov   [KcArg0],eax
+  call  KcDispatch
+  mov   eax,[KcResult0]
+  mov   [TaskPut4DecVal],eax
+  lea   eax,[CnFsTestOpenStatus+22]
+  mov   [pTaskPut4DecDst],eax
+  call  TaskPut4Dec
+  lea   eax,[CnFsTestOpenStatus]
+  mov   [pVdStr],eax
+  call  VdPutStr
+  call  CnCrLf
+  mov   eax,[KcResult1]
+  mov   [CnFsTestHandle],eax
+  mov   [TaskPut4DecVal],eax
+  lea   eax,[CnFsTestOpenHandle+22]
+  mov   [pTaskPut4DecDst],eax
+  call  TaskPut4Dec
+  lea   eax,[CnFsTestOpenHandle]
+  mov   [pVdStr],eax
+  call  VdPutStr
+  call  CnCrLf
+  mov   eax,[CnFsTestHandle]
+  test  eax,eax
+  jz    CnDoCmdFsTestDone
+  mov   dword[KcNumber],KcFsRead
+  mov   [KcArg0],eax
+  lea   eax,[CnFsTestBuffer]
+  mov   [KcArg1],eax
+  mov   dword[KcArg2],32
+  call  KcDispatch
+  mov   eax,[KcResult0]
+  mov   [TaskPut4DecVal],eax
+  lea   eax,[CnFsTestReadStatus+22]
+  mov   [pTaskPut4DecDst],eax
+  call  TaskPut4Dec
+  lea   eax,[CnFsTestReadStatus]
+  mov   [pVdStr],eax
+  call  VdPutStr
+  call  CnCrLf
+  mov   eax,[KcResult1]
+  mov   [TaskPut4DecVal],eax
+  lea   eax,[CnFsTestReadBytes+21]
+  mov   [pTaskPut4DecDst],eax
+  call  TaskPut4Dec
+  lea   eax,[CnFsTestReadBytes]
+  mov   [pVdStr],eax
+  call  VdPutStr
+  call  CnCrLf
+  mov   dword[KcNumber],KcFsClose
+  mov   eax,[CnFsTestHandle]
+  mov   [KcArg0],eax
+  call  KcDispatch
+  mov   eax,[KcResult0]
+  mov   [TaskPut4DecVal],eax
+  lea   eax,[CnFsTestCloseStatus+23]
+  mov   [pTaskPut4DecDst],eax
+  call  TaskPut4Dec
+  lea   eax,[CnFsTestCloseStatus]
+  mov   [pVdStr],eax
+  call  VdPutStr
+  call  CnCrLf
+CnDoCmdFsTestDone:
   ret
 
 ;------------------------------------------------------------------------------
