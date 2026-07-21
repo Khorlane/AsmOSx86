@@ -44,6 +44,18 @@ KcFsRead           equ 7
 KcFsClose          equ 8
 
 ;--------------------------------------------------------------------------------------------------
+; User Kernel-Call Block Layout
+;--------------------------------------------------------------------------------------------------
+KC_BLOCK_NUMBER    equ 0
+KC_BLOCK_STATUS    equ 4
+KC_BLOCK_ARG0      equ 8
+KC_BLOCK_ARG1      equ 12
+KC_BLOCK_ARG2      equ 16
+KC_BLOCK_ARG3      equ 20
+KC_BLOCK_RESULT0   equ 24
+KC_BLOCK_RESULT1   equ 28
+
+;--------------------------------------------------------------------------------------------------
 ; Kernel Call Communication Fields
 ;--------------------------------------------------------------------------------------------------
 align 4
@@ -98,6 +110,51 @@ KcDispatch:
   mov   eax,[KcHandler]
   call  eax
 KcDispatchDone:
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; KcUserDispatch
+;   Input:
+;     Current task's TASK_KCBLOCK_PTR points to a 32-byte user kernel-call block.
+;   Output:
+;     Copies KcStatus/KcResult0/KcResult1 back to the current task's block when
+;     the call returns to the same task.
+;   Notes:
+;     Fixed gateway entry lives at 00100005h in Kernel.asm.
+;--------------------------------------------------------------------------------------------------
+KcUserDispatch:
+  call  TaskGetCurrentRecord
+  mov   edi,[pTaskRecord]
+  test  edi,edi
+  jz    KcUserDispatchDone
+  mov   esi,[edi+TASK_KCBLOCK_PTR]
+  test  esi,esi
+  jz    KcUserDispatchDone
+  mov   eax,[esi+KC_BLOCK_NUMBER]
+  mov   [KcNumber],eax
+  mov   eax,[esi+KC_BLOCK_ARG0]
+  mov   [KcArg0],eax
+  mov   eax,[esi+KC_BLOCK_ARG1]
+  mov   [KcArg1],eax
+  mov   eax,[esi+KC_BLOCK_ARG2]
+  mov   [KcArg2],eax
+  mov   eax,[esi+KC_BLOCK_ARG3]
+  mov   [KcArg3],eax
+  call  KcDispatch
+  call  TaskGetCurrentRecord
+  mov   edi,[pTaskRecord]
+  test  edi,edi
+  jz    KcUserDispatchDone
+  mov   esi,[edi+TASK_KCBLOCK_PTR]
+  test  esi,esi
+  jz    KcUserDispatchDone
+  mov   eax,[KcStatus]
+  mov   [esi+KC_BLOCK_STATUS],eax
+  mov   eax,[KcResult0]
+  mov   [esi+KC_BLOCK_RESULT0],eax
+  mov   eax,[KcResult1]
+  mov   [esi+KC_BLOCK_RESULT1],eax
+KcUserDispatchDone:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -211,7 +268,7 @@ KcTsYieldHandler:
 ;--------------------------------------------------------------------------------------------------
 ; KcTsLoadProgramHandler
 ;   Input:
-;     KcArg0 = mock program id.
+;     KcArg0 = pointer to kernel Str filename.
 ;     KcArg1 = task table index to prepare.
 ;     KcArg2 = stack slot index to assign.
 ;   Output:
@@ -219,11 +276,11 @@ KcTsYieldHandler:
 ;     KcResult0 = TaskProgramStatus
 ;     KcResult1 = 0
 ;   Notes:
-;     Loads a kernel-resident mock program image into the fixed user slot.
+;     Loads a flat user-program binary from the filesystem into a fixed slot.
 ;--------------------------------------------------------------------------------------------------
 KcTsLoadProgramHandler:
   mov   eax,[KcArg0]
-  mov   [TaskProgramId],eax
+  mov   [pTaskProgramName],eax
   mov   eax,[KcArg1]
   mov   [TaskProgramTaskIndex],eax
   mov   eax,[KcArg2]

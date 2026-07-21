@@ -54,7 +54,10 @@ String  CnFsTestReadBytes,"FsTest: read bytes 0000"
 String  CnFsTestCloseStatus,"FsTest: close status 0000"
 String  CnKcTestMsg1,"KcTest: KcVdWriteStr dispatch OK"
 String  CnKcTestMsg2,"KcTest: KcTmGetUptime dispatch result:"
-String  CnUserTestMsg1,"UserTest: loading Prog1, Prog2, Prog3"
+String  CnUserProg1File,"PROG1.BIN"
+String  CnUserProg2File,"PROG2.BIN"
+String  CnUserProg3File,"PROG3.BIN"
+String  CnUserTestMsg1,"UserTest: loading PROG1.BIN, PROG2.BIN, PROG3.BIN"
 String  CnUserTestMsg2,"UserTest: running loaded programs"
 String  CnUserTestMsg3,"UserTest: complete"
 String  CnUserTestFail,"UserTest: load failed"
@@ -558,7 +561,7 @@ CnDoCmdKcTest:
 ;------------------------------------------------------------------------------
 ; CnDoCmdUserTest
 ;   Output:
-;     Loads three mock user programs through KcTsLoadProgram and runs them.
+;     Loads three user programs through KcTsLoadProgram and runs them.
 ;   Notes:
 ;     Exercises the kernel-call path before entering cooperative dispatch.
 ;------------------------------------------------------------------------------
@@ -569,7 +572,8 @@ CnDoCmdUserTest:
   call  CnCrLf
   call  TaskProgramInit
   mov   dword[KcNumber],KcTsLoadProgram
-  mov   dword[KcArg0],1
+  lea   eax,[CnUserProg1File]
+  mov   [KcArg0],eax
   mov   dword[KcArg1],1
   mov   dword[KcArg2],1
   call  KcDispatch
@@ -577,7 +581,8 @@ CnDoCmdUserTest:
   cmp   eax,KC_STATUS_OK
   jne   CnDoCmdUserTest1
   mov   dword[KcNumber],KcTsLoadProgram
-  mov   dword[KcArg0],2
+  lea   eax,[CnUserProg2File]
+  mov   [KcArg0],eax
   mov   dword[KcArg1],2
   mov   dword[KcArg2],2
   call  KcDispatch
@@ -585,7 +590,8 @@ CnDoCmdUserTest:
   cmp   eax,KC_STATUS_OK
   jne   CnDoCmdUserTest1
   mov   dword[KcNumber],KcTsLoadProgram
-  mov   dword[KcArg0],3
+  lea   eax,[CnUserProg3File]
+  mov   [KcArg0],eax
   mov   dword[KcArg1],3
   mov   dword[KcArg2],3
   call  KcDispatch

@@ -10,8 +10,7 @@
 ;   - Task record layout constants
 ;   - Task table storage
 ;   - Helpers for resolving task records and stack-slot bounds
-;   - Mock user-program image loading plumbing
-;   - Kernel-resident task-switch POC payloads
+;   - File-backed user-program loading plumbing
 ;
 ; Notes
 ;   - Task metadata is kernel-owned.
@@ -55,27 +54,21 @@ STACK_ARENA_BOTTOM   equ 00001000h
 STACK_SLOT_COUNT     equ 143
 
 ;--------------------------------------------------------------------------------------------------
-; Mock User Program Loader Constants
+; User Program Loader Constants
 ;--------------------------------------------------------------------------------------------------
 TASK_PROGRAM_STATUS_OK          equ 0
 TASK_PROGRAM_STATUS_NOT_FOUND   equ 1
 TASK_PROGRAM_STATUS_BAD_TASK    equ 2
 TASK_PROGRAM_STATUS_BAD_STACK   equ 3
 TASK_PROGRAM_STATUS_BAD_IMAGE   equ 4
-TASK_PROGRAM_ID                 equ 0
-TASK_PROGRAM_SOURCE             equ 4
-TASK_PROGRAM_SIZE               equ 8
-TASK_PROGRAM_LOAD_BASE          equ 12
-TASK_PROGRAM_ENTRY_OFFSET       equ 16
-TASK_PROGRAM_KCBLOCK_OFFSET     equ 20
-TASK_PROGRAM_RECORD_SIZE        equ 24
-TASK_PROGRAM_TABLE_COUNT        equ 3
+TASK_PROGRAM_STATUS_FS_ERROR    equ 5
 USER_PROGRAM_LOAD_BASE          equ 00200000h
 USER_PROGRAM_SLOT_SIZE          equ 00001000h
 USER_PROGRAM1_LOAD_BASE         equ USER_PROGRAM_LOAD_BASE
 USER_PROGRAM2_LOAD_BASE         equ USER_PROGRAM_LOAD_BASE+USER_PROGRAM_SLOT_SIZE
 USER_PROGRAM3_LOAD_BASE         equ USER_PROGRAM_LOAD_BASE+(USER_PROGRAM_SLOT_SIZE*2)
 USER_PROGRAM_KCBLOCK_SIZE       equ 32
+USER_PROGRAM_IMAGE_SIZE         equ USER_PROGRAM_SLOT_SIZE-USER_PROGRAM_KCBLOCK_SIZE
 
 ;--------------------------------------------------------------------------------------------------
 ; Task Globals
@@ -94,56 +87,20 @@ TaskPut4DecVal       dd 0               ; input: value 0..9999
 pTaskPut4DecDst      dd 0               ; input: destination payload pointer
 TaskInitPtr          dd 0               ; work: table clear pointer
 TaskInitLeft         dd 0               ; work: table clear byte count
-TaskProgramId        dd 0               ; input: mock program id to load
+pTaskProgramName     dd 0               ; input: pointer to kernel Str filename
 TaskProgramTaskIndex dd 0               ; input: task table index to prepare
 TaskProgramStackSlot dd 0               ; input: stack slot index to assign
 TaskProgramStatus    dd 0               ; output: TASK_PROGRAM_STATUS_*
-pTaskProgramRecord   dd 0               ; output/work: selected program table record
-pTaskProgramScan     dd 0               ; work: program table scan pointer
-TaskProgramLeft      dd 0               ; work: program table entries left
 TaskProgramEntryPtr  dd 0               ; output: loaded program entry address
 TaskProgramKcBlockPtr dd 0              ; output: loaded program KcBlock address
+TaskProgramLoadBase  dd 0               ; work: selected program load base
+TaskProgramHandle    dd 0               ; work: open file handle
+TaskProgramClearPtr   dd 0              ; work: user slot clear pointer
+TaskProgramClearLeft  dd 0              ; work: user slot clear byte count
 TaskExitCode         dd 0               ; input: current task exit code
 String  TaskProgramExitStr1,"Task 1 exit 0000"
 String  TaskProgramExitStr2,"Task 2 exit 0000"
 String  TaskProgramExitStr3,"Task 3 exit 0000"
-TaskProgramTable:
-  dd 1,TaskProgram1Image,TaskProgram1ImageEnd-TaskProgram1Image
-  dd USER_PROGRAM1_LOAD_BASE,0,TaskProgram1KcBlock-TaskProgram1Image
-  dd 2,TaskProgram2Image,TaskProgram2ImageEnd-TaskProgram2Image
-  dd USER_PROGRAM2_LOAD_BASE,0,TaskProgram2KcBlock-TaskProgram2Image
-  dd 3,TaskProgram3Image,TaskProgram3ImageEnd-TaskProgram3Image
-  dd USER_PROGRAM3_LOAD_BASE,0,TaskProgram3KcBlock-TaskProgram3Image
-TaskProgram1Image:
-  mov   dword[KcNumber],KcTsExit
-  mov   dword[KcArg0],55
-  mov   eax,KcDispatch
-  call  eax
-TaskProgram1Image1:
-  jmp   TaskProgram1Image1
-TaskProgram1KcBlock:
-  times USER_PROGRAM_KCBLOCK_SIZE db 0
-TaskProgram1ImageEnd:
-TaskProgram2Image:
-  mov   dword[KcNumber],KcTsExit
-  mov   dword[KcArg0],155
-  mov   eax,KcDispatch
-  call  eax
-TaskProgram2Image1:
-  jmp   TaskProgram2Image1
-TaskProgram2KcBlock:
-  times USER_PROGRAM_KCBLOCK_SIZE db 0
-TaskProgram2ImageEnd:
-TaskProgram3Image:
-  mov   dword[KcNumber],KcTsExit
-  mov   dword[KcArg0],255
-  mov   eax,KcDispatch
-  call  eax
-TaskProgram3Image1:
-  jmp   TaskProgram3Image1
-TaskProgram3KcBlock:
-  times USER_PROGRAM_KCBLOCK_SIZE db 0
-TaskProgram3ImageEnd:
 TaskTable:
   times MAX_TASKS * TASK_RECORD_SIZE db 0
 
@@ -248,71 +205,9 @@ TaskPut4Dec:
   ret
 
 ;--------------------------------------------------------------------------------------------------
-; TaskProgramFind
-;   Input:
-;     TaskProgramId = mock program id to find.
-;   Output:
-;     TaskProgramStatus  = TASK_PROGRAM_STATUS_OK or TASK_PROGRAM_STATUS_NOT_FOUND.
-;     pTaskProgramRecord = selected program record, or 0 if not found.
-;--------------------------------------------------------------------------------------------------
-TaskProgramFind:
-  mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_NOT_FOUND
-  mov   dword[pTaskProgramRecord],0
-  mov   eax,TaskProgramTable
-  mov   [pTaskProgramScan],eax
-  mov   dword[TaskProgramLeft],TASK_PROGRAM_TABLE_COUNT
-TaskProgramFind1:
-  mov   eax,[TaskProgramLeft]
-  test  eax,eax
-  jz    TaskProgramFind3
-  mov   edi,[pTaskProgramScan]
-  mov   eax,[edi+TASK_PROGRAM_ID]
-  cmp   eax,[TaskProgramId]
-  je    TaskProgramFind2
-  add   edi,TASK_PROGRAM_RECORD_SIZE
-  mov   [pTaskProgramScan],edi
-  mov   eax,[TaskProgramLeft]
-  dec   eax
-  mov   [TaskProgramLeft],eax
-  jmp   TaskProgramFind1
-TaskProgramFind2:
-  mov   [pTaskProgramRecord],edi
-  mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_OK
-TaskProgramFind3:
-  ret
-
-;--------------------------------------------------------------------------------------------------
-; TaskProgramCopyImage
-;   Input:
-;     pTaskProgramRecord = selected program table record.
-;   Output:
-;     TaskProgramStatus = TASK_PROGRAM_STATUS_OK or TASK_PROGRAM_STATUS_BAD_IMAGE.
-;--------------------------------------------------------------------------------------------------
-TaskProgramCopyImage:
-  mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_BAD_IMAGE
-  mov   esi,[pTaskProgramRecord]
-  test  esi,esi
-  jz    TaskProgramCopyImage2
-  mov   ecx,[esi+TASK_PROGRAM_SIZE]
-  test  ecx,ecx
-  jz    TaskProgramCopyImage2
-  mov   edi,[esi+TASK_PROGRAM_LOAD_BASE]
-  mov   esi,[esi+TASK_PROGRAM_SOURCE]
-TaskProgramCopyImage1:
-  mov   al,[esi]
-  mov   [edi],al
-  inc   esi
-  inc   edi
-  dec   ecx
-  jnz   TaskProgramCopyImage1
-  mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_OK
-TaskProgramCopyImage2:
-  ret
-
-;--------------------------------------------------------------------------------------------------
 ; TaskProgramLoad
 ;   Input:
-;     TaskProgramId        = mock program id to load.
+;     pTaskProgramName     = pointer to kernel Str filename.
 ;     TaskProgramTaskIndex = task table index to prepare.
 ;     TaskProgramStackSlot = stack slot index to assign.
 ;   Output:
@@ -320,20 +215,17 @@ TaskProgramCopyImage2:
 ;     TaskProgramEntryPtr   = loaded program entry address.
 ;     TaskProgramKcBlockPtr = loaded program KcBlock address.
 ;   Notes:
-;     Copies a kernel-resident mock image into the fixed user load slot and
-;     seeds a ready task record. It does not start or schedule the task.
+;     Reads a flat user-program binary into a fixed user load slot and seeds a
+;     ready task record. It does not start or schedule the task.
 ;--------------------------------------------------------------------------------------------------
 TaskProgramLoad:
   mov   dword[TaskProgramEntryPtr],0
   mov   dword[TaskProgramKcBlockPtr],0
-  call  TaskProgramFind
-  mov   eax,[TaskProgramStatus]
+  mov   dword[TaskProgramLoadBase],0
+  mov   dword[TaskProgramHandle],0
+  mov   eax,[pTaskProgramName]
   test  eax,eax
-  jnz   TaskProgramLoad3
-  call  TaskProgramCopyImage
-  mov   eax,[TaskProgramStatus]
-  test  eax,eax
-  jnz   TaskProgramLoad3
+  jz    TaskProgramLoad4
   mov   eax,[TaskProgramTaskIndex]
   mov   [TaskIndex],eax
   call  TaskGetRecord
@@ -346,8 +238,28 @@ TaskProgramLoad:
   mov   eax,[TaskStackTop]
   test  eax,eax
   jz    TaskProgramLoad2
+  call  TaskProgramGetLoadBase
+  mov   eax,[TaskProgramLoadBase]
+  test  eax,eax
+  jz    TaskProgramLoad4
+  call  TaskProgramClearSlot
+  mov   eax,[pTaskProgramName]
+  mov   [pFsOpenName],eax
+  call  FsOpen
+  mov   eax,[FsStatus]
+  cmp   eax,FS_STATUS_OK
+  jne   TaskProgramLoad5
+  mov   eax,[FsOpenHandle]
+  mov   [TaskProgramHandle],eax
+  mov   [FsReadHandle],eax
+  mov   eax,[TaskProgramLoadBase]
+  mov   [pFsReadBuffer],eax
+  mov   dword[FsReadCount],USER_PROGRAM_IMAGE_SIZE
+  call  FsRead
+  mov   eax,[FsStatus]
+  cmp   eax,FS_STATUS_OK
+  jne   TaskProgramLoad6
   mov   edi,[pTaskRecord]
-  mov   esi,[pTaskProgramRecord]
   mov   dword[edi+TASK_STATE],TASK_STATE_READY
   mov   eax,[TaskProgramStackSlot]
   mov   [edi+TASK_STACK_SLOT],eax
@@ -357,25 +269,100 @@ TaskProgramLoad:
   mov   [edi+TASK_STACK_TOP],eax
   sub   eax,4
   mov   [edi+TASK_SAVED_ESP],eax
-  mov   ebx,[esi+TASK_PROGRAM_LOAD_BASE]
-  add   ebx,[esi+TASK_PROGRAM_ENTRY_OFFSET]
+  mov   ebx,[TaskProgramLoadBase]
   mov   [TaskProgramEntryPtr],ebx
   mov   [eax],ebx
   mov   [edi+TASK_ENTRY],ebx
-  mov   ebx,[esi+TASK_PROGRAM_LOAD_BASE]
-  add   ebx,[esi+TASK_PROGRAM_KCBLOCK_OFFSET]
+  mov   ebx,[TaskProgramLoadBase]
+  add   ebx,USER_PROGRAM_SLOT_SIZE-USER_PROGRAM_KCBLOCK_SIZE
   mov   [TaskProgramKcBlockPtr],ebx
   mov   [edi+TASK_KCBLOCK_PTR],ebx
   mov   dword[edi+TASK_EXIT_CODE],0
   mov   dword[edi+TASK_RUN_COUNT],0
   mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_OK
+  call  TaskProgramCloseFile
   jmp   TaskProgramLoad3
 TaskProgramLoad1:
   mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_BAD_TASK
   jmp   TaskProgramLoad3
 TaskProgramLoad2:
   mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_BAD_STACK
+  jmp   TaskProgramLoad3
+TaskProgramLoad4:
+  mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_BAD_IMAGE
+  jmp   TaskProgramLoad3
+TaskProgramLoad5:
+  mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_NOT_FOUND
+  jmp   TaskProgramLoad3
+TaskProgramLoad6:
+  call  TaskProgramCloseFile
+  mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_FS_ERROR
 TaskProgramLoad3:
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; TaskProgramGetLoadBase
+;   Input:
+;     TaskProgramTaskIndex = task index.
+;   Output:
+;     TaskProgramLoadBase = fixed load base, or 0 if the task index cannot map
+;     to a user-program slot.
+;--------------------------------------------------------------------------------------------------
+TaskProgramGetLoadBase:
+  mov   dword[TaskProgramLoadBase],0
+  mov   eax,[TaskProgramTaskIndex]
+  test  eax,eax
+  jz    TaskProgramGetLoadBaseDone
+  dec   eax
+  cmp   eax,3
+  jae   TaskProgramGetLoadBaseDone
+  mov   ebx,USER_PROGRAM_SLOT_SIZE
+  mul   ebx
+  add   eax,USER_PROGRAM_LOAD_BASE
+  mov   [TaskProgramLoadBase],eax
+TaskProgramGetLoadBaseDone:
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; TaskProgramCloseFile
+;   Input:
+;     TaskProgramHandle = open file handle, or 0.
+;   Output:
+;     Closes the file if a handle was opened.
+;--------------------------------------------------------------------------------------------------
+TaskProgramCloseFile:
+  mov   eax,[TaskProgramHandle]
+  test  eax,eax
+  jz    TaskProgramCloseFileDone
+  mov   [FsCloseHandle],eax
+  call  FsClose
+  mov   dword[TaskProgramHandle],0
+TaskProgramCloseFileDone:
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; TaskProgramClearSlot
+;   Input:
+;     TaskProgramLoadBase = selected user-program load base.
+;   Output:
+;     Clears the full 4K user-program slot.
+;--------------------------------------------------------------------------------------------------
+TaskProgramClearSlot:
+  mov   eax,[TaskProgramLoadBase]
+  mov   [TaskProgramClearPtr],eax
+  mov   dword[TaskProgramClearLeft],USER_PROGRAM_SLOT_SIZE
+TaskProgramClearSlot1:
+  mov   eax,[TaskProgramClearLeft]
+  test  eax,eax
+  jz    TaskProgramClearSlotDone
+  mov   edi,[TaskProgramClearPtr]
+  mov   byte[edi],0
+  inc   edi
+  mov   [TaskProgramClearPtr],edi
+  dec   eax
+  mov   [TaskProgramClearLeft],eax
+  jmp   TaskProgramClearSlot1
+TaskProgramClearSlotDone:
   ret
 
 ;--------------------------------------------------------------------------------------------------

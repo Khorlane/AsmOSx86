@@ -1,8 +1,8 @@
 <# 
 Copy1.ps1
-Copies Boot2.bin and Kernel.bin to floppy.img using ImDisk.
+Copies Boot2.bin, Kernel.bin, and optional user programs to floppy.img using ImDisk.
 - Mounts using first free drive letter (#:) to avoid conflicts.
-- Copies BOOT2.BIN and KERNEL.BIN to the FAT12 root.
+- Copies BOOT2.BIN, KERNEL.BIN, and optional PROG*.BIN files to the FAT12 root.
 - Verifies files exist via DIR-style listing.
 - Unmounts robustly: dismount/remove drive letter, retry detach, then force detach if needed.
 #>
@@ -67,6 +67,9 @@ try {
   $Image  = Join-Path $RepoRoot "floppy.img"
   $Boot2  = Join-Path $RepoRoot "Boot2.bin"
   $Kernel = Join-Path $RepoRoot "Kernel.bin"
+  $Prog1  = Join-Path $RepoRoot "Prog1.bin"
+  $Prog2  = Join-Path $RepoRoot "Prog2.bin"
+  $Prog3  = Join-Path $RepoRoot "Prog3.bin"
 
   Write-Host "[1/5] Verifying files..."
   foreach ($f in @($Image, $Boot2, $Kernel)) {
@@ -113,6 +116,11 @@ try {
     Write-Host "[3/5] Copying files to $Drive..."
     Copy-Item -LiteralPath $Boot2  -Destination "$Drive\BOOT2.BIN"  -Force
     Copy-Item -LiteralPath $Kernel -Destination "$Drive\KERNEL.BIN" -Force
+    foreach ($prog in @($Prog1, $Prog2, $Prog3)) {
+      if (Test-Path -LiteralPath $prog -PathType Leaf) {
+        Copy-Item -LiteralPath $prog -Destination (Join-Path "$Drive\" ([IO.Path]::GetFileName($prog).ToUpperInvariant())) -Force
+      }
+    }
 
     Write-Host "[4/5] Verifying files on $Drive (DIR)..."
     if (-not (Test-Path "$Drive\BOOT2.BIN"))  { Fail "BOOT2.BIN not found on $Drive after copy." }
@@ -164,7 +172,7 @@ try {
     }
   }
 
-  Write-Host "SUCCESS: Boot2.bin and Kernel.bin copied to floppy.img via FAT12."
+  Write-Host "SUCCESS: Boot2.bin, Kernel.bin, and optional user programs copied to floppy.img via FAT12."
   Wait-ForKey
   exit 0
 }
