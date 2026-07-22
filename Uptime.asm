@@ -65,6 +65,10 @@ UptimePut3DecVal   dd 0                 ; input: value 0..999
 pUptimePut3DecDst  dd 0                 ; input/output: destination payload pointer
 
 ;--------------------------------------------------------------------------------------------------
+; External Routines
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
 ; UptimeInit
 ;   Output:
 ;     UptimeBaseLo/UptimeBaseHi = current monotonic tick baseline.
@@ -102,39 +106,6 @@ UptimeNow1:
   mov   ecx,UP_PIT_HZ
   div   ecx                             ; quotient seconds, remainder ticks
   mov   [UptimeOutSec],eax
-  ret
-
-;--------------------------------------------------------------------------------------------------
-; UptimePut3Dec
-;   Input:
-;     UptimePut3DecVal  = value 0..999
-;     pUptimePut3DecDst = destination payload pointer
-;   Output:
-;     [pUptimePut3DecDst original..original+2] = three ASCII decimal digits.
-;     pUptimePut3DecDst += 3.
-;   Notes:
-;     Internal helper for UptimeFmtYdhms.
-;--------------------------------------------------------------------------------------------------
-UptimePut3Dec:
-  mov   edi,[pUptimePut3DecDst]
-  mov   eax,[UptimePut3DecVal]
-  xor   edx,edx
-  mov   ebx,100
-  div   ebx                             ; quotient hundreds, remainder
-  add   al,'0'
-  mov   [edi],al
-  inc   edi
-  mov   eax,edx
-  xor   edx,edx
-  mov   ebx,10
-  div   ebx                             ; quotient tens, remainder ones
-  add   al,'0'
-  mov   [edi],al
-  mov   al,dl
-  add   al,'0'
-  mov   [edi+1],al
-  add   edi,2
-  mov   [pUptimePut3DecDst],edi
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -228,4 +199,41 @@ UptimePrint:
   mov   [pVdStr],eax
   call  VdPutStr
   call  CnCrLf
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; Internal Routines
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; UptimePut3Dec
+;   Input:
+;     UptimePut3DecVal  = value 0..999
+;     pUptimePut3DecDst = destination payload pointer
+;   Output:
+;     [pUptimePut3DecDst original..original+2] = three ASCII decimal digits.
+;     pUptimePut3DecDst += 3.
+;   Notes:
+;     Internal helper for UptimeFmtYdhms.
+;--------------------------------------------------------------------------------------------------
+UptimePut3Dec:
+  mov   edi,[pUptimePut3DecDst]
+  mov   eax,[UptimePut3DecVal]
+  xor   edx,edx
+  mov   ebx,100
+  div   ebx                             ; quotient hundreds, remainder
+  add   al,'0'
+  mov   [edi],al
+  inc   edi
+  mov   eax,edx
+  xor   edx,edx
+  mov   ebx,10
+  div   ebx                             ; quotient tens, remainder ones
+  add   al,'0'
+  mov   [edi],al
+  mov   al,dl
+  add   al,'0'
+  mov   [edi+1],al
+  add   edi,2
+  mov   [pUptimePut3DecDst],edi
   ret
