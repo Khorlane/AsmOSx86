@@ -16,8 +16,8 @@
 ; Notes
 ;   - Console.asm is the kernel/operator interface, not the future userland shell.
 ;   - CnInit is called during kernel startup.
-;   - CnReadLine reads one edited command line.
-;   - CnCrLf outputs a new line.
+;   - Console is called by the kernel main loop.
+;   - CnCrLf is also used by other modules for kernel text output.
 ;**************************************************************************************************
 
 [bits 32]
@@ -198,7 +198,6 @@ CnSpace:
 ; Notes:
 ;     Non-blocking line editor. Polls timer and keyboard once per call.
 ;     Uses KbGetKey output variables and VdIn* routines for visual editing.
-;     Registers are scratch only across all calls.
 ;------------------------------------------------------------------------------
 CnReadLine:
   mov   byte[CnOutHasLine],0            ; default: no completed line
@@ -352,7 +351,7 @@ CnCmdDispatchDone:
 ;------------------------------------------------------------------------------
 ; Command Handlers
 ; Each handler corresponds to a command in CnCmdTable.
-; Handlers perform specific actions based on the command invoked.
+; Handlers are internal command-table entries.
 ;------------------------------------------------------------------------------
 ;------------------------------------------------------------------------------
 ; CnDoCmdDate
