@@ -14,6 +14,16 @@
 ;   - Stack-slot bounds helpers
 ;   - ASMX user-program loading, relocation, and task setup
 ;
+; Public API
+;   - TaskGetCurrentRecord
+;   - TaskPut4Dec
+;   - TaskProgramLoad
+;   - TaskProgramInit
+;   - TaskProgramStart
+;   - TaskProgramPrintExitCodes
+;   - TaskExit
+;   - TaskYield
+;
 ; Notes
 ;   - Task metadata is kernel-owned.
 ;   - Task stacks live in the low-memory stack-slot arena.
@@ -159,6 +169,8 @@ TaskGetCurrentRecord:
 ; TaskGetNextRecord
 ;   Output:
 ;     pTaskRecord = next task record, or 0 if TaskNextIndex is invalid.
+;   Notes:
+;     Currently has no callers.
 ;--------------------------------------------------------------------------------------------------
 TaskGetNextRecord:
   mov   eax,[TaskNextIndex]
