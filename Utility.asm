@@ -80,24 +80,6 @@ StrTrim:
 ;------------------------------------------------------------------------------
 
 ;------------------------------------------------------------------------------
-; StrCopy
-;   Input:
-;     pStr1 = source Str pointer
-;     pStr2 = destination Str pointer
-;   Output:
-;     Destination Str receives source length word and payload bytes.
-;   Notes:
-;     Internal utility helper. No external callers currently use it.
-;------------------------------------------------------------------------------
-StrCopy:
-  mov   esi,[pStr1]        ; Source pointer
-  mov   edi,[pStr2]        ; Destination pointer
-  mov   cx,[esi]           ; Get length prefix (u16)
-  add   cx,2               ; Include length word
-  rep   movsb
-  ret
-
-;------------------------------------------------------------------------------
 ; StrTrimLead
 ;   Input:
 ;     pStr1 = Str pointer
@@ -137,6 +119,7 @@ StrTrimLeadMove:
   rep   movsb
 StrTrimLeadDone:
   ret
+
 ;------------------------------------------------------------------------------
 ; StrTrimTrail
 ;   Input:
@@ -167,4 +150,26 @@ StrTrimTrailAllSpaces:
 StrTrimTrailStore:
   mov   [edi],cx
 StrTrimTrailDone:
+  ret
+
+;------------------------------------------------------------------------------
+; Unused Routines
+;------------------------------------------------------------------------------
+
+;------------------------------------------------------------------------------
+; StrCopy
+;   Input:
+;     pStr1 = source Str pointer
+;     pStr2 = destination Str pointer
+;   Output:
+;     Destination Str receives source length word and payload bytes.
+;   Notes:
+;     Currently has no callers.
+;------------------------------------------------------------------------------
+StrCopy:
+  mov   esi,[pStr1]        ; Source pointer
+  mov   edi,[pStr2]        ; Destination pointer
+  mov   cx,[esi]           ; Get length prefix (u16)
+  add   cx,2               ; Include length word
+  rep   movsb
   ret
