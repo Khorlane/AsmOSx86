@@ -41,8 +41,6 @@ Put2DecPad0      db 0,0,0               ; alignment padding
 ;     [pPut2DecDst original]   = tens ASCII digit
 ;     [pPut2DecDst original+1] = ones ASCII digit
 ;     pPut2DecDst += 2
-;   Clobbers:
-;     AL, AH, BL, EDI
 ;------------------------------------------------------------------------------
 Put2Dec:
   mov   edi,[pPut2DecDst]
@@ -66,8 +64,8 @@ Put2Dec:
 ;     pStr2 = destination Str pointer
 ;   Output:
 ;     Destination Str receives source length word and payload bytes.
-;   Clobbers:
-;     CX, ESI, EDI
+;   Notes:
+;     Internal utility helper. No external callers currently use it.
 ;------------------------------------------------------------------------------
 StrCopy:
   mov   esi,[pStr1]        ; Source pointer
@@ -98,8 +96,8 @@ StrTrim:
 ;   Output:
 ;     Leading spaces removed in-place.
 ;     String length word is updated.
-;   Clobbers:
-;     EAX, ECX, ESI, EDI
+;   Notes:
+;     Internal helper for StrTrim.
 ;------------------------------------------------------------------------------
 StrTrimLead:
   mov   edi,[pStr1]                     ; EDI = Str
@@ -138,8 +136,8 @@ StrTrimLeadDone:
 ;   Output:
 ;     Trailing spaces removed in-place.
 ;     String length word is updated.
-;   Clobbers:
-;     ECX, ESI, EDI
+;   Notes:
+;     Internal helper for StrTrim.
 ;------------------------------------------------------------------------------
 StrTrimTrail:
   mov   edi,[pStr1]                     ; EDI = Str
