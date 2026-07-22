@@ -11,10 +11,17 @@
 ;   - Read-only FAT12 root-directory lookup
 ;   - Bare-bones floppy sector reads
 ;
+; Public API
+;   - FsInit
+;   - FsOpen
+;   - FsRead
+;   - FsClose
+;
 ; Notes
 ;   - This is intentionally simple and optimistic.
 ;   - It assumes a 1.44MB FAT12 floppy in drive A:.
 ;   - It uses a low-memory DMA bounce buffer at 00008000h.
+;   - FAT12 and floppy routines are internal implementation details.
 ;**************************************************************************************************
 
 [bits 32]
