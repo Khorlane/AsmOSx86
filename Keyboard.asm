@@ -1,20 +1,22 @@
-;==============================================================================
-; Keyboard.asm (Kb) - Keyboard Input Handler for AsmOSx86
+;**************************************************************************************************
+; Keyboard.asm
+;   PC/AT keyboard input handling for AsmOSx86.
 ;
-; Purpose:
-;   Provides routines for initializing keyboard state and reading key events
-;   from the PC/AT keyboard hardware. Handles shift state, scancode decoding,
-;   and ASCII translation.
+; Purpose
+;   Initialize keyboard state, poll the keyboard controller, track modifier
+;   state, decode scancodes, and translate supported keys to ASCII/events.
 ;
-; Coding Standards:
-;   - Column alignment (LOCKED-IN)
-;   - No blank lines within functions (LOCKED-IN)
-;   - PascalCase for variable and label names (LOCKED-IN)
+; Contains
+;   - Keyboard state initialization
+;   - Single-key polling
+;   - Shift make/break tracking
+;   - Scancode-to-ASCII translation
 ;
-; Usage:
-;   Call KbInit at system startup to initialize keyboard state.
-;   Call KbGetKey to poll and decode key events.
-;==============================================================================
+; Notes
+;   - KbInit is called during kernel startup.
+;   - KbGetKey polls once and returns memory-backed key state.
+;   - Physical keyboard hardware remains kernel-owned.
+;**************************************************************************************************
 
 [bits 32]
 

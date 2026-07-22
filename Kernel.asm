@@ -1,31 +1,21 @@
 ;**************************************************************************************************
 ; Kernel.asm
-;   A basic 32 bit binary kernel for x86 PCs.
+;   Resident protected-mode kernel root for AsmOSx86.
 ;
-; nasm -f bin Kernel.asm -o Kernel.bin -l Kernel.lst
+; Purpose
+;   Provide the fixed kernel entry point, descriptor tables, subsystem includes,
+;   initialization order, and main console loop.
 ;
-; Coding Standards (LOCKED-IN)
-; 1) Applies to all included files as well
-; 2) Column Alignment
-;    - Instruction mnemonic starts at column 3
-;    - Operand 1 starts at column 9
-;    - No spaces around operand commas
-;    - Line comments start at column 41
-; 3) Blank Lines
-;    - No blank lines are allowed within a function
-;    - Blank lines are allowed only between functions or major sections
-; 4) Naming
-;    - PascalCase (no underscores) is REQUIRED for:
-;      * Labels
-;      * Variables
-;      * Storage symbols
-;    - SCREAMING_SNAKE_CASE is REQUIRED for:
-;      * Equates / constants
-; 5) General Rules
-;    - No size specifiers like BYTE, WORD, DWORD except for storage definitions
-;    - No reliance on register values across CALL boundaries
-;    - No .bss section; all storage is explicitly zero-initialized
-;    - Row,Col ordering everywhere (row first, then column)
+; Build
+;   nasm -f bin Kernel.asm -o Kernel.bin -l Kernel.lst
+;
+; Contains
+;   - Fixed kernel origin at 00100000h
+;   - Fixed user kernel-call gateway
+;   - GDT and IDT storage
+;   - Major component includes
+;   - Stage3 protected-mode startup path
+;   - Main operator-console loop
 ;**************************************************************************************************
 
 [bits  32]                              ; 32 bit code

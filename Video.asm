@@ -1,14 +1,30 @@
-;==============================================================================
-; Video.asm (Vd) - Video Output and Cursor Management for AsmOSx86
+;**************************************************************************************************
+; Video.asm
+;   Physical VGA text output and cursor management for AsmOSx86.
 ;
-; Cursor contract is 1-based:
-;   Row 1, Col 1 maps to VGA offset 0 (0xB8000 + 0 bytes)
+; Purpose
+;   Own kernel-side VGA text memory output, output/input cursor state,
+;   scrolling, screen clearing, and hardware cursor updates.
 ;
-; Screen: Rows=25, Cols=80
-; Output region (scrolls): rows 1..24
-; "Input-style" routines (VdIn*): write on row = VdCurRow (set by caller)
-; Row,Col ordering everywhere (row first, then col)
-;==============================================================================
+; Contains
+;   - VGA text-mode initialization
+;   - Kernel Str output through VdPutStr/VdPutChar
+;   - Output-region scrolling
+;   - Input-style row editing helpers
+;   - Hardware cursor programming
+;
+; Contracts
+;   - Cursor coordinates are 1-based.
+;   - Row 1, Col 1 maps to VGA offset 0 at 000B8000h.
+;   - Screen size is 25 rows by 80 columns.
+;   - Output region scrolls through rows 1..24.
+;   - VdIn* routines write on VdCurRow, set by the caller.
+;   - Row,Col ordering is used everywhere, row first and then column.
+;
+; Notes
+;   - Video.asm owns the physical VGA text display for the kernel.
+;   - Future userland display should use KcVd* logical session services.
+;**************************************************************************************************
 
 [bits 32]
 

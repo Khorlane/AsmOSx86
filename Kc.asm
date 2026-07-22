@@ -3,11 +3,13 @@
 ;   Kernel Call Interface core for AsmOSx86
 ;
 ; Purpose
-;   Provide the first memory-backed kernel-call dispatcher.
+;   Provide memory-backed kernel-call dispatcher.
 ;
-;   Userland does not exist yet, so this is currently callable from kernel
-;   test paths only. The contract is intentionally shaped like the future
-;   user/kernel service boundary.
+;   Kernel tests may call KcDispatch directly through the global Kc fields.
+;   Userland enters through KcUserDispatch, which copies arguments/results
+;   through the current task's KcBlock.
+;
+;   The contract is intentionally shaped as the user/kernel service boundary.
 ;
 ; Contains
 ;   - Global kernel-call communication fields

@@ -1,27 +1,26 @@
 ;**************************************************************************************************
 ; Utility.asm
-;   Kernel utility routines (subsystem-agnostic helpers)
+;   Subsystem-agnostic kernel helper routines for AsmOSx86.
 ;
 ; Purpose
-;   Provide small, reusable helper routines that:
-;     - Are not tied to a specific hardware device
-;     - Are not part of a single kernel subsystem
-;     - Are safe to call from early boot and core kernel code
+;   Provide small, reusable helpers that are not tied to a specific hardware
+;   device or single kernel subsystem.
 ;
 ; Contains
-;   - Decimal formatting helpers such as Put2Dec
-;   - Kernel Str copy and trim helpers
+;   - Put2Dec decimal formatting
+;   - Kernel Str copy helper
+;   - Kernel Str trim helpers
 ;   - Pure helper logic with no side effects beyond documented outputs
 ;
-; Does NOT contain
+; Does Not Contain
 ;   - Hardware access code
 ;   - Policy decisions or global configuration constants
 ;   - Subsystem-specific logic
 ;
-; Notes (LOCKED-IN)
+; Notes
 ;   - All routines use memory-contract inputs/outputs unless stated.
 ;   - Registers are scratch only; callers must not expect preservation.
-;   - Callers must supply valid pointers and buffers per each routine’s contract.
+;   - Callers must supply valid pointers and buffers per each routine's contract.
 ;**************************************************************************************************
 
 [bits 32]

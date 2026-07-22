@@ -1,33 +1,39 @@
 ;**************************************************************************************************
 ; Uptime.asm
-;   Uptime reporting using monotonic Timer ticks.
+;   Monotonic uptime reporting for AsmOSx86.
 ;
-; Display Format:
-;   "UP YY:DDD:HH:MM:SS"
+; Purpose
+;   Report elapsed monotonic time since UptimeInit using Timer.asm ticks.
 ;
-; Semantics:
+; Display Format
+;   - UP YY:DDD:HH:MM:SS
+;
+; Contains
+;   - Uptime baseline initialization
+;   - Current uptime calculation in seconds
+;   - YY:DDD:HH:MM:SS formatting
+;   - Console uptime printing
+;
+; Public API
+;   - UptimeInit
+;   - UptimeNow
+;   - UptimeFmtYdhms
+;   - UptimePrint
+;
+; Contracts
+;   - UptimeInit captures UptimeBaseLo:UptimeBaseHi from TimerNowTicks.
+;   - UptimeNow returns UptimeOutSec = seconds since UptimeInit.
+;   - UptimeFmtYdhms reads UptimeFmtSec and updates UptimeStr.
+;   - UptimePrint updates and prints UptimeStr through VdPutStr plus CnCrLf.
+;
+; Semantics
 ;   - Uptime measures monotonic elapsed time since UptimeInit.
 ;   - Uptime is based only on TimerNowTicks / TimerOutTicksLo/Hi.
 ;   - Uptime is unaffected by wall-time resync or CMOS changes.
 ;
-; Kernel-facing contract:
-;   UptimeInit
-;     Captures the monotonic tick baseline.
-;
-;   UptimeNow
-;     UptimeOutSec = uptime seconds since UptimeInit.
-;
-;   UptimeFmtYdhms
-;     Input:
-;       UptimeFmtSec = seconds to format.
-;     Output:
-;       UptimeStr payload updated as "UP YY:DDD:HH:MM:SS".
-;
-;   UptimePrint
-;     Updates and prints UptimeStr through VdPutStr plus CnCrLf.
-;
-; Notes:
-;   - 386-safe: no 64-bit instructions.
+; Notes
+;   - UptimeNow lazily calls UptimeInit if needed.
+;   - Uptime code is 386-safe: no 64-bit instructions.
 ;   - Registers are scratch only.
 ;   - Persistent inputs/outputs use Uptime* globals.
 ;**************************************************************************************************

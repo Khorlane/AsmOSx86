@@ -1,16 +1,24 @@
-;==============================================================================
-; Console.asm (Cn) - Console Input and Output Handler for AsmOSx86
+;**************************************************************************************************
+; Console.asm
+;   Kernel/operator console for AsmOSx86.
 ;
-; Purpose:
-;   Provides routines for console initialization, line input, and line output.
-;   Handles user input line editing, carriage return/line feed, and integration
-;   with the video and keyboard subsystems.
+; Purpose
+;   Provide the current operator interface, command processor, line input/editing,
+;   and console output integration with keyboard, video, and kernel services.
 ;
-; Usage:
-;   Call CnInit at system startup to initialize console state.
-;   Use CnReadLine to read a line of user input with editing support.
-;   Use CnCrLf to output a new line.
-;==============================================================================
+; Contains
+;   - Console initialization and startup messages
+;   - Command line input and editing
+;   - Command lookup and dispatch
+;   - Operator commands for date/time/uptime, delay, shutdown, and tests
+;   - Current launch path for file-loaded ASMX user-program tests
+;
+; Notes
+;   - Console.asm is the kernel/operator interface, not the future userland shell.
+;   - CnInit is called during kernel startup.
+;   - CnReadLine reads one edited command line.
+;   - CnCrLf outputs a new line.
+;**************************************************************************************************
 
 [bits 32]
 

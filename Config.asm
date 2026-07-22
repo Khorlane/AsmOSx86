@@ -1,6 +1,6 @@
 ;**************************************************************************************************
 ; Config.asm
-;   Global kernel configuration constants
+;   Global kernel configuration constants for AsmOSx86.
 ;
 ; Purpose
 ;   Centralize kernel-wide tunables and limits that:
@@ -13,11 +13,11 @@
 ;   - Global policy constants
 ;   - Compile-time kernel configuration values
 ;
-; Does NOT contain
+; Does Not Contain
 ;   - Hardware-specific equates (belong in their subsystem modules)
 ;   - Local implementation constants
 ;
-; Notes (LOCKED-IN)
+; Notes
 ;   - Constants here define ABI and memory layout expectations.
 ;   - Changes may require coordinated updates across modules.
 ;**************************************************************************************************

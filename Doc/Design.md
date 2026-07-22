@@ -1557,6 +1557,10 @@ They are separate concepts.
 
 The OS should not care too much how a session was started.
 
+Current AsmOSx86 can already load ASMX userland programs from the FAT12 floppy
+image and run multiple cooperative user tasks. The console is the current
+operator interface to that capability.
+
 A session may eventually be started by:
 
 ```text
@@ -1566,6 +1570,11 @@ future session manager
 future task launcher
 future remote terminal
 ```
+
+The first practical session path may therefore be a console command such as
+`StartSession` or `Start Session`. That command would ask the kernel to load a
+session/sign-on program from disk, create the required task and session state,
+and make that session eligible to become the active input/video target.
 
 Once started, a session presents a sign-on panel.
 

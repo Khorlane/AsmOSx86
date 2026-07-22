@@ -1,17 +1,33 @@
 ;**************************************************************************************************
 ; Timer.asm
-;   PIT timer (channel 0) - polled, no interrupts
+;   Polled PIT monotonic timer support for AsmOSx86.
 ;
-;   Kernel-facing contract:
-;     TimerInit
-;     TimerLatchCount0     ; TimerLatchCnt = current PIT down-counter
-;     TimerNowTicks        ; TimerOutTicksHi:TimerOutTicksLo = monotonic PIT input ticks
-;     TimerSpinDelayMs     ; TimerDelayMs = delay duration in milliseconds
+; Purpose
+;   Provide monotonic PIT tick accumulation and simple busy-wait delays.
 ;
-;   Notes:
-;     - 386-safe (no 64-bit instructions; 64-bit values stored as Hi/Lo dwords)
-;     - Uses PIT ch0 down-counter + wrap tracking to build a monotonic tick counter.
-;     - Registers are scratch only; persistent inputs/outputs use Timer* globals.
+; Contains
+;   - PIT channel 0 initialization
+;   - PIT channel 0 count latching
+;   - Polled monotonic tick accumulation
+;   - Millisecond busy-wait delay
+;
+; Public API
+;   - TimerInit
+;   - TimerLatchCount0
+;   - TimerNowTicks
+;   - TimerSpinDelayMs
+;
+; Contracts
+;   - TimerLatchCount0 returns TimerLatchCnt = current PIT down-counter.
+;   - TimerNowTicks returns TimerOutTicksHi:TimerOutTicksLo as monotonic PIT input ticks.
+;   - TimerSpinDelayMs reads TimerDelayMs as the requested delay duration.
+;
+; Notes
+;   - PIT channel 0 is currently polled; no timer IRQ is used.
+;   - TimerNowTicks uses the PIT down-counter plus wrap tracking.
+;   - First TimerNowTicks call after TimerInit seeds the baseline and returns zero.
+;   - Timer code is 386-safe: no 64-bit instructions; use Hi/Lo dword pairs.
+;   - Registers are scratch only; persistent inputs/outputs use Timer* globals.
 ;**************************************************************************************************
 
 [bits 32]

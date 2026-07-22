@@ -1,20 +1,23 @@
 ;**************************************************************************************************
 ; Task.asm
-;   Cooperative task metadata and stack-slot support for AsmOSx86.
+;   Cooperative tasking and ASMX user-program loading for AsmOSx86.
 ;
 ; Purpose
-;   Provide the first kernel-owned task table and fixed low-memory stack-slot model.
+;   Provide kernel-owned task records, cooperative scheduling support,
+;   low-memory stack-slot assignment, and file-backed ASMX user-program loading.
 ;
 ; Contains
 ;   - Task state constants
 ;   - Task record layout constants
 ;   - Task table storage
-;   - Helpers for resolving task records and stack-slot bounds
-;   - File-backed user-program loading plumbing
+;   - Ready-task selection and cooperative task switching
+;   - Stack-slot bounds helpers
+;   - ASMX user-program loading, relocation, and task setup
 ;
 ; Notes
 ;   - Task metadata is kernel-owned.
 ;   - Task stacks live in the low-memory stack-slot arena.
+;   - Loaded user programs currently reserve 4K slots above the kernel.
 ;   - Registers are scratch only.
 ;   - Persistent inputs/outputs use Task* globals.
 ;**************************************************************************************************

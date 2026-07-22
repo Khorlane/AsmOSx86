@@ -1,45 +1,53 @@
 ;**************************************************************************************************
 ; Time.asm
-;   Time support (RTC + PIT)
-;   - CMOS read for baseline wall clock (YYYY-MM-DD HH:MM:SS)
-;   - PIT polled ticks for monotonic elapsed time (no IRQ)
-;   - 386-safe (no 64-bit instructions; uses Hi/Lo dword pairs)
-;
-; TIME CONTRACTS — MONOTONIC (UPTIME) vs WALL (CALENDAR)
+;   Wall/calendar time support for AsmOSx86.
 ;
 ; Purpose
-;   AsmOSx86 treats “time” as TWO separate services:
-;     (A) TimeMono  = monotonic uptime time (never goes backward,never jumps)
-;     (B) TimeWall  = wall/calendar time (human-readable; may jump/correct)
+;   Provide RTC/CMOS-backed wall time for date, time, timestamps, and logs.
+;   Wall time is separate from monotonic uptime time.
+;
+; Time Domains
+;   - TimeMono = monotonic uptime time; never goes backward and never jumps.
+;   - TimeWall = wall/calendar time; human-readable and may jump/correct.
 ;
 ; Rule of Use
-;   - Use TimeMono (Timer*) for: delays,timeouts,scheduling,profiling,uptime.
-;   - Use TimeWall (Time*)  for: timestamps,logs,human-readable clock display.
+;   - Use TimeMono / Timer* for delays, timeouts, scheduling, profiling, uptime.
+;   - Use TimeWall / Time* for timestamps, logs, date display, and clock display.
+;
+; Contains
+;   - CMOS read for baseline wall clock in YYYY-MM-DD HH:MM:SS form
+;   - Wall-time advancement from polled PIT/Timer ticks
+;   - RTC BCD/binary conversion and 12h/24h normalization
+;   - Date and time string formatting
+;   - 60-second CMOS resync policy
+;
+; Public API
+;   - TimeDtPrint
+;   - TimeTmPrint
+;
+; Internal
+;   - TimeSync
+;   - TimeNow
+;   - TimeFmtHms
+;   - TimeFmtYmd
 ;
 ; Ownership (LOCKED-IN)
 ;   - All wall time logic lives in Time.asm.
 ;   - Monotonic time lives in Timer.asm / Uptime.asm.
 ;   - The kernel MUST NOT read CMOS or PIT directly.
-;   - CMOS,PIT,resync,and future IRQ handling are internal details.
+;   - CMOS, PIT, resync, and future IRQ handling are internal details.
 ;
 ; Dependencies
-;   - Requires Timer.asm contract:
-;       TimerInit
-;       TimerNowTicks     ; outputs TimerOutTicksHi:TimerOutTicksLo
+;   - TimerInit must run before wall time is used.
+;   - TimerNowTicks provides TimerOutTicksHi:TimerOutTicksLo.
 ;
-; Resync Policy (B,locked-in for now)
+; Resync Policy
 ;   - TimeNow will resync wall baseline every 60 seconds of monotonic time.
 ;   - Resync reads CMOS once and snaps wall baseline (wall may jump).
 ;
-; Public API
-;   TimeDtPrint
-;   TimeTmPrint
-;
-; Internal
-;   TimeSync
-;   TimeNow
-;   TimeFmtHms
-;   TimeFmtYmd
+; Notes
+;   - Time code is 386-safe: no 64-bit instructions; use Hi/Lo dword pairs.
+;   - Wall time initializes lazily on first Time* use.
 ;**************************************************************************************************
 
 [bits 32]
