@@ -136,23 +136,8 @@ TaskTable:
   times MAX_TASKS * TASK_RECORD_SIZE db 0
 
 ;--------------------------------------------------------------------------------------------------
-; TaskGetRecord
-;   Input:
-;     TaskIndex = task index, 0..MAX_TASKS-1.
-;   Output:
-;     pTaskRecord = selected task record, or 0 if TaskIndex is invalid.
+; External Routines
 ;--------------------------------------------------------------------------------------------------
-TaskGetRecord:
-  mov   dword[pTaskRecord],0
-  mov   eax,[TaskIndex]
-  cmp   eax,MAX_TASKS
-  jae   TaskGetRecordDone
-  mov   ebx,TASK_RECORD_SIZE
-  mul   ebx
-  lea   edi,[TaskTable+eax]
-  mov   [pTaskRecord],edi
-TaskGetRecordDone:
-  ret
 
 ;--------------------------------------------------------------------------------------------------
 ; TaskGetCurrentRecord
@@ -163,45 +148,6 @@ TaskGetCurrentRecord:
   mov   eax,[TaskCurrentIndex]
   mov   [TaskIndex],eax
   call  TaskGetRecord
-  ret
-
-;--------------------------------------------------------------------------------------------------
-; TaskGetNextRecord
-;   Output:
-;     pTaskRecord = next task record, or 0 if TaskNextIndex is invalid.
-;   Notes:
-;     Currently has no callers.
-;--------------------------------------------------------------------------------------------------
-TaskGetNextRecord:
-  mov   eax,[TaskNextIndex]
-  mov   [TaskIndex],eax
-  call  TaskGetRecord
-  ret
-
-;--------------------------------------------------------------------------------------------------
-; TaskGetStackBounds
-;   Input:
-;     TaskStackSlot = stack slot index, 0..STACK_SLOT_COUNT-1.
-;   Output:
-;     TaskStackTop    = exclusive top address for the slot, or 0 if invalid.
-;     TaskStackBottom = inclusive bottom address for the slot, or 0 if invalid.
-;   Notes:
-;     Slot 0 is the kernel stack. Later slots may be assigned to resident tasks.
-;--------------------------------------------------------------------------------------------------
-TaskGetStackBounds:
-  mov   dword[TaskStackTop],0
-  mov   dword[TaskStackBottom],0
-  mov   eax,[TaskStackSlot]
-  cmp   eax,STACK_SLOT_COUNT
-  jae   TaskGetStackBoundsDone
-  mov   ebx,STACK_SLOT_SIZE
-  mul   ebx
-  mov   ebx,STACK_ARENA_TOP
-  sub   ebx,eax
-  mov   [TaskStackTop],ebx
-  sub   ebx,STACK_SLOT_SIZE
-  mov   [TaskStackBottom],ebx
-TaskGetStackBoundsDone:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -351,6 +297,277 @@ TaskProgramLoad3:
   ret
 
 ;--------------------------------------------------------------------------------------------------
+; TaskProgramInit
+;   Output:
+;     Clears the task table and records the current kernel console context as task 0.
+;   Notes:
+;     Used by console-driven user-program smoke tests before loading mock images.
+;--------------------------------------------------------------------------------------------------
+TaskProgramInit:
+  mov   eax,KernelEnd
+  add   eax,00000FFFh
+  and   eax,0FFFFF000h
+  mov   [TaskProgramNextLoadBase],eax
+  mov   eax,TaskTable
+  mov   [TaskInitPtr],eax
+  mov   eax,MAX_TASKS * TASK_RECORD_SIZE
+  mov   [TaskInitLeft],eax
+TaskProgramInit1:
+  mov   eax,[TaskInitLeft]
+  test  eax,eax
+  jz    TaskProgramInit2
+  mov   edi,[TaskInitPtr]
+  mov   byte[edi],0
+  inc   edi
+  mov   [TaskInitPtr],edi
+  mov   eax,[TaskInitLeft]
+  dec   eax
+  mov   [TaskInitLeft],eax
+  jmp   TaskProgramInit1
+TaskProgramInit2:
+  mov   dword[TaskCurrentIndex],0
+  mov   dword[TaskNextIndex],0
+  mov   dword[TaskIndex],0
+  call  TaskGetRecord
+  mov   edi,[pTaskRecord]
+  mov   dword[edi+TASK_STATE],TASK_STATE_RUNNING
+  mov   dword[edi+TASK_STACK_SLOT],0
+  mov   dword[TaskStackSlot],0
+  call  TaskGetStackBounds
+  mov   eax,[TaskStackBottom]
+  mov   [edi+TASK_STACK_BOTTOM],eax
+  mov   eax,[TaskStackTop]
+  mov   [edi+TASK_STACK_TOP],eax
+  mov   [edi+TASK_SAVED_ESP],esp
+  mov   dword[edi+TASK_ENTRY],0
+  mov   dword[edi+TASK_KCBLOCK_PTR],0
+  mov   dword[edi+TASK_EXIT_CODE],0
+  mov   dword[edi+TASK_RUN_COUNT],0
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; TaskProgramStart
+;   Output:
+;     Starts cooperative dispatch of ready tasks and returns when user-test
+;     tasks 1, 2, and 3 have exited.
+;--------------------------------------------------------------------------------------------------
+TaskProgramStart:
+  mov   dword[TaskProgramDone],0
+TaskProgramStart1:
+  call  TaskYield
+  call  TaskProgramCheckDone
+  mov   eax,[TaskProgramDone]
+  test  eax,eax
+  jz    TaskProgramStart1
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; TaskProgramPrintExitCodes
+;   Output:
+;     Prints recorded exit codes for user-test tasks 1, 2, and 3.
+;   Notes:
+;     Debug helper for the console-driven UserTest path.
+;--------------------------------------------------------------------------------------------------
+TaskProgramPrintExitCodes:
+  mov   dword[TaskIndex],1
+  call  TaskGetRecord
+  mov   edi,[pTaskRecord]
+  mov   eax,[edi+TASK_EXIT_CODE]
+  call  TaskProgramSplitExitCode
+  mov   eax,[TaskExitCodeSum]
+  mov   [TaskPut4DecVal],eax
+  lea   eax,[TaskProgramExitStr1+14]
+  mov   [pTaskPut4DecDst],eax
+  call  TaskPut4Dec
+  mov   eax,[TaskExitCodeYield]
+  mov   [TaskPut4DecVal],eax
+  lea   eax,[TaskProgramExitStr1+19]
+  mov   [pTaskPut4DecDst],eax
+  call  TaskPut4Dec
+  lea   eax,[TaskProgramExitStr1]
+  mov   [pVdStr],eax
+  call  VdPutStr
+  call  CnCrLf
+  mov   dword[TaskIndex],2
+  call  TaskGetRecord
+  mov   edi,[pTaskRecord]
+  mov   eax,[edi+TASK_EXIT_CODE]
+  call  TaskProgramSplitExitCode
+  mov   eax,[TaskExitCodeSum]
+  mov   [TaskPut4DecVal],eax
+  lea   eax,[TaskProgramExitStr2+14]
+  mov   [pTaskPut4DecDst],eax
+  call  TaskPut4Dec
+  mov   eax,[TaskExitCodeYield]
+  mov   [TaskPut4DecVal],eax
+  lea   eax,[TaskProgramExitStr2+19]
+  mov   [pTaskPut4DecDst],eax
+  call  TaskPut4Dec
+  lea   eax,[TaskProgramExitStr2]
+  mov   [pVdStr],eax
+  call  VdPutStr
+  call  CnCrLf
+  mov   dword[TaskIndex],3
+  call  TaskGetRecord
+  mov   edi,[pTaskRecord]
+  mov   eax,[edi+TASK_EXIT_CODE]
+  call  TaskProgramSplitExitCode
+  mov   eax,[TaskExitCodeSum]
+  mov   [TaskPut4DecVal],eax
+  lea   eax,[TaskProgramExitStr3+14]
+  mov   [pTaskPut4DecDst],eax
+  call  TaskPut4Dec
+  mov   eax,[TaskExitCodeYield]
+  mov   [TaskPut4DecVal],eax
+  lea   eax,[TaskProgramExitStr3+19]
+  mov   [pTaskPut4DecDst],eax
+  call  TaskPut4Dec
+  lea   eax,[TaskProgramExitStr3]
+  mov   [pVdStr],eax
+  call  VdPutStr
+  call  CnCrLf
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; TaskExit
+;   Input:
+;     TaskExitCode = current task exit code.
+;   Output:
+;     Marks the current task exited, records its exit code, and dispatches next ready task.
+;--------------------------------------------------------------------------------------------------
+TaskExit:
+  mov   eax,[TaskCurrentIndex]
+  mov   ebx,TASK_RECORD_SIZE
+  mul   ebx
+  lea   edi,[TaskTable+eax]
+  mov   eax,[TaskExitCode]
+  mov   [edi+TASK_EXIT_CODE],eax
+  mov   eax,[edi+TASK_RUN_COUNT]
+  inc   eax
+  mov   [edi+TASK_RUN_COUNT],eax
+  mov   dword[edi+TASK_STATE],TASK_STATE_EXITED
+  call  TaskYield
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; TaskYield
+;   Output:
+;     Saves the current task ESP, selects the next ready task, loads its ESP,
+;     and returns through that task's saved stack.
+;   Notes:
+;     Low-level transition routine: intentionally saves and loads ESP.
+;     Cooperative scheduler scans the task table in round-robin order.
+;--------------------------------------------------------------------------------------------------
+TaskYield:
+  mov   eax,[TaskCurrentIndex]
+  mov   ebx,TASK_RECORD_SIZE
+  mul   ebx
+  lea   edi,[TaskTable+eax]
+  mov   [edi+TASK_SAVED_ESP],esp
+  cmp   dword[edi+TASK_STATE],TASK_STATE_EXITED
+  je    TaskYield1
+  mov   dword[edi+TASK_STATE],TASK_STATE_READY
+  mov   eax,[TaskCurrentIndex]
+  inc   eax
+  cmp   eax,MAX_TASKS
+  jb    TaskYield2
+  xor   eax,eax
+  jmp   TaskYield2
+TaskYield1:
+  mov   eax,[TaskCurrentIndex]
+  inc   eax
+  cmp   eax,MAX_TASKS
+  jb    TaskYield2
+  xor   eax,eax
+TaskYield2:
+  mov   [TaskScanIndex],eax
+  mov   dword[TaskScanLeft],MAX_TASKS
+TaskYield3:
+  mov   eax,[TaskScanLeft]
+  test  eax,eax
+  jz    TaskYield6
+  mov   eax,[TaskScanIndex]
+  mov   ebx,TASK_RECORD_SIZE
+  mul   ebx
+  lea   edi,[TaskTable+eax]
+  cmp   dword[edi+TASK_STATE],TASK_STATE_READY
+  je    TaskYield5
+  mov   eax,[TaskScanIndex]
+  inc   eax
+  cmp   eax,MAX_TASKS
+  jb    TaskYield4
+  xor   eax,eax
+TaskYield4:
+  mov   [TaskScanIndex],eax
+  mov   eax,[TaskScanLeft]
+  dec   eax
+  mov   [TaskScanLeft],eax
+  jmp   TaskYield3
+TaskYield5:
+  mov   eax,[TaskScanIndex]
+  jmp   TaskYield7
+TaskYield6:
+  xor   eax,eax
+TaskYield7:
+  mov   [TaskNextIndex],eax
+  mov   [TaskCurrentIndex],eax
+  mov   ebx,TASK_RECORD_SIZE
+  mul   ebx
+  lea   edi,[TaskTable+eax]
+  mov   dword[edi+TASK_STATE],TASK_STATE_RUNNING
+  mov   esp,[edi+TASK_SAVED_ESP]
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; Internal Routines
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; TaskGetRecord
+;   Input:
+;     TaskIndex = task index, 0..MAX_TASKS-1.
+;   Output:
+;     pTaskRecord = selected task record, or 0 if TaskIndex is invalid.
+;--------------------------------------------------------------------------------------------------
+TaskGetRecord:
+  mov   dword[pTaskRecord],0
+  mov   eax,[TaskIndex]
+  cmp   eax,MAX_TASKS
+  jae   TaskGetRecordDone
+  mov   ebx,TASK_RECORD_SIZE
+  mul   ebx
+  lea   edi,[TaskTable+eax]
+  mov   [pTaskRecord],edi
+TaskGetRecordDone:
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; TaskGetStackBounds
+;   Input:
+;     TaskStackSlot = stack slot index, 0..STACK_SLOT_COUNT-1.
+;   Output:
+;     TaskStackTop    = exclusive top address for the slot, or 0 if invalid.
+;     TaskStackBottom = inclusive bottom address for the slot, or 0 if invalid.
+;   Notes:
+;     Slot 0 is the kernel stack. Later slots may be assigned to resident tasks.
+;--------------------------------------------------------------------------------------------------
+TaskGetStackBounds:
+  mov   dword[TaskStackTop],0
+  mov   dword[TaskStackBottom],0
+  mov   eax,[TaskStackSlot]
+  cmp   eax,STACK_SLOT_COUNT
+  jae   TaskGetStackBoundsDone
+  mov   ebx,STACK_SLOT_SIZE
+  mul   ebx
+  mov   ebx,STACK_ARENA_TOP
+  sub   ebx,eax
+  mov   [TaskStackTop],ebx
+  sub   ebx,STACK_SLOT_SIZE
+  mov   [TaskStackBottom],ebx
+TaskGetStackBoundsDone:
+  ret
+
+;--------------------------------------------------------------------------------------------------
 ; TaskProgramValidateHeader
 ;   Output:
 ;     TaskProgramStatus      = TASK_PROGRAM_STATUS_OK or BAD_IMAGE.
@@ -486,71 +703,6 @@ TaskProgramClearSlotDone:
   ret
 
 ;--------------------------------------------------------------------------------------------------
-; TaskProgramInit
-;   Output:
-;     Clears the task table and records the current kernel console context as task 0.
-;   Notes:
-;     Used by console-driven user-program smoke tests before loading mock images.
-;--------------------------------------------------------------------------------------------------
-TaskProgramInit:
-  mov   eax,KernelEnd
-  add   eax,00000FFFh
-  and   eax,0FFFFF000h
-  mov   [TaskProgramNextLoadBase],eax
-  mov   eax,TaskTable
-  mov   [TaskInitPtr],eax
-  mov   eax,MAX_TASKS * TASK_RECORD_SIZE
-  mov   [TaskInitLeft],eax
-TaskProgramInit1:
-  mov   eax,[TaskInitLeft]
-  test  eax,eax
-  jz    TaskProgramInit2
-  mov   edi,[TaskInitPtr]
-  mov   byte[edi],0
-  inc   edi
-  mov   [TaskInitPtr],edi
-  mov   eax,[TaskInitLeft]
-  dec   eax
-  mov   [TaskInitLeft],eax
-  jmp   TaskProgramInit1
-TaskProgramInit2:
-  mov   dword[TaskCurrentIndex],0
-  mov   dword[TaskNextIndex],0
-  mov   dword[TaskIndex],0
-  call  TaskGetRecord
-  mov   edi,[pTaskRecord]
-  mov   dword[edi+TASK_STATE],TASK_STATE_RUNNING
-  mov   dword[edi+TASK_STACK_SLOT],0
-  mov   dword[TaskStackSlot],0
-  call  TaskGetStackBounds
-  mov   eax,[TaskStackBottom]
-  mov   [edi+TASK_STACK_BOTTOM],eax
-  mov   eax,[TaskStackTop]
-  mov   [edi+TASK_STACK_TOP],eax
-  mov   [edi+TASK_SAVED_ESP],esp
-  mov   dword[edi+TASK_ENTRY],0
-  mov   dword[edi+TASK_KCBLOCK_PTR],0
-  mov   dword[edi+TASK_EXIT_CODE],0
-  mov   dword[edi+TASK_RUN_COUNT],0
-  ret
-
-;--------------------------------------------------------------------------------------------------
-; TaskProgramStart
-;   Output:
-;     Starts cooperative dispatch of ready tasks and returns when user-test
-;     tasks 1, 2, and 3 have exited.
-;--------------------------------------------------------------------------------------------------
-TaskProgramStart:
-  mov   dword[TaskProgramDone],0
-TaskProgramStart1:
-  call  TaskYield
-  call  TaskProgramCheckDone
-  mov   eax,[TaskProgramDone]
-  test  eax,eax
-  jz    TaskProgramStart1
-  ret
-
-;--------------------------------------------------------------------------------------------------
 ; TaskProgramCheckDone
 ;   Output:
 ;     TaskProgramDone = 1 when tasks 1, 2, and 3 are EXITED, else 0.
@@ -577,73 +729,6 @@ TaskProgramCheckDoneDone:
   ret
 
 ;--------------------------------------------------------------------------------------------------
-; TaskProgramPrintExitCodes
-;   Output:
-;     Prints recorded exit codes for user-test tasks 1, 2, and 3.
-;   Notes:
-;     Debug helper for the console-driven UserTest path.
-;--------------------------------------------------------------------------------------------------
-TaskProgramPrintExitCodes:
-  mov   dword[TaskIndex],1
-  call  TaskGetRecord
-  mov   edi,[pTaskRecord]
-  mov   eax,[edi+TASK_EXIT_CODE]
-  call  TaskProgramSplitExitCode
-  mov   eax,[TaskExitCodeSum]
-  mov   [TaskPut4DecVal],eax
-  lea   eax,[TaskProgramExitStr1+14]
-  mov   [pTaskPut4DecDst],eax
-  call  TaskPut4Dec
-  mov   eax,[TaskExitCodeYield]
-  mov   [TaskPut4DecVal],eax
-  lea   eax,[TaskProgramExitStr1+19]
-  mov   [pTaskPut4DecDst],eax
-  call  TaskPut4Dec
-  lea   eax,[TaskProgramExitStr1]
-  mov   [pVdStr],eax
-  call  VdPutStr
-  call  CnCrLf
-  mov   dword[TaskIndex],2
-  call  TaskGetRecord
-  mov   edi,[pTaskRecord]
-  mov   eax,[edi+TASK_EXIT_CODE]
-  call  TaskProgramSplitExitCode
-  mov   eax,[TaskExitCodeSum]
-  mov   [TaskPut4DecVal],eax
-  lea   eax,[TaskProgramExitStr2+14]
-  mov   [pTaskPut4DecDst],eax
-  call  TaskPut4Dec
-  mov   eax,[TaskExitCodeYield]
-  mov   [TaskPut4DecVal],eax
-  lea   eax,[TaskProgramExitStr2+19]
-  mov   [pTaskPut4DecDst],eax
-  call  TaskPut4Dec
-  lea   eax,[TaskProgramExitStr2]
-  mov   [pVdStr],eax
-  call  VdPutStr
-  call  CnCrLf
-  mov   dword[TaskIndex],3
-  call  TaskGetRecord
-  mov   edi,[pTaskRecord]
-  mov   eax,[edi+TASK_EXIT_CODE]
-  call  TaskProgramSplitExitCode
-  mov   eax,[TaskExitCodeSum]
-  mov   [TaskPut4DecVal],eax
-  lea   eax,[TaskProgramExitStr3+14]
-  mov   [pTaskPut4DecDst],eax
-  call  TaskPut4Dec
-  mov   eax,[TaskExitCodeYield]
-  mov   [TaskPut4DecVal],eax
-  lea   eax,[TaskProgramExitStr3+19]
-  mov   [pTaskPut4DecDst],eax
-  call  TaskPut4Dec
-  lea   eax,[TaskProgramExitStr3]
-  mov   [pVdStr],eax
-  call  VdPutStr
-  call  CnCrLf
-  ret
-
-;--------------------------------------------------------------------------------------------------
 ; TaskProgramSplitExitCode
 ;   Input:
 ;     EAX = packed exit code: high 16 bits yield count, low 16 bits sum.
@@ -661,91 +746,18 @@ TaskProgramSplitExitCode:
   ret
 
 ;--------------------------------------------------------------------------------------------------
-; TaskExit
-;   Input:
-;     TaskExitCode = current task exit code.
-;   Output:
-;     Marks the current task exited, records its exit code, and dispatches next ready task.
+; Unused Routines
 ;--------------------------------------------------------------------------------------------------
-TaskExit:
-  mov   eax,[TaskCurrentIndex]
-  mov   ebx,TASK_RECORD_SIZE
-  mul   ebx
-  lea   edi,[TaskTable+eax]
-  mov   eax,[TaskExitCode]
-  mov   [edi+TASK_EXIT_CODE],eax
-  mov   eax,[edi+TASK_RUN_COUNT]
-  inc   eax
-  mov   [edi+TASK_RUN_COUNT],eax
-  mov   dword[edi+TASK_STATE],TASK_STATE_EXITED
-  call  TaskYield
-  ret
 
 ;--------------------------------------------------------------------------------------------------
-; TaskYield
+; TaskGetNextRecord
 ;   Output:
-;     Saves the current task ESP, selects the next ready task, loads its ESP,
-;     and returns through that task's saved stack.
+;     pTaskRecord = next task record, or 0 if TaskNextIndex is invalid.
 ;   Notes:
-;     Low-level transition routine: intentionally saves and loads ESP.
-;     Cooperative scheduler scans the task table in round-robin order.
+;     Currently has no callers.
 ;--------------------------------------------------------------------------------------------------
-TaskYield:
-  mov   eax,[TaskCurrentIndex]
-  mov   ebx,TASK_RECORD_SIZE
-  mul   ebx
-  lea   edi,[TaskTable+eax]
-  mov   [edi+TASK_SAVED_ESP],esp
-  cmp   dword[edi+TASK_STATE],TASK_STATE_EXITED
-  je    TaskYield1
-  mov   dword[edi+TASK_STATE],TASK_STATE_READY
-  mov   eax,[TaskCurrentIndex]
-  inc   eax
-  cmp   eax,MAX_TASKS
-  jb    TaskYield2
-  xor   eax,eax
-  jmp   TaskYield2
-TaskYield1:
-  mov   eax,[TaskCurrentIndex]
-  inc   eax
-  cmp   eax,MAX_TASKS
-  jb    TaskYield2
-  xor   eax,eax
-TaskYield2:
-  mov   [TaskScanIndex],eax
-  mov   dword[TaskScanLeft],MAX_TASKS
-TaskYield3:
-  mov   eax,[TaskScanLeft]
-  test  eax,eax
-  jz    TaskYield6
-  mov   eax,[TaskScanIndex]
-  mov   ebx,TASK_RECORD_SIZE
-  mul   ebx
-  lea   edi,[TaskTable+eax]
-  cmp   dword[edi+TASK_STATE],TASK_STATE_READY
-  je    TaskYield5
-  mov   eax,[TaskScanIndex]
-  inc   eax
-  cmp   eax,MAX_TASKS
-  jb    TaskYield4
-  xor   eax,eax
-TaskYield4:
-  mov   [TaskScanIndex],eax
-  mov   eax,[TaskScanLeft]
-  dec   eax
-  mov   [TaskScanLeft],eax
-  jmp   TaskYield3
-TaskYield5:
-  mov   eax,[TaskScanIndex]
-  jmp   TaskYield7
-TaskYield6:
-  xor   eax,eax
-TaskYield7:
-  mov   [TaskNextIndex],eax
-  mov   [TaskCurrentIndex],eax
-  mov   ebx,TASK_RECORD_SIZE
-  mul   ebx
-  lea   edi,[TaskTable+eax]
-  mov   dword[edi+TASK_STATE],TASK_STATE_RUNNING
-  mov   esp,[edi+TASK_SAVED_ESP]
+TaskGetNextRecord:
+  mov   eax,[TaskNextIndex]
+  mov   [TaskIndex],eax
+  call  TaskGetRecord
   ret
