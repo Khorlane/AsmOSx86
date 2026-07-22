@@ -66,6 +66,10 @@ TimerDeadHi     dd 0                     ; delay: deadline ticks (high)
 TimerTmpTicks   dd 0                     ; delay: delta ticks (32-bit)
 
 ;--------------------------------------------------------------------------------------------------
+; External Routines
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
 ; TimerInit - initialize PIT channel 0 for stable polling
 ;   Programs PIT ch0 mode 2 and loads reload value 0xFFFF.
 ;--------------------------------------------------------------------------------------------------
@@ -85,25 +89,6 @@ TimerInit:
   mov   [TimerTicksHi],eax              ;  high
   mov   [TimerOutTicksLo],eax           ; Clear output low
   mov   [TimerOutTicksHi],eax           ; Clear output high
-  ret                                   ; Return to caller
-
-;--------------------------------------------------------------------------------------------------
-; TimerLatchCount0 - latch and read PIT channel 0 count
-;   Output:
-;     TimerLatchCnt = current down-counter value
-;   Notes:
-;     Internal helper for TimerNowTicks.
-;--------------------------------------------------------------------------------------------------
-TimerLatchCount0:
-  mov   dx,PIT_CMD                      ; PIT command port
-  mov   al,PIT_LATCH0                   ; Latch ch0 count
-  out   dx,al                           ; Issue latch
-  mov   dx,PIT_CH0                      ; PIT ch0 data port
-  in    al,dx                           ; Read low byte
-  mov   ah,al                           ; Save low in AH temporarily
-  in    al,dx                           ; Read high byte
-  xchg  ah,al                           ; AX = hi:lo
-  mov   [TimerLatchCnt],ax              ; Store latched count
   ret                                   ; Return to caller
 
 ;--------------------------------------------------------------------------------------------------
@@ -209,3 +194,27 @@ TimerSpinDelayMs2:
   jb    TimerSpinDelayMs2               ; now.lo < deadline.lo
 TimerSpinDelayMs3:
   ret                                   ; Return to caller
+
+;--------------------------------------------------------------------------------------------------
+; Internal Routines
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; TimerLatchCount0 - latch and read PIT channel 0 count
+;   Output:
+;     TimerLatchCnt = current down-counter value
+;   Notes:
+;     Internal helper for TimerNowTicks.
+;--------------------------------------------------------------------------------------------------
+TimerLatchCount0:
+  mov   dx,PIT_CMD                      ; PIT command port
+  mov   al,PIT_LATCH0                   ; Latch ch0 count
+  out   dx,al                           ; Issue latch
+  mov   dx,PIT_CH0                      ; PIT ch0 data port
+  in    al,dx                           ; Read low byte
+  mov   ah,al                           ; Save low in AH temporarily
+  in    al,dx                           ; Read high byte
+  xchg  ah,al                           ; AX = hi:lo
+  mov   [TimerLatchCnt],ax              ; Store latched count
+  ret                                   ; Return to caller
+
