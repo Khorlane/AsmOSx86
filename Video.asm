@@ -120,7 +120,7 @@ VdInit:
 ;     Writes each payload byte through VdPutChar.
 ;   Notes:
 ;     Uses pVdWorkStr and VdWorkLen as memory-backed loop state because
-;     VdPutChar is allowed to clobber all registers.
+;     VdPutChar may use registers as scratch.
 ;------------------------------------------------------------------------------
 VdPutStr:
   mov   esi,[pVdStr]
@@ -275,7 +275,7 @@ VdInBackspaceVisualDone:
 ;     Clears the current input-style row VdCurRow and resets VdInCurCol/VdCurCol
 ;     to column 1.
 ;   Notes:
-;     Uses VdWorkCol as memory-backed loop state because calls clobber registers.
+;     Uses VdWorkCol as memory-backed loop state across helper calls.
 ;     VdInCurCol is 1-based.
 ;------------------------------------------------------------------------------
 VdInClearLine:
@@ -304,7 +304,7 @@ VdInClearLineDone:
   ret
 
 ;------------------------------------------------------------------------------
-; Internal helpers
+; Additional Routines
 ;------------------------------------------------------------------------------
 
 ;------------------------------------------------------------------------------
@@ -422,7 +422,7 @@ VdScrollDone:
 ;     Resets VdCurRow/VdCurCol, VdOutCurRow/VdOutCurCol, and VdInCurCol to 1.
 ;     Updates the hardware cursor through VdSetCursor.
 ; Notes:
-;     Uses registers as local loop scratch only.
+;     Called by VdInit and Console.asm.
 ;------------------------------------------------------------------------------
 VdClear:
   mov   edi,VGA_TEXT_BASE
@@ -454,6 +454,7 @@ VdClearLoop:
 ;     Row,Col ordering is row first, then column.
 ;     Row 1, Col 1 maps to VGA offset 0.
 ;     Invalid row/column enters a halt loop.
+;     Called by input-style routines and Console.asm.
 ;------------------------------------------------------------------------------
 VdSetCursor:
   mov   ax,[VdCurRow]                   ; Load desired row
@@ -511,6 +512,7 @@ VdSetCursorPanicHang:
 ;     VdColorAttr = combined VGA text attribute byte.
 ;   Notes:
 ;     Clears EAX and EBX before combining nibbles to avoid stale high bits.
+;     Called by Console.asm.
 ;------------------------------------------------------------------------------
 VdSetColorAttr:
   xor   eax,eax                           ; Clear full
