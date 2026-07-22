@@ -112,8 +112,8 @@ UptimeNow1:
 ;   Output:
 ;     [pUptimePut3DecDst original..original+2] = three ASCII decimal digits.
 ;     pUptimePut3DecDst += 3.
-;   Clobbers:
-;     AL, EAX, EDX, EBX, EDI
+;   Notes:
+;     Internal helper for UptimeFmtYdhms.
 ;--------------------------------------------------------------------------------------------------
 UptimePut3Dec:
   mov   edi,[pUptimePut3DecDst]
