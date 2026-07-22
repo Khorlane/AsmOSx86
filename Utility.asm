@@ -33,6 +33,10 @@ Put2DecVal       db 0                   ; input: value 0..99
 Put2DecPad0      db 0,0,0               ; alignment padding
 
 ;------------------------------------------------------------------------------
+; External Routines
+;------------------------------------------------------------------------------
+
+;------------------------------------------------------------------------------
 ; Put2Dec
 ;   Input:
 ;     Put2DecVal  = value 0..99
@@ -58,6 +62,24 @@ Put2Dec:
   ret
 
 ;------------------------------------------------------------------------------
+; StrTrim
+;   Input:
+;     pStr1 = Str pointer
+;   Output:
+;     Leading and trailing spaces removed in-place.
+;   Notes:
+;     Calls StrTrimLead and StrTrimTrail.
+;------------------------------------------------------------------------------
+StrTrim:
+  call  StrTrimLead
+  call  StrTrimTrail
+  ret
+
+;------------------------------------------------------------------------------
+; Internal Routines
+;------------------------------------------------------------------------------
+
+;------------------------------------------------------------------------------
 ; StrCopy
 ;   Input:
 ;     pStr1 = source Str pointer
@@ -73,20 +95,6 @@ StrCopy:
   mov   cx,[esi]           ; Get length prefix (u16)
   add   cx,2               ; Include length word
   rep   movsb
-  ret
-
-;------------------------------------------------------------------------------
-; StrTrim
-;   Input:
-;     pStr1 = Str pointer
-;   Output:
-;     Leading and trailing spaces removed in-place.
-;   Notes:
-;     Calls StrTrimLead and StrTrimTrail.
-;------------------------------------------------------------------------------
-StrTrim:
-  call  StrTrimLead
-  call  StrTrimTrail
   ret
 
 ;------------------------------------------------------------------------------
