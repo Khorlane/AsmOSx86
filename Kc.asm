@@ -18,10 +18,15 @@
 ;   - Dispatch, validation, and lookup logic
 ;   - Small initial service handlers for testing the boundary
 ;
-; Notes (LOCKED-IN)
+; Public API
+;   - KcDispatch
+;   - KcUserDispatch
+;
+; Notes
 ;   - Kernel calls use memory-backed inputs and outputs.
 ;   - Registers are scratch only.
 ;   - User programs must not call subsystem routines directly in the future.
+;   - Handler routines are internal dispatch-table entries.
 ;**************************************************************************************************
 
 [bits 32]
@@ -292,7 +297,7 @@ KcTsYieldHandler:
 ;     KcResult0 = TaskProgramStatus
 ;     KcResult1 = 0
 ;   Notes:
-;     Loads a flat user-program binary from the filesystem into a fixed slot.
+;     Loads an ASMX user executable from the filesystem and prepares a task.
 ;--------------------------------------------------------------------------------------------------
 KcTsLoadProgramHandler:
   mov   eax,[KcArg0]
