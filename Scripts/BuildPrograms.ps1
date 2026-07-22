@@ -1,5 +1,5 @@
 <# BuildPrograms.ps1
-Assembles Prog1.asm, Prog2.asm, and Prog3.asm into flat binaries.
+Assembles Prog1.asm, Prog2.asm, and Prog3.asm into flat binaries, then wraps them as ASMX executables.
 #>
 
 Set-StrictMode -Version Latest
@@ -24,6 +24,11 @@ try {
     & nasm -f bin "$prog.asm" -o "$prog.bin" -l "$prog.lst"
     if ($LASTEXITCODE -ne 0) {
       throw "nasm failed with exit code $LASTEXITCODE."
+    }
+    Write-Host "go run relo.go $prog"
+    & go run relo.go $prog
+    if ($LASTEXITCODE -ne 0) {
+      throw "relo failed with exit code $LASTEXITCODE."
     }
   }
   Wait-ForKey

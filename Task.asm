@@ -62,13 +62,19 @@ TASK_PROGRAM_STATUS_BAD_TASK    equ 2
 TASK_PROGRAM_STATUS_BAD_STACK   equ 3
 TASK_PROGRAM_STATUS_BAD_IMAGE   equ 4
 TASK_PROGRAM_STATUS_FS_ERROR    equ 5
-USER_PROGRAM_LOAD_BASE          equ 00200000h
 USER_PROGRAM_SLOT_SIZE          equ 00001000h
-USER_PROGRAM1_LOAD_BASE         equ USER_PROGRAM_LOAD_BASE
-USER_PROGRAM2_LOAD_BASE         equ USER_PROGRAM_LOAD_BASE+USER_PROGRAM_SLOT_SIZE
-USER_PROGRAM3_LOAD_BASE         equ USER_PROGRAM_LOAD_BASE+(USER_PROGRAM_SLOT_SIZE*2)
 USER_PROGRAM_KCBLOCK_SIZE       equ 32
-USER_PROGRAM_IMAGE_SIZE         equ USER_PROGRAM_SLOT_SIZE-USER_PROGRAM_KCBLOCK_SIZE
+USER_PROGRAM_KCBLOCK_OFFSET     equ USER_PROGRAM_SLOT_SIZE-USER_PROGRAM_KCBLOCK_SIZE
+ASMX_SIGNATURE                  equ 584D5341h
+ASMX_VERSION                    equ 1
+ASMX_HEADER_SIZE                equ 28
+ASMX_HEADER_SIGNATURE           equ 0
+ASMX_HEADER_VERSION             equ 4
+ASMX_HEADER_ENTRY_OFFSET        equ 8
+ASMX_HEADER_IMAGE_OFFSET        equ 12
+ASMX_HEADER_IMAGE_SIZE          equ 16
+ASMX_HEADER_RELOC_OFFSET        equ 20
+ASMX_HEADER_RELOC_COUNT         equ 24
 
 ;--------------------------------------------------------------------------------------------------
 ; Task Globals
@@ -93,7 +99,13 @@ TaskProgramStackSlot dd 0               ; input: stack slot index to assign
 TaskProgramStatus    dd 0               ; output: TASK_PROGRAM_STATUS_*
 TaskProgramEntryPtr  dd 0               ; output: loaded program entry address
 TaskProgramKcBlockPtr dd 0              ; output: loaded program KcBlock address
+TaskProgramNextLoadBase dd 0            ; work: next dynamic user-program load base
 TaskProgramLoadBase  dd 0               ; work: selected program load base
+TaskProgramAllocSize  dd 0              ; work: bytes reserved for loaded program
+TaskProgramEntryOffset dd 0             ; work: ASMX entry offset
+TaskProgramImageSize dd 0               ; work: ASMX image size
+TaskProgramRelocCount dd 0              ; work: ASMX relocation entries left
+TaskProgramRelocOffset dd 0             ; work: relocation offset inside image
 TaskProgramHandle    dd 0               ; work: open file handle
 TaskProgramClearPtr   dd 0              ; work: user slot clear pointer
 TaskProgramClearLeft  dd 0              ; work: user slot clear byte count
@@ -104,6 +116,9 @@ TaskExitCode         dd 0               ; input: current task exit code
 String  TaskProgramExitStr1,"Task 1 exit 0000 0000"
 String  TaskProgramExitStr2,"Task 2 exit 0000 0000"
 String  TaskProgramExitStr3,"Task 3 exit 0000 0000"
+TaskProgramHeader:
+  times ASMX_HEADER_SIZE db 0
+TaskProgramRelocBuffer dd 0
 TaskTable:
   times MAX_TASKS * TASK_RECORD_SIZE db 0
 
@@ -218,13 +233,14 @@ TaskPut4Dec:
 ;     TaskProgramEntryPtr   = loaded program entry address.
 ;     TaskProgramKcBlockPtr = loaded program KcBlock address.
 ;   Notes:
-;     Reads a flat user-program binary into a fixed user load slot and seeds a
-;     ready task record. It does not start or schedule the task.
+;     Reads an ASMX executable, relocates its image at the next dynamic load
+;     address, and seeds a ready task record. It does not start the task.
 ;--------------------------------------------------------------------------------------------------
 TaskProgramLoad:
   mov   dword[TaskProgramEntryPtr],0
   mov   dword[TaskProgramKcBlockPtr],0
   mov   dword[TaskProgramLoadBase],0
+  mov   dword[TaskProgramAllocSize],0
   mov   dword[TaskProgramHandle],0
   mov   eax,[pTaskProgramName]
   test  eax,eax
@@ -241,11 +257,6 @@ TaskProgramLoad:
   mov   eax,[TaskStackTop]
   test  eax,eax
   jz    TaskProgramLoad2
-  call  TaskProgramGetLoadBase
-  mov   eax,[TaskProgramLoadBase]
-  test  eax,eax
-  jz    TaskProgramLoad4
-  call  TaskProgramClearSlot
   mov   eax,[pTaskProgramName]
   mov   [pFsOpenName],eax
   call  FsOpen
@@ -255,13 +266,33 @@ TaskProgramLoad:
   mov   eax,[FsOpenHandle]
   mov   [TaskProgramHandle],eax
   mov   [FsReadHandle],eax
-  mov   eax,[TaskProgramLoadBase]
+  mov   eax,TaskProgramHeader
   mov   [pFsReadBuffer],eax
-  mov   dword[FsReadCount],USER_PROGRAM_IMAGE_SIZE
+  mov   dword[FsReadCount],ASMX_HEADER_SIZE
   call  FsRead
   mov   eax,[FsStatus]
   cmp   eax,FS_STATUS_OK
   jne   TaskProgramLoad6
+  call  TaskProgramValidateHeader
+  mov   eax,[TaskProgramStatus]
+  test  eax,eax
+  jnz   TaskProgramLoad6
+  call  TaskProgramAlloc
+  call  TaskProgramClearSlot
+  mov   eax,[TaskProgramHandle]
+  mov   [FsReadHandle],eax
+  mov   eax,[TaskProgramLoadBase]
+  mov   [pFsReadBuffer],eax
+  mov   eax,[TaskProgramImageSize]
+  mov   [FsReadCount],eax
+  call  FsRead
+  mov   eax,[FsStatus]
+  cmp   eax,FS_STATUS_OK
+  jne   TaskProgramLoad6
+  call  TaskProgramApplyRelocs
+  mov   eax,[TaskProgramStatus]
+  test  eax,eax
+  jnz   TaskProgramLoad6
   mov   edi,[pTaskRecord]
   mov   dword[edi+TASK_STATE],TASK_STATE_READY
   mov   eax,[TaskProgramStackSlot]
@@ -273,11 +304,12 @@ TaskProgramLoad:
   sub   eax,4
   mov   [edi+TASK_SAVED_ESP],eax
   mov   ebx,[TaskProgramLoadBase]
+  add   ebx,[TaskProgramEntryOffset]
   mov   [TaskProgramEntryPtr],ebx
   mov   [eax],ebx
   mov   [edi+TASK_ENTRY],ebx
   mov   ebx,[TaskProgramLoadBase]
-  add   ebx,USER_PROGRAM_SLOT_SIZE-USER_PROGRAM_KCBLOCK_SIZE
+  add   ebx,USER_PROGRAM_KCBLOCK_OFFSET
   mov   [TaskProgramKcBlockPtr],ebx
   mov   [edi+TASK_KCBLOCK_PTR],ebx
   mov   dword[edi+TASK_EXIT_CODE],0
@@ -304,26 +336,56 @@ TaskProgramLoad3:
   ret
 
 ;--------------------------------------------------------------------------------------------------
-; TaskProgramGetLoadBase
-;   Input:
-;     TaskProgramTaskIndex = task index.
+; TaskProgramValidateHeader
 ;   Output:
-;     TaskProgramLoadBase = fixed load base, or 0 if the task index cannot map
-;     to a user-program slot.
+;     TaskProgramStatus      = TASK_PROGRAM_STATUS_OK or BAD_IMAGE.
+;     TaskProgramEntryOffset = ASMX entry offset.
+;     TaskProgramImageSize   = ASMX image size.
+;     TaskProgramRelocCount  = ASMX relocation count.
 ;--------------------------------------------------------------------------------------------------
-TaskProgramGetLoadBase:
-  mov   dword[TaskProgramLoadBase],0
-  mov   eax,[TaskProgramTaskIndex]
+TaskProgramValidateHeader:
+  mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_BAD_IMAGE
+  mov   eax,[TaskProgramHeader+ASMX_HEADER_SIGNATURE]
+  cmp   eax,ASMX_SIGNATURE
+  jne   TaskProgramValidateHeaderDone
+  mov   eax,[TaskProgramHeader+ASMX_HEADER_VERSION]
+  cmp   eax,ASMX_VERSION
+  jne   TaskProgramValidateHeaderDone
+  mov   eax,[TaskProgramHeader+ASMX_HEADER_IMAGE_OFFSET]
+  cmp   eax,ASMX_HEADER_SIZE
+  jne   TaskProgramValidateHeaderDone
+  mov   eax,[TaskProgramHeader+ASMX_HEADER_IMAGE_SIZE]
   test  eax,eax
-  jz    TaskProgramGetLoadBaseDone
-  dec   eax
-  cmp   eax,3
-  jae   TaskProgramGetLoadBaseDone
-  mov   ebx,USER_PROGRAM_SLOT_SIZE
-  mul   ebx
-  add   eax,USER_PROGRAM_LOAD_BASE
+  jz    TaskProgramValidateHeaderDone
+  cmp   eax,USER_PROGRAM_KCBLOCK_OFFSET
+  jae   TaskProgramValidateHeaderDone
+  mov   [TaskProgramImageSize],eax
+  mov   eax,[TaskProgramHeader+ASMX_HEADER_ENTRY_OFFSET]
+  cmp   eax,[TaskProgramImageSize]
+  jae   TaskProgramValidateHeaderDone
+  mov   [TaskProgramEntryOffset],eax
+  mov   eax,[TaskProgramHeader+ASMX_HEADER_RELOC_COUNT]
+  mov   [TaskProgramRelocCount],eax
+  mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_OK
+TaskProgramValidateHeaderDone:
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; TaskProgramAlloc
+;   Output:
+;     TaskProgramLoadBase = next dynamic user-program load base.
+;     TaskProgramAllocSize = allocation bytes.
+;     TaskProgramNextLoadBase advanced to the next 4K boundary.
+;--------------------------------------------------------------------------------------------------
+TaskProgramAlloc:
+  mov   eax,[TaskProgramNextLoadBase]
   mov   [TaskProgramLoadBase],eax
-TaskProgramGetLoadBaseDone:
+  mov   dword[TaskProgramAllocSize],USER_PROGRAM_SLOT_SIZE
+  mov   eax,[TaskProgramLoadBase]
+  add   eax,[TaskProgramAllocSize]
+  add   eax,00000FFFh
+  and   eax,0FFFFF000h
+  mov   [TaskProgramNextLoadBase],eax
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -344,16 +406,56 @@ TaskProgramCloseFileDone:
   ret
 
 ;--------------------------------------------------------------------------------------------------
+; TaskProgramApplyRelocs
+;   Input:
+;     TaskProgramLoadBase   = loaded image base.
+;     TaskProgramRelocCount = relocation entries left in the open ASMX file.
+;   Output:
+;     TaskProgramStatus = TASK_PROGRAM_STATUS_OK or TASK_PROGRAM_STATUS_FS_ERROR.
+;--------------------------------------------------------------------------------------------------
+TaskProgramApplyRelocs:
+  mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_OK
+TaskProgramApplyRelocs1:
+  mov   eax,[TaskProgramRelocCount]
+  test  eax,eax
+  jz    TaskProgramApplyRelocsDone
+  mov   eax,[TaskProgramHandle]
+  mov   [FsReadHandle],eax
+  mov   eax,TaskProgramRelocBuffer
+  mov   [pFsReadBuffer],eax
+  mov   dword[FsReadCount],4
+  call  FsRead
+  mov   eax,[FsStatus]
+  cmp   eax,FS_STATUS_OK
+  jne   TaskProgramApplyRelocsError
+  mov   eax,[TaskProgramRelocBuffer]
+  mov   [TaskProgramRelocOffset],eax
+  cmp   eax,[TaskProgramImageSize]
+  jae   TaskProgramApplyRelocsError
+  mov   edi,[TaskProgramLoadBase]
+  add   edi,eax
+  mov   eax,[edi]
+  add   eax,[TaskProgramLoadBase]
+  mov   [edi],eax
+  dec   dword[TaskProgramRelocCount]
+  jmp   TaskProgramApplyRelocs1
+TaskProgramApplyRelocsError:
+  mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_FS_ERROR
+TaskProgramApplyRelocsDone:
+  ret
+
+;--------------------------------------------------------------------------------------------------
 ; TaskProgramClearSlot
 ;   Input:
 ;     TaskProgramLoadBase = selected user-program load base.
 ;   Output:
-;     Clears the full 4K user-program slot.
+;     Clears the current user-program allocation.
 ;--------------------------------------------------------------------------------------------------
 TaskProgramClearSlot:
   mov   eax,[TaskProgramLoadBase]
   mov   [TaskProgramClearPtr],eax
-  mov   dword[TaskProgramClearLeft],USER_PROGRAM_SLOT_SIZE
+  mov   eax,[TaskProgramAllocSize]
+  mov   [TaskProgramClearLeft],eax
 TaskProgramClearSlot1:
   mov   eax,[TaskProgramClearLeft]
   test  eax,eax
@@ -376,6 +478,10 @@ TaskProgramClearSlotDone:
 ;     Used by console-driven user-program smoke tests before loading mock images.
 ;--------------------------------------------------------------------------------------------------
 TaskProgramInit:
+  mov   eax,KernelEnd
+  add   eax,00000FFFh
+  and   eax,0FFFFF000h
+  mov   [TaskProgramNextLoadBase],eax
   mov   eax,TaskTable
   mov   [TaskInitPtr],eax
   mov   eax,MAX_TASKS * TASK_RECORD_SIZE

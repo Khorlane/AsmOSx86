@@ -110,7 +110,12 @@ func readRelocs(path string) ([]Reloc, error) {
 		if err != nil {
 			return nil, err
 		}
-		bytesText := strings.Fields(match[2])[0]
+		fields := strings.Fields(match[2])
+		if len(fields) == 0 {
+			continue
+		}
+		bytesText := fields[0]
+		sourceText := strings.TrimSpace(strings.TrimPrefix(match[2], bytesText))
 		matches := bracketedHex.FindAllStringSubmatchIndex(bytesText, -1)
 		for _, loc := range matches {
 			valueText := bytesText[loc[2]:loc[3]]
@@ -131,11 +136,44 @@ func readRelocs(path string) ([]Reloc, error) {
 				Value:  value,
 			})
 		}
+		if strings.Contains(sourceText, "KC_BLOCK") {
+			addKnownMemoryReloc(bytesText, lineOffset, seen, &relocs)
+		}
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err
 	}
 	return relocs, nil
+}
+
+func addKnownMemoryReloc(bytesText string, lineOffset uint32, seen map[uint32]bool, relocs *[]Reloc) {
+	hexText := plainHex(bytesText)
+	var fieldStart uint32
+	switch {
+	case strings.HasPrefix(hexText, "C705") && len(hexText) >= 12:
+		fieldStart = 2
+	case strings.HasPrefix(hexText, "A3") && len(hexText) >= 10:
+		fieldStart = 1
+	default:
+		return
+	}
+	valueText := hexText[fieldStart*2 : (fieldStart*2)+8]
+	value, err := parseLittleEndianDword(valueText)
+	if err != nil {
+		return
+	}
+	if value >= userProgramSlotSize {
+		return
+	}
+	fieldOffset := lineOffset + fieldStart
+	if seen[fieldOffset] {
+		return
+	}
+	seen[fieldOffset] = true
+	*relocs = append(*relocs, Reloc{
+		Offset: fieldOffset,
+		Value:  value,
+	})
 }
 
 func writeReport(path string, binPath string, lstPath string, exePath string, imageSize int, relocs []Reloc) error {
@@ -196,6 +234,16 @@ func hexByteLen(text string) int {
 		}
 	}
 	return count / 2
+}
+
+func plainHex(text string) string {
+	var b strings.Builder
+	for _, r := range text {
+		if (r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F') {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 func fail(format string, args ...any) {

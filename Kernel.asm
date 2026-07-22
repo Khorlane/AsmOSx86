@@ -148,3 +148,5 @@ KernelCtxSz  equ KernelCtxEnd - KernelCtx
 %if (KernelCtxSz % 4) != 0
   %error "KernelCtxSz is not dword aligned"
 %endif
+align 4
+KernelEnd:
