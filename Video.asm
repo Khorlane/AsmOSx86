@@ -90,6 +90,10 @@ VdColorFore      db  0                  ; Foreground color (00h - 0Fh)
 VdColorAttr      db  0                  ; Combination of background and foreground color (e.g. 3Fh 3=cyan background,F=white text)
 
 ;------------------------------------------------------------------------------
+; External Routines
+;------------------------------------------------------------------------------
+
+;------------------------------------------------------------------------------
 ; VdInit
 ;   Output:
 ;     Initializes video output cursor, input cursor, current cursor position,
@@ -142,79 +146,6 @@ VdPutStrNext:
   call  VdPutChar
   jmp   VdPutStrNext
 VdPutStrDone:
-  ret
-
-;------------------------------------------------------------------------------
-; VdPutChar
-;   Input:
-;     VdInCh = character/control byte to write
-;   Output:
-;     Updates VdOutCurRow/VdOutCurCol and writes to output region.
-;   Notes:
-;     Handles CR, LF, BS, printable characters, and output scrolling.
-;     Output region is rows 1..24.
-;------------------------------------------------------------------------------
-VdPutChar:
-  mov   al,[VdInCh]
-  cmp   al,0x0D
-  je    VdPutCharCR
-  cmp   al,0x0A
-  je    VdPutCharLF
-  cmp   al,0x08
-  je    VdPutCharBS
-  mov   ax,[VdOutCurRow]
-  movzx eax,ax
-  cmp   eax,VD_OUT_MAX_ROW
-  jbe   VdPutCharRowOk
-  mov   ax,VD_OUT_MAX_ROW
-  mov   [VdOutCurRow],ax
-VdPutCharRowOk:
-  call  VdWriteOutCharAtCursor
-  mov   ax,[VdOutCurCol]
-  movzx eax,ax
-  inc   eax
-  cmp   eax,(VD_COLS + 1)               ; past col 80?
-  jb    VdPutCharSetCol
-  mov   ax,1
-  mov   [VdOutCurCol],ax
-  jmp   VdPutCharLF
-VdPutCharSetCol:
-  mov   [VdOutCurCol],ax
-  ret
-VdPutCharCR:
-  mov   ax,1
-  mov   [VdOutCurCol],ax
-  ret
-VdPutCharLF:
-  mov   ax,[VdOutCurRow]
-  movzx eax,ax
-  inc   eax
-  cmp   eax,VD_OUT_MAX_ROW
-  jbe   VdPutCharSetRow
-  call  VdScrollOutputRegion
-  mov   ax,VD_OUT_MAX_ROW
-  mov   [VdOutCurRow],ax
-  ret
-VdPutCharSetRow:
-  mov   [VdOutCurRow],ax
-  ret
-VdPutCharBS:
-  mov   ax,[VdOutCurCol]
-  movzx eax,ax
-  cmp   eax,1
-  jbe   VdPutCharBSDone
-  dec   eax
-  mov   [VdOutCurCol],ax
-  mov   al,' '
-  mov   [VdInCh],al
-  call  VdWriteOutCharAtCursor
-  mov   ax,[VdOutCurCol]
-  movzx eax,ax
-  cmp   eax,1
-  jbe   VdPutCharBSDone
-  dec   eax
-  mov   [VdOutCurCol],ax
-VdPutCharBSDone:
   ret
 
 ;------------------------------------------------------------------------------
@@ -301,118 +232,6 @@ VdInClearLineDone:
   mov   ax,[VdInCurCol]
   mov   [VdCurCol],ax
   call  VdSetCursor
-  ret
-
-;------------------------------------------------------------------------------
-; Additional Routines
-;------------------------------------------------------------------------------
-
-;------------------------------------------------------------------------------
-; VdWriteOutCharAtCursor
-;   Input:
-;     VdInCh      = character to write
-;     VdOutCurRow = output row, 1-based, 1..24
-;     VdOutCurCol = output column, 1-based, 1..80
-;     VdColorAttr = VGA text attribute
-;   Output:
-;     Writes character/attribute cell to VGA text memory.
-; Notes:
-;     Does not advance VdOutCurRow/VdOutCurCol.
-;     Row 1, Col 1 maps to VGA offset 0.
-;------------------------------------------------------------------------------
-VdWriteOutCharAtCursor:
-  mov   ax,[VdOutCurRow]
-  movzx eax,ax
-  dec   eax                               ; row0 = row-1
-  imul  eax,VD_COLS
-  mov   dx,[VdOutCurCol]
-  movzx edx,dx
-  dec   edx                               ; col0 = col-1
-  add   eax,edx
-  shl   eax,1
-  mov   edi,VGA_TEXT_BASE
-  add   edi,eax
-  mov   al,[VdInCh]
-  mov   ah,[VdColorAttr]                  ; Use current color attribute
-  mov   [edi],ax
-  ret
-
-;------------------------------------------------------------------------------
-; VdWriteInCharAtCursor
-;   Input:
-;     VdInCh      = character to write
-;     VdCurRow    = target row, 1-based, 1..25
-;     VdInCurCol  = target column, 1-based, 1..80
-;     VdColorAttr = VGA text attribute
-;   Output:
-;     Writes character/attribute cell to VGA text memory.
-; Notes:
-;     Does not advance VdInCurCol.
-;     Row 1, Col 1 maps to VGA offset 0.
-;------------------------------------------------------------------------------
-VdWriteInCharAtCursor:
-  mov   ax,[VdCurRow]
-  movzx eax,ax
-  dec   eax                               ; row0 = row-1
-  imul  eax,VD_COLS
-  mov   dx,[VdInCurCol]
-  movzx edx,dx
-  dec   edx                               ; col0 = col-1
-  add   eax,edx
-  shl   eax,1
-  mov   edi,VGA_TEXT_BASE
-  add   edi,eax
-  mov   al,[VdInCh]
-  mov   ah,[VdColorAttr]                  ; Use current color attribute
-  mov   [edi],ax
-  ret
-
-;------------------------------------------------------------------------------
-; VdScrollOutputRegion
-;   Output:
-;     Scrolls output region rows 1..24 up by one line and clears row 24.
-; Notes:
-;     Copies rows 2..24 over rows 1..23.
-;     Uses VdWorkCount and VdWorkCol as memory-backed loop state.
-;     Clears row 24 using VdColorAttr.
-;------------------------------------------------------------------------------
-VdScrollOutputRegion:
-  mov   eax,(VD_OUT_MAX_ROW - 1) * 160    ; 23 rows * 160 bytes/row
-  mov   [VdWorkCount],eax
-  mov   esi,VGA_TEXT_BASE
-  mov   edi,VGA_TEXT_BASE
-  add   esi,160                           ; start at row2 (row0=1)
-VdScrollCopyLoop:
-  mov   eax,[VdWorkCount]
-  test  eax,eax
-  jz    VdScrollClearRow
-  mov   eax,[esi]
-  mov   [edi],eax
-  add   esi,4
-  add   edi,4
-  mov   eax,[VdWorkCount]
-  sub   eax,4
-  mov   [VdWorkCount],eax
-  jmp   VdScrollCopyLoop
-VdScrollClearRow:
-  mov   edi,VGA_TEXT_BASE
-  add   edi,(VD_OUT_MAX_ROW - 1) * 160    ; row24 start (row0=23)
-  mov   ax,1
-  mov   [VdWorkCol],ax
-VdScrollClearLoop:
-  mov   ax,[VdWorkCol]
-  movzx eax,ax
-  cmp   eax,(VD_COLS + 1)
-  jae   VdScrollDone
-  mov   al,' '
-  mov   ah,[VdColorAttr]
-  mov   [edi],ax
-  add   edi,2
-  mov   ax,[VdWorkCol]
-  inc   ax
-  mov   [VdWorkCol],ax
-  jmp   VdScrollClearLoop
-VdScrollDone:
   ret
 
 ;------------------------------------------------------------------------------
@@ -522,4 +341,189 @@ VdSetColorAttr:
   mov   bl,[VdColorFore]                  ; Foreground color (0..F)
   or    al,bl                             ; Combine -> attribute byte
   mov   [VdColorAttr],al                  ; Save attribute
+  ret
+
+;------------------------------------------------------------------------------
+; Internal Routines
+;------------------------------------------------------------------------------
+
+;------------------------------------------------------------------------------
+; VdPutChar
+;   Input:
+;     VdInCh = character/control byte to write
+;   Output:
+;     Updates VdOutCurRow/VdOutCurCol and writes to output region.
+;   Notes:
+;     Handles CR, LF, BS, printable characters, and output scrolling.
+;     Output region is rows 1..24.
+;------------------------------------------------------------------------------
+VdPutChar:
+  mov   al,[VdInCh]
+  cmp   al,0x0D
+  je    VdPutCharCR
+  cmp   al,0x0A
+  je    VdPutCharLF
+  cmp   al,0x08
+  je    VdPutCharBS
+  mov   ax,[VdOutCurRow]
+  movzx eax,ax
+  cmp   eax,VD_OUT_MAX_ROW
+  jbe   VdPutCharRowOk
+  mov   ax,VD_OUT_MAX_ROW
+  mov   [VdOutCurRow],ax
+VdPutCharRowOk:
+  call  VdWriteOutCharAtCursor
+  mov   ax,[VdOutCurCol]
+  movzx eax,ax
+  inc   eax
+  cmp   eax,(VD_COLS + 1)               ; past col 80?
+  jb    VdPutCharSetCol
+  mov   ax,1
+  mov   [VdOutCurCol],ax
+  jmp   VdPutCharLF
+VdPutCharSetCol:
+  mov   [VdOutCurCol],ax
+  ret
+VdPutCharCR:
+  mov   ax,1
+  mov   [VdOutCurCol],ax
+  ret
+VdPutCharLF:
+  mov   ax,[VdOutCurRow]
+  movzx eax,ax
+  inc   eax
+  cmp   eax,VD_OUT_MAX_ROW
+  jbe   VdPutCharSetRow
+  call  VdScrollOutputRegion
+  mov   ax,VD_OUT_MAX_ROW
+  mov   [VdOutCurRow],ax
+  ret
+VdPutCharSetRow:
+  mov   [VdOutCurRow],ax
+  ret
+VdPutCharBS:
+  mov   ax,[VdOutCurCol]
+  movzx eax,ax
+  cmp   eax,1
+  jbe   VdPutCharBSDone
+  dec   eax
+  mov   [VdOutCurCol],ax
+  mov   al,' '
+  mov   [VdInCh],al
+  call  VdWriteOutCharAtCursor
+  mov   ax,[VdOutCurCol]
+  movzx eax,ax
+  cmp   eax,1
+  jbe   VdPutCharBSDone
+  dec   eax
+  mov   [VdOutCurCol],ax
+VdPutCharBSDone:
+  ret
+
+;------------------------------------------------------------------------------
+; VdWriteOutCharAtCursor
+;   Input:
+;     VdInCh      = character to write
+;     VdOutCurRow = output row, 1-based, 1..24
+;     VdOutCurCol = output column, 1-based, 1..80
+;     VdColorAttr = VGA text attribute
+;   Output:
+;     Writes character/attribute cell to VGA text memory.
+; Notes:
+;     Does not advance VdOutCurRow/VdOutCurCol.
+;     Row 1, Col 1 maps to VGA offset 0.
+;------------------------------------------------------------------------------
+VdWriteOutCharAtCursor:
+  mov   ax,[VdOutCurRow]
+  movzx eax,ax
+  dec   eax                               ; row0 = row-1
+  imul  eax,VD_COLS
+  mov   dx,[VdOutCurCol]
+  movzx edx,dx
+  dec   edx                               ; col0 = col-1
+  add   eax,edx
+  shl   eax,1
+  mov   edi,VGA_TEXT_BASE
+  add   edi,eax
+  mov   al,[VdInCh]
+  mov   ah,[VdColorAttr]                  ; Use current color attribute
+  mov   [edi],ax
+  ret
+
+;------------------------------------------------------------------------------
+; VdWriteInCharAtCursor
+;   Input:
+;     VdInCh      = character to write
+;     VdCurRow    = target row, 1-based, 1..25
+;     VdInCurCol  = target column, 1-based, 1..80
+;     VdColorAttr = VGA text attribute
+;   Output:
+;     Writes character/attribute cell to VGA text memory.
+; Notes:
+;     Does not advance VdInCurCol.
+;     Row 1, Col 1 maps to VGA offset 0.
+;------------------------------------------------------------------------------
+VdWriteInCharAtCursor:
+  mov   ax,[VdCurRow]
+  movzx eax,ax
+  dec   eax                               ; row0 = row-1
+  imul  eax,VD_COLS
+  mov   dx,[VdInCurCol]
+  movzx edx,dx
+  dec   edx                               ; col0 = col-1
+  add   eax,edx
+  shl   eax,1
+  mov   edi,VGA_TEXT_BASE
+  add   edi,eax
+  mov   al,[VdInCh]
+  mov   ah,[VdColorAttr]                  ; Use current color attribute
+  mov   [edi],ax
+  ret
+
+;------------------------------------------------------------------------------
+; VdScrollOutputRegion
+;   Output:
+;     Scrolls output region rows 1..24 up by one line and clears row 24.
+; Notes:
+;     Copies rows 2..24 over rows 1..23.
+;     Uses VdWorkCount and VdWorkCol as memory-backed loop state.
+;     Clears row 24 using VdColorAttr.
+;------------------------------------------------------------------------------
+VdScrollOutputRegion:
+  mov   eax,(VD_OUT_MAX_ROW - 1) * 160    ; 23 rows * 160 bytes/row
+  mov   [VdWorkCount],eax
+  mov   esi,VGA_TEXT_BASE
+  mov   edi,VGA_TEXT_BASE
+  add   esi,160                           ; start at row2 (row0=1)
+VdScrollCopyLoop:
+  mov   eax,[VdWorkCount]
+  test  eax,eax
+  jz    VdScrollClearRow
+  mov   eax,[esi]
+  mov   [edi],eax
+  add   esi,4
+  add   edi,4
+  mov   eax,[VdWorkCount]
+  sub   eax,4
+  mov   [VdWorkCount],eax
+  jmp   VdScrollCopyLoop
+VdScrollClearRow:
+  mov   edi,VGA_TEXT_BASE
+  add   edi,(VD_OUT_MAX_ROW - 1) * 160    ; row24 start (row0=23)
+  mov   ax,1
+  mov   [VdWorkCol],ax
+VdScrollClearLoop:
+  mov   ax,[VdWorkCol]
+  movzx eax,ax
+  cmp   eax,(VD_COLS + 1)
+  jae   VdScrollDone
+  mov   al,' '
+  mov   ah,[VdColorAttr]
+  mov   [edi],ax
+  add   edi,2
+  mov   ax,[VdWorkCol]
+  inc   ax
+  mov   [VdWorkCol],ax
+  jmp   VdScrollClearLoop
+VdScrollDone:
   ret
