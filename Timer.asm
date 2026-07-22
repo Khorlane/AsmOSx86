@@ -13,12 +13,10 @@
 ;
 ; Public API
 ;   - TimerInit
-;   - TimerLatchCount0
 ;   - TimerNowTicks
 ;   - TimerSpinDelayMs
 ;
 ; Contracts
-;   - TimerLatchCount0 returns TimerLatchCnt = current PIT down-counter.
 ;   - TimerNowTicks returns TimerOutTicksHi:TimerOutTicksLo as monotonic PIT input ticks.
 ;   - TimerSpinDelayMs reads TimerDelayMs as the requested delay duration.
 ;
@@ -26,6 +24,7 @@
 ;   - PIT channel 0 is currently polled; no timer IRQ is used.
 ;   - TimerNowTicks uses the PIT down-counter plus wrap tracking.
 ;   - First TimerNowTicks call after TimerInit seeds the baseline and returns zero.
+;   - TimerLatchCount0 is an internal helper used by TimerNowTicks.
 ;   - Timer code is 386-safe: no 64-bit instructions; use Hi/Lo dword pairs.
 ;   - Registers are scratch only; persistent inputs/outputs use Timer* globals.
 ;**************************************************************************************************
@@ -92,6 +91,8 @@ TimerInit:
 ; TimerLatchCount0 - latch and read PIT channel 0 count
 ;   Output:
 ;     TimerLatchCnt = current down-counter value
+;   Notes:
+;     Internal helper for TimerNowTicks.
 ;--------------------------------------------------------------------------------------------------
 TimerLatchCount0:
   mov   dx,PIT_CMD                      ; PIT command port
