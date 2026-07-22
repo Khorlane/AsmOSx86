@@ -57,7 +57,6 @@ KbInit:
 ; Notes:
 ;     Polls the keyboard controller once.
 ;     Handles shift state and translates scancodes to ASCII.
-;     Registers are scratch only.
 ;------------------------------------------------------------------------------
 KbGetKey:
   xor   eax,eax
