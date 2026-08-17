@@ -9,11 +9,13 @@
 ; Contains
 ;   - Page-fault IDT gate installation
 ;   - Identity-mapped page directory and page tables
+;   - Shared user virtual page remapping
 ;   - CR3/CR0 paging enable path
 ;   - Minimal page-fault halt handler
 ;
 ; Notes
 ;   - Maps the first 16 MiB as present, writable, supervisor pages.
+;   - The shared user virtual page can be remapped to a task image page.
 ;   - Paging does not enable hardware IRQs.
 ;   - Page faults currently halt forever.
 ;**************************************************************************************************
@@ -31,6 +33,7 @@ PG_ENTRY_COUNT  equ 1024
 PG_CR0_ENABLE   equ 80000000h
 PG_FAULT_VECTOR equ 14
 PG_IDT_ATTR     equ 08E00h
+PG_USER_PTE     equ 512
 
 ;--------------------------------------------------------------------------------------------------
 ; Paging Globals
@@ -39,6 +42,7 @@ align 4
 PgEntryIndex    dd 0                    ; work: page-table entry index
 PgPhysAddr      dd 0                    ; work: identity-mapped physical address
 PgTableAddr     dd 0                    ; work: page table address to fill
+PgUserPhysBase  dd 0                    ; input: physical page backing user virtual base
 
 align 4096
 PgDirectory:
@@ -75,6 +79,22 @@ PgInit:
   mov   cr0,eax
   jmp   PgInit1
 PgInit1:
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; PgMapUserProgram
+;   Input:
+;     PgUserPhysBase = physical 4K page backing the user virtual base.
+;   Output:
+;     Shared user virtual page maps to PgUserPhysBase and CR3 is reloaded.
+;--------------------------------------------------------------------------------------------------
+PgMapUserProgram:
+  mov   eax,[PgUserPhysBase]
+  and   eax,0FFFFF000h
+  or    eax,PG_FLAGS
+  mov   [PgTable0+(PG_USER_PTE*4)],eax
+  mov   eax,PgDirectory
+  mov   cr3,eax
   ret
 
 ;--------------------------------------------------------------------------------------------------

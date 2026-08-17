@@ -13,6 +13,7 @@
 ;   - Ready-task selection and cooperative task switching
 ;   - Stack-slot bounds helpers
 ;   - ASMX user-program loading, relocation, and task setup
+;   - Shared virtual user-program page mapping
 ;
 ; Public API
 ;   - TaskGetCurrentRecord
@@ -27,7 +28,8 @@
 ; Notes
 ;   - Task metadata is kernel-owned.
 ;   - Task stacks live in the low-memory stack-slot arena.
-;   - Loaded user programs currently reserve 4K slots above the kernel.
+;   - Loaded user programs reserve physical 4K slots above the kernel.
+;   - User tasks run through a shared virtual base page.
 ;   - Registers are scratch only.
 ;   - Persistent inputs/outputs use Task* globals.
 ;**************************************************************************************************
@@ -55,7 +57,8 @@ TASK_ENTRY           equ 20
 TASK_KCBLOCK_PTR     equ 24
 TASK_EXIT_CODE       equ 28
 TASK_RUN_COUNT       equ 32
-TASK_RECORD_SIZE     equ 36
+TASK_PROGRAM_PHYS    equ 36
+TASK_RECORD_SIZE     equ 40
 
 ;--------------------------------------------------------------------------------------------------
 ; Task Table and Stack-Slot Constants
@@ -76,6 +79,7 @@ TASK_PROGRAM_STATUS_BAD_STACK   equ 3
 TASK_PROGRAM_STATUS_BAD_IMAGE   equ 4
 TASK_PROGRAM_STATUS_FS_ERROR    equ 5
 USER_PROGRAM_SLOT_SIZE          equ 00001000h
+USER_PROGRAM_VIRTUAL_BASE       equ 00200000h
 USER_PROGRAM_KCBLOCK_SIZE       equ 32
 USER_PROGRAM_KCBLOCK_OFFSET     equ USER_PROGRAM_SLOT_SIZE-USER_PROGRAM_KCBLOCK_SIZE
 ASMX_SIGNATURE                  equ 584D5341h
@@ -194,8 +198,9 @@ TaskPut4Dec:
 ;     TaskProgramEntryPtr   = loaded program entry address.
 ;     TaskProgramKcBlockPtr = loaded program KcBlock address.
 ;   Notes:
-;     Reads an ASMX executable, relocates its image at the next dynamic load
-;     address, and seeds a ready task record. It does not start the task.
+;     Reads an ASMX executable into the next physical load slot, relocates its
+;     image for USER_PROGRAM_VIRTUAL_BASE, and seeds a ready task record.
+;     It does not start the task.
 ;--------------------------------------------------------------------------------------------------
 TaskProgramLoad:
   mov   dword[TaskProgramEntryPtr],0
@@ -264,15 +269,17 @@ TaskProgramLoad:
   mov   [edi+TASK_STACK_TOP],eax
   sub   eax,4
   mov   [edi+TASK_SAVED_ESP],eax
-  mov   ebx,[TaskProgramLoadBase]
+  mov   ebx,USER_PROGRAM_VIRTUAL_BASE
   add   ebx,[TaskProgramEntryOffset]
   mov   [TaskProgramEntryPtr],ebx
   mov   [eax],ebx
   mov   [edi+TASK_ENTRY],ebx
-  mov   ebx,[TaskProgramLoadBase]
+  mov   ebx,USER_PROGRAM_VIRTUAL_BASE
   add   ebx,USER_PROGRAM_KCBLOCK_OFFSET
   mov   [TaskProgramKcBlockPtr],ebx
   mov   [edi+TASK_KCBLOCK_PTR],ebx
+  mov   ebx,[TaskProgramLoadBase]
+  mov   [edi+TASK_PROGRAM_PHYS],ebx
   mov   dword[edi+TASK_EXIT_CODE],0
   mov   dword[edi+TASK_RUN_COUNT],0
   mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_OK
@@ -343,6 +350,7 @@ TaskProgramInit2:
   mov   dword[edi+TASK_KCBLOCK_PTR],0
   mov   dword[edi+TASK_EXIT_CODE],0
   mov   dword[edi+TASK_RUN_COUNT],0
+  mov   dword[edi+TASK_PROGRAM_PHYS],0
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -515,12 +523,34 @@ TaskYield7:
   mul   ebx
   lea   edi,[TaskTable+eax]
   mov   dword[edi+TASK_STATE],TASK_STATE_RUNNING
+  mov   [pTaskRecord],edi
+  call  TaskMapSelectedProgram
+  mov   edi,[pTaskRecord]
   mov   esp,[edi+TASK_SAVED_ESP]
   ret
 
 ;--------------------------------------------------------------------------------------------------
 ; Internal Routines
 ;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; TaskMapSelectedProgram
+;   Input:
+;     pTaskRecord = selected task record.
+;   Output:
+;     Shared user virtual page maps to the selected task's loaded image, or
+;     identity maps USER_PROGRAM_VIRTUAL_BASE for kernel task 0.
+;--------------------------------------------------------------------------------------------------
+TaskMapSelectedProgram:
+  mov   edi,[pTaskRecord]
+  mov   eax,[edi+TASK_PROGRAM_PHYS]
+  test  eax,eax
+  jnz   TaskMapSelectedProgram1
+  mov   eax,USER_PROGRAM_VIRTUAL_BASE
+TaskMapSelectedProgram1:
+  mov   [PgUserPhysBase],eax
+  call  PgMapUserProgram
+  ret
 
 ;--------------------------------------------------------------------------------------------------
 ; TaskGetRecord
@@ -667,7 +697,7 @@ TaskProgramApplyRelocs1:
   mov   edi,[TaskProgramLoadBase]
   add   edi,eax
   mov   eax,[edi]
-  add   eax,[TaskProgramLoadBase]
+  add   eax,USER_PROGRAM_VIRTUAL_BASE
   mov   [edi],eax
   dec   dword[TaskProgramRelocCount]
   jmp   TaskProgramApplyRelocs1
