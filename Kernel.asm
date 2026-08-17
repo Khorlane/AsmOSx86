@@ -71,6 +71,7 @@ IDT2:
 %include "Uptime.asm"
 %include "Utility.asm"
 %include "Video.asm"
+%include "Paging.asm"
 %include "Fs.asm"
 %include "Kc.asm"
 %include "Task.asm"
@@ -95,6 +96,7 @@ FlushCS:
   mov   esp,90000h                      ; Stack begins from 90000h
   lea   eax,[IDT2]                      ; Load the IDT
   lidt  [eax]                           ;  register
+  call  PgInit                          ; Enable identity-mapped paging
 
   ; Initialize subsystems
   call  TimerInit                       ; Initialize timer
