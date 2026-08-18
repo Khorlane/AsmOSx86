@@ -11,7 +11,7 @@
 ;   - Command line input and editing
 ;   - Command lookup and dispatch
 ;   - Operator commands for date/time/uptime, delay, shutdown, and tests
-;   - Current launch path for file-loaded ASMX user-program tests
+;   - Current launch path for file-loaded user-program tests
 ;
 ; Notes
 ;   - Console.asm is the kernel/operator interface, not the future userland shell.
@@ -62,10 +62,10 @@ String  CnFsTestReadBytes,"FsTest: read bytes 0000"
 String  CnFsTestCloseStatus,"FsTest: close status 0000"
 String  CnKcTestMsg1,"KcTest: KcVdWriteStr dispatch OK"
 String  CnKcTestMsg2,"KcTest: KcTmGetUptime dispatch result:"
-String  CnUserProg1File,"PROG1.EXE"
-String  CnUserProg2File,"PROG2.EXE"
-String  CnUserProg3File,"PROG3.EXE"
-String  CnUserTestMsg1,"UserTest: loading PROG1.EXE, PROG2.EXE, PROG3.EXE"
+String  CnUserProg1File,"PROG1.BIN"
+String  CnUserProg2File,"PROG2.BIN"
+String  CnUserProg3File,"PROG3.BIN"
+String  CnUserTestMsg1,"UserTest: loading PROG1.BIN, PROG2.BIN, PROG3.BIN"
 String  CnUserTestMsg2,"UserTest: running loaded programs"
 String  CnUserTestMsg3,"UserTest: complete"
 String  CnUserTestFail,"UserTest: load failed"

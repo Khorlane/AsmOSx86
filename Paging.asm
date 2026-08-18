@@ -9,13 +9,13 @@
 ; Contains
 ;   - Page-fault IDT gate installation
 ;   - Identity-mapped page directory and page tables
-;   - Shared user virtual page remapping
+;   - Shared user virtual page-range remapping
 ;   - CR3/CR0 paging enable path
 ;   - Minimal page-fault halt handler
 ;
 ; Notes
 ;   - Maps the first 16 MiB as present, writable, supervisor pages.
-;   - The shared user virtual page can be remapped to a task image page.
+;   - The shared user virtual range can be remapped to task image pages.
 ;   - Paging does not enable hardware IRQs.
 ;   - Page faults currently halt forever.
 ;**************************************************************************************************
@@ -34,6 +34,8 @@ PG_CR0_ENABLE   equ 80000000h
 PG_FAULT_VECTOR equ 14
 PG_IDT_ATTR     equ 08E00h
 PG_USER_PTE     equ 512
+PG_USER_MAX_PAGES equ 16
+PG_USER_KC_PTE  equ PG_USER_PTE+PG_USER_MAX_PAGES
 
 ;--------------------------------------------------------------------------------------------------
 ; Paging Globals
@@ -43,6 +45,13 @@ PgEntryIndex    dd 0                    ; work: page-table entry index
 PgPhysAddr      dd 0                    ; work: identity-mapped physical address
 PgTableAddr     dd 0                    ; work: page table address to fill
 PgUserPhysBase  dd 0                    ; input: physical page backing user virtual base
+PgUserPageCount dd 0                    ; input: number of user pages to map
+PgUserKcPhysBase dd 0                   ; input: physical page backing user KcBlock
+PgUserPageLeft  dd 0                    ; work: user pages left to map
+PgUserMappedCount dd 0                  ; work: user pages mapped
+PgUserClearLeft dd 0                    ; work: user PTEs left to clear
+PgUserPteAddr   dd 0                    ; work: current user PTE address
+PgUserMapPhys   dd 0                    ; work: current user physical page
 
 align 4096
 PgDirectory:
@@ -84,15 +93,64 @@ PgInit1:
 ;--------------------------------------------------------------------------------------------------
 ; PgMapUserProgram
 ;   Input:
-;     PgUserPhysBase = physical 4K page backing the user virtual base.
+;     PgUserPhysBase  = first physical 4K page backing the user virtual base.
+;     PgUserPageCount = number of contiguous user pages to map.
+;     PgUserKcPhysBase = physical 4K page backing the user KcBlock.
 ;   Output:
-;     Shared user virtual page maps to PgUserPhysBase and CR3 is reloaded.
+;     Shared user virtual range and KcBlock page are mapped and CR3 is reloaded.
 ;--------------------------------------------------------------------------------------------------
 PgMapUserProgram:
+  mov   eax,[PgUserPageCount]
+  test  eax,eax
+  jnz   PgMapUserProgram1
+  mov   eax,1
+PgMapUserProgram1:
+  cmp   eax,PG_USER_MAX_PAGES
+  jbe   PgMapUserProgram3
+  mov   eax,PG_USER_MAX_PAGES
+PgMapUserProgram3:
+  mov   [PgUserPageLeft],eax
+  mov   [PgUserMappedCount],eax
   mov   eax,[PgUserPhysBase]
   and   eax,0FFFFF000h
+  mov   [PgUserMapPhys],eax
+  mov   eax,PgTable0+(PG_USER_PTE*4)
+  mov   [PgUserPteAddr],eax
+PgMapUserProgram2:
+  mov   eax,[PgUserMapPhys]
   or    eax,PG_FLAGS
-  mov   [PgTable0+(PG_USER_PTE*4)],eax
+  mov   edi,[PgUserPteAddr]
+  mov   [edi],eax
+  add   edi,4
+  mov   [PgUserPteAddr],edi
+  mov   eax,[PgUserMapPhys]
+  add   eax,PG_PAGE_SIZE
+  mov   [PgUserMapPhys],eax
+  mov   eax,[PgUserPageLeft]
+  dec   eax
+  mov   [PgUserPageLeft],eax
+  jnz   PgMapUserProgram2
+  mov   eax,PG_USER_MAX_PAGES
+  sub   eax,[PgUserMappedCount]
+  mov   [PgUserClearLeft],eax
+PgMapUserProgram4:
+  mov   eax,[PgUserClearLeft]
+  test  eax,eax
+  jz    PgMapUserProgram5
+  mov   edi,[PgUserPteAddr]
+  xor   eax,eax
+  mov   [edi],eax
+  add   edi,4
+  mov   [PgUserPteAddr],edi
+  mov   eax,[PgUserClearLeft]
+  dec   eax
+  mov   [PgUserClearLeft],eax
+  jmp   PgMapUserProgram4
+PgMapUserProgram5:
+  mov   eax,[PgUserKcPhysBase]
+  and   eax,0FFFFF000h
+  or    eax,PG_FLAGS
+  mov   [PgTable0+(PG_USER_KC_PTE*4)],eax
   mov   eax,PgDirectory
   mov   cr3,eax
   ret

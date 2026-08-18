@@ -4,12 +4,12 @@
 ;**************************************************************************************************
 
 [bits 32]
-  org   0
+  org   00200000h
 
 KERNEL_CALL_GATEWAY equ 00100005h
 KC_TS_YIELD         equ 3
 KC_TS_EXIT          equ 5
-KC_BLOCK            equ 00000FE0h
+KC_BLOCK            equ 00210000h
 KC_BLOCK_NUMBER     equ 0
 KC_BLOCK_ARG0       equ 8
 

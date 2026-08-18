@@ -1,10 +1,10 @@
 ;**************************************************************************************************
 ; Task.asm
-;   Cooperative tasking and ASMX user-program loading for AsmOSx86.
+;   Cooperative tasking and raw user-program loading for AsmOSx86.
 ;
 ; Purpose
 ;   Provide kernel-owned task records, cooperative scheduling support,
-;   low-memory stack-slot assignment, and file-backed ASMX user-program loading.
+;   low-memory stack-slot assignment, and file-backed user-program loading.
 ;
 ; Contains
 ;   - Task state constants
@@ -12,7 +12,7 @@
 ;   - Task table storage
 ;   - Ready-task selection and cooperative task switching
 ;   - Stack-slot bounds helpers
-;   - ASMX user-program loading, relocation, and task setup
+;   - Raw user-program loading and task setup
 ;   - Shared virtual user-program page mapping
 ;
 ; Public API
@@ -28,8 +28,8 @@
 ; Notes
 ;   - Task metadata is kernel-owned.
 ;   - Task stacks live in the low-memory stack-slot arena.
-;   - Loaded user programs reserve physical 4K slots above the kernel.
-;   - User tasks run through a shared virtual base page.
+;   - Loaded user programs reserve physical pages above the kernel.
+;   - User tasks run through a shared virtual base range.
 ;   - Registers are scratch only.
 ;   - Persistent inputs/outputs use Task* globals.
 ;**************************************************************************************************
@@ -58,7 +58,9 @@ TASK_KCBLOCK_PTR     equ 24
 TASK_EXIT_CODE       equ 28
 TASK_RUN_COUNT       equ 32
 TASK_PROGRAM_PHYS    equ 36
-TASK_RECORD_SIZE     equ 40
+TASK_PROGRAM_PAGES   equ 40
+TASK_KCBLOCK_PHYS    equ 44
+TASK_RECORD_SIZE     equ 48
 
 ;--------------------------------------------------------------------------------------------------
 ; Task Table and Stack-Slot Constants
@@ -79,19 +81,12 @@ TASK_PROGRAM_STATUS_BAD_STACK   equ 3
 TASK_PROGRAM_STATUS_BAD_IMAGE   equ 4
 TASK_PROGRAM_STATUS_FS_ERROR    equ 5
 USER_PROGRAM_SLOT_SIZE          equ 00001000h
+USER_PROGRAM_MAX_PAGES          equ PG_USER_MAX_PAGES
+USER_PROGRAM_MAX_SIZE           equ USER_PROGRAM_SLOT_SIZE*USER_PROGRAM_MAX_PAGES
 USER_PROGRAM_VIRTUAL_BASE       equ 00200000h
 USER_PROGRAM_KCBLOCK_SIZE       equ 32
-USER_PROGRAM_KCBLOCK_OFFSET     equ USER_PROGRAM_SLOT_SIZE-USER_PROGRAM_KCBLOCK_SIZE
-ASMX_SIGNATURE                  equ 584D5341h
-ASMX_VERSION                    equ 1
-ASMX_HEADER_SIZE                equ 28
-ASMX_HEADER_SIGNATURE           equ 0
-ASMX_HEADER_VERSION             equ 4
-ASMX_HEADER_ENTRY_OFFSET        equ 8
-ASMX_HEADER_IMAGE_OFFSET        equ 12
-ASMX_HEADER_IMAGE_SIZE          equ 16
-ASMX_HEADER_RELOC_OFFSET        equ 20
-ASMX_HEADER_RELOC_COUNT         equ 24
+USER_PROGRAM_KCBLOCK_OFFSET     equ USER_PROGRAM_MAX_SIZE
+USER_PROGRAM_KCBLOCK_BASE       equ USER_PROGRAM_VIRTUAL_BASE+USER_PROGRAM_KCBLOCK_OFFSET
 
 ;--------------------------------------------------------------------------------------------------
 ; Task Globals
@@ -119,10 +114,10 @@ TaskProgramKcBlockPtr dd 0              ; output: loaded program KcBlock address
 TaskProgramNextLoadBase dd 0            ; work: next dynamic user-program load base
 TaskProgramLoadBase  dd 0               ; work: selected program load base
 TaskProgramAllocSize  dd 0              ; work: bytes reserved for loaded program
-TaskProgramEntryOffset dd 0             ; work: ASMX entry offset
-TaskProgramImageSize dd 0               ; work: ASMX image size
-TaskProgramRelocCount dd 0              ; work: ASMX relocation entries left
-TaskProgramRelocOffset dd 0             ; work: relocation offset inside image
+TaskProgramPageCount  dd 0              ; work: pages reserved for loaded program
+TaskProgramImageSize dd 0               ; work: raw image size
+TaskProgramImageAllocSize dd 0          ; work: bytes reserved for raw image
+TaskProgramKcBlockPhysPtr dd 0          ; work: physical KcBlock page address
 TaskProgramHandle    dd 0               ; work: open file handle
 TaskProgramClearPtr   dd 0              ; work: user slot clear pointer
 TaskProgramClearLeft  dd 0              ; work: user slot clear byte count
@@ -133,9 +128,6 @@ TaskExitCode         dd 0               ; input: current task exit code
 String  TaskProgramExitStr1,"Task 1 exit 0000 0000"
 String  TaskProgramExitStr2,"Task 2 exit 0000 0000"
 String  TaskProgramExitStr3,"Task 3 exit 0000 0000"
-TaskProgramHeader:
-  times ASMX_HEADER_SIZE db 0
-TaskProgramRelocBuffer dd 0
 TaskTable:
   times MAX_TASKS * TASK_RECORD_SIZE db 0
 
@@ -198,15 +190,18 @@ TaskPut4Dec:
 ;     TaskProgramEntryPtr   = loaded program entry address.
 ;     TaskProgramKcBlockPtr = loaded program KcBlock address.
 ;   Notes:
-;     Reads an ASMX executable into the next physical load slot, relocates its
-;     image for USER_PROGRAM_VIRTUAL_BASE, and seeds a ready task record.
-;     It does not start the task.
+;     Reads a raw flat binary into the next physical load area and seeds a
+;     ready task record. It does not start the task.
 ;--------------------------------------------------------------------------------------------------
 TaskProgramLoad:
   mov   dword[TaskProgramEntryPtr],0
   mov   dword[TaskProgramKcBlockPtr],0
   mov   dword[TaskProgramLoadBase],0
   mov   dword[TaskProgramAllocSize],0
+  mov   dword[TaskProgramPageCount],0
+  mov   dword[TaskProgramImageSize],0
+  mov   dword[TaskProgramImageAllocSize],0
+  mov   dword[TaskProgramKcBlockPhysPtr],0
   mov   dword[TaskProgramHandle],0
   mov   eax,[pTaskProgramName]
   test  eax,eax
@@ -231,15 +226,9 @@ TaskProgramLoad:
   jne   TaskProgramLoad5
   mov   eax,[FsOpenHandle]
   mov   [TaskProgramHandle],eax
-  mov   [FsReadHandle],eax
-  mov   eax,TaskProgramHeader
-  mov   [pFsReadBuffer],eax
-  mov   dword[FsReadCount],ASMX_HEADER_SIZE
-  call  FsRead
-  mov   eax,[FsStatus]
-  cmp   eax,FS_STATUS_OK
-  jne   TaskProgramLoad6
-  call  TaskProgramValidateHeader
+  mov   eax,[FsOpenSize]
+  mov   [TaskProgramImageSize],eax
+  call  TaskProgramValidateImage
   mov   eax,[TaskProgramStatus]
   test  eax,eax
   jnz   TaskProgramLoad6
@@ -255,10 +244,6 @@ TaskProgramLoad:
   mov   eax,[FsStatus]
   cmp   eax,FS_STATUS_OK
   jne   TaskProgramLoad6
-  call  TaskProgramApplyRelocs
-  mov   eax,[TaskProgramStatus]
-  test  eax,eax
-  jnz   TaskProgramLoad6
   mov   edi,[pTaskRecord]
   mov   dword[edi+TASK_STATE],TASK_STATE_READY
   mov   eax,[TaskProgramStackSlot]
@@ -270,16 +255,18 @@ TaskProgramLoad:
   sub   eax,4
   mov   [edi+TASK_SAVED_ESP],eax
   mov   ebx,USER_PROGRAM_VIRTUAL_BASE
-  add   ebx,[TaskProgramEntryOffset]
   mov   [TaskProgramEntryPtr],ebx
   mov   [eax],ebx
   mov   [edi+TASK_ENTRY],ebx
-  mov   ebx,USER_PROGRAM_VIRTUAL_BASE
-  add   ebx,USER_PROGRAM_KCBLOCK_OFFSET
+  mov   ebx,USER_PROGRAM_KCBLOCK_BASE
   mov   [TaskProgramKcBlockPtr],ebx
   mov   [edi+TASK_KCBLOCK_PTR],ebx
   mov   ebx,[TaskProgramLoadBase]
   mov   [edi+TASK_PROGRAM_PHYS],ebx
+  mov   ebx,[TaskProgramPageCount]
+  mov   [edi+TASK_PROGRAM_PAGES],ebx
+  mov   ebx,[TaskProgramKcBlockPhysPtr]
+  mov   [edi+TASK_KCBLOCK_PHYS],ebx
   mov   dword[edi+TASK_EXIT_CODE],0
   mov   dword[edi+TASK_RUN_COUNT],0
   mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_OK
@@ -351,6 +338,8 @@ TaskProgramInit2:
   mov   dword[edi+TASK_EXIT_CODE],0
   mov   dword[edi+TASK_RUN_COUNT],0
   mov   dword[edi+TASK_PROGRAM_PHYS],0
+  mov   dword[edi+TASK_PROGRAM_PAGES],0
+  mov   dword[edi+TASK_KCBLOCK_PHYS],0
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -538,7 +527,7 @@ TaskYield7:
 ;   Input:
 ;     pTaskRecord = selected task record.
 ;   Output:
-;     Shared user virtual page maps to the selected task's loaded image, or
+;     Shared user virtual range maps to the selected task's loaded image, or
 ;     identity maps USER_PROGRAM_VIRTUAL_BASE for kernel task 0.
 ;--------------------------------------------------------------------------------------------------
 TaskMapSelectedProgram:
@@ -547,7 +536,15 @@ TaskMapSelectedProgram:
   test  eax,eax
   jnz   TaskMapSelectedProgram1
   mov   eax,USER_PROGRAM_VIRTUAL_BASE
+  mov   dword[PgUserPageCount],USER_PROGRAM_MAX_PAGES
+  mov   dword[PgUserKcPhysBase],USER_PROGRAM_KCBLOCK_BASE
+  jmp   TaskMapSelectedProgram2
 TaskMapSelectedProgram1:
+  mov   ebx,[edi+TASK_PROGRAM_PAGES]
+  mov   [PgUserPageCount],ebx
+  mov   ebx,[edi+TASK_KCBLOCK_PHYS]
+  mov   [PgUserKcPhysBase],ebx
+TaskMapSelectedProgram2:
   mov   [PgUserPhysBase],eax
   call  PgMapUserProgram
   ret
@@ -598,38 +595,19 @@ TaskGetStackBoundsDone:
   ret
 
 ;--------------------------------------------------------------------------------------------------
-; TaskProgramValidateHeader
+; TaskProgramValidateImage
 ;   Output:
-;     TaskProgramStatus      = TASK_PROGRAM_STATUS_OK or BAD_IMAGE.
-;     TaskProgramEntryOffset = ASMX entry offset.
-;     TaskProgramImageSize   = ASMX image size.
-;     TaskProgramRelocCount  = ASMX relocation count.
+;     TaskProgramStatus = TASK_PROGRAM_STATUS_OK or BAD_IMAGE.
 ;--------------------------------------------------------------------------------------------------
-TaskProgramValidateHeader:
+TaskProgramValidateImage:
   mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_BAD_IMAGE
-  mov   eax,[TaskProgramHeader+ASMX_HEADER_SIGNATURE]
-  cmp   eax,ASMX_SIGNATURE
-  jne   TaskProgramValidateHeaderDone
-  mov   eax,[TaskProgramHeader+ASMX_HEADER_VERSION]
-  cmp   eax,ASMX_VERSION
-  jne   TaskProgramValidateHeaderDone
-  mov   eax,[TaskProgramHeader+ASMX_HEADER_IMAGE_OFFSET]
-  cmp   eax,ASMX_HEADER_SIZE
-  jne   TaskProgramValidateHeaderDone
-  mov   eax,[TaskProgramHeader+ASMX_HEADER_IMAGE_SIZE]
+  mov   eax,[TaskProgramImageSize]
   test  eax,eax
-  jz    TaskProgramValidateHeaderDone
-  cmp   eax,USER_PROGRAM_KCBLOCK_OFFSET
-  jae   TaskProgramValidateHeaderDone
-  mov   [TaskProgramImageSize],eax
-  mov   eax,[TaskProgramHeader+ASMX_HEADER_ENTRY_OFFSET]
-  cmp   eax,[TaskProgramImageSize]
-  jae   TaskProgramValidateHeaderDone
-  mov   [TaskProgramEntryOffset],eax
-  mov   eax,[TaskProgramHeader+ASMX_HEADER_RELOC_COUNT]
-  mov   [TaskProgramRelocCount],eax
+  jz    TaskProgramValidateImageDone
+  cmp   eax,USER_PROGRAM_MAX_SIZE
+  ja    TaskProgramValidateImageDone
   mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_OK
-TaskProgramValidateHeaderDone:
+TaskProgramValidateImageDone:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -637,12 +615,26 @@ TaskProgramValidateHeaderDone:
 ;   Output:
 ;     TaskProgramLoadBase = next dynamic user-program load base.
 ;     TaskProgramAllocSize = allocation bytes.
+;     TaskProgramPageCount = allocation pages.
 ;     TaskProgramNextLoadBase advanced to the next 4K boundary.
 ;--------------------------------------------------------------------------------------------------
 TaskProgramAlloc:
   mov   eax,[TaskProgramNextLoadBase]
   mov   [TaskProgramLoadBase],eax
-  mov   dword[TaskProgramAllocSize],USER_PROGRAM_SLOT_SIZE
+  mov   eax,[TaskProgramImageSize]
+  add   eax,00000FFFh
+  and   eax,0FFFFF000h
+  mov   [TaskProgramImageAllocSize],eax
+  mov   ebx,USER_PROGRAM_SLOT_SIZE
+  xor   edx,edx
+  div   ebx
+  mov   [TaskProgramPageCount],eax
+  mov   eax,[TaskProgramLoadBase]
+  add   eax,[TaskProgramImageAllocSize]
+  mov   [TaskProgramKcBlockPhysPtr],eax
+  mov   eax,[TaskProgramImageAllocSize]
+  add   eax,USER_PROGRAM_SLOT_SIZE
+  mov   [TaskProgramAllocSize],eax
   mov   eax,[TaskProgramLoadBase]
   add   eax,[TaskProgramAllocSize]
   add   eax,00000FFFh
@@ -665,45 +657,6 @@ TaskProgramCloseFile:
   call  FsClose
   mov   dword[TaskProgramHandle],0
 TaskProgramCloseFileDone:
-  ret
-
-;--------------------------------------------------------------------------------------------------
-; TaskProgramApplyRelocs
-;   Input:
-;     TaskProgramLoadBase   = loaded image base.
-;     TaskProgramRelocCount = relocation entries left in the open ASMX file.
-;   Output:
-;     TaskProgramStatus = TASK_PROGRAM_STATUS_OK or TASK_PROGRAM_STATUS_FS_ERROR.
-;--------------------------------------------------------------------------------------------------
-TaskProgramApplyRelocs:
-  mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_OK
-TaskProgramApplyRelocs1:
-  mov   eax,[TaskProgramRelocCount]
-  test  eax,eax
-  jz    TaskProgramApplyRelocsDone
-  mov   eax,[TaskProgramHandle]
-  mov   [FsReadHandle],eax
-  mov   eax,TaskProgramRelocBuffer
-  mov   [pFsReadBuffer],eax
-  mov   dword[FsReadCount],4
-  call  FsRead
-  mov   eax,[FsStatus]
-  cmp   eax,FS_STATUS_OK
-  jne   TaskProgramApplyRelocsError
-  mov   eax,[TaskProgramRelocBuffer]
-  mov   [TaskProgramRelocOffset],eax
-  cmp   eax,[TaskProgramImageSize]
-  jae   TaskProgramApplyRelocsError
-  mov   edi,[TaskProgramLoadBase]
-  add   edi,eax
-  mov   eax,[edi]
-  add   eax,USER_PROGRAM_VIRTUAL_BASE
-  mov   [edi],eax
-  dec   dword[TaskProgramRelocCount]
-  jmp   TaskProgramApplyRelocs1
-TaskProgramApplyRelocsError:
-  mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_FS_ERROR
-TaskProgramApplyRelocsDone:
   ret
 
 ;--------------------------------------------------------------------------------------------------

@@ -1,8 +1,8 @@
 <# 
-Copy1.ps1
+BuildCopy.ps1
 Copies Boot2.bin, Kernel.bin, and optional user programs to floppy.img using ImDisk.
 - Mounts using first free drive letter (#:) to avoid conflicts.
-- Copies BOOT2.BIN, KERNEL.BIN, and optional PROG*.EXE files to the FAT12 root.
+- Copies BOOT2.BIN, KERNEL.BIN, and optional PROG*.BIN files to the FAT12 root.
 - Verifies files exist via DIR-style listing.
 - Unmounts robustly: dismount/remove drive letter, retry detach, then force detach if needed.
 #>
@@ -67,9 +67,9 @@ try {
   $Image  = Join-Path $RepoRoot "floppy.img"
   $Boot2  = Join-Path $RepoRoot "Boot2.bin"
   $Kernel = Join-Path $RepoRoot "Kernel.bin"
-  $Prog1  = Join-Path $RepoRoot "Prog1.exe"
-  $Prog2  = Join-Path $RepoRoot "Prog2.exe"
-  $Prog3  = Join-Path $RepoRoot "Prog3.exe"
+  $Prog1  = Join-Path $RepoRoot "Prog1.bin"
+  $Prog2  = Join-Path $RepoRoot "Prog2.bin"
+  $Prog3  = Join-Path $RepoRoot "Prog3.bin"
 
   Write-Host "[1/5] Verifying files..."
   foreach ($f in @($Image, $Boot2, $Kernel)) {
@@ -114,6 +114,7 @@ try {
     }
 
     Write-Host "[3/5] Copying files to $Drive..."
+    Remove-Item "$Drive\PROG1.EXE", "$Drive\PROG2.EXE", "$Drive\PROG3.EXE" -Force -ErrorAction SilentlyContinue
     Copy-Item -LiteralPath $Boot2  -Destination "$Drive\BOOT2.BIN"  -Force
     Copy-Item -LiteralPath $Kernel -Destination "$Drive\KERNEL.BIN" -Force
     foreach ($prog in @($Prog1, $Prog2, $Prog3)) {

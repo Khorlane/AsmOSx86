@@ -88,6 +88,7 @@ align 4
 FsStatus             dd 0              ; output: FS_STATUS_*
 pFsOpenName          dd 0              ; input: pointer to kernel Str filename
 FsOpenHandle         dd 0              ; output: opened handle, or 0
+FsOpenSize           dd 0              ; output: opened file size
 FsReadHandle         dd 0              ; input: handle to read
 pFsReadBuffer        dd 0              ; input: destination buffer
 FsReadCount          dd 0              ; input: requested bytes
@@ -193,6 +194,7 @@ FsInit2:
 ;--------------------------------------------------------------------------------------------------
 FsOpen:
   mov   dword[FsOpenHandle],0
+  mov   dword[FsOpenSize],0
   mov   eax,[pFsOpenName]
   test  eax,eax
   jz    FsOpenBadArg
@@ -224,6 +226,7 @@ FsOpen1:
   mov   [edi+FS_HANDLE_CLUSTER],eax
   mov   eax,[esi+28]
   mov   [edi+FS_HANDLE_SIZE],eax
+  mov   [FsOpenSize],eax
   mov   eax,[FsHandleIndex]
   inc   eax
   mov   [FsOpenHandle],eax

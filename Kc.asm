@@ -305,7 +305,7 @@ KcTsYieldHandler:
 ;     KcResult0 = TaskProgramStatus
 ;     KcResult1 = 0
 ;   Notes:
-;     Loads an ASMX user executable from the filesystem and prepares a task.
+;     Loads a raw user program from the filesystem and prepares a task.
 ;--------------------------------------------------------------------------------------------------
 KcTsLoadProgramHandler:
   mov   eax,[KcArg0]
