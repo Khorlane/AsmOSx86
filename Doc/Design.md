@@ -21,8 +21,11 @@ Current major included kernel components are:
 ```text
 Config.asm
 Console.asm
+Fs.asm
 Keyboard.asm
 Kc.asm
+Paging.asm
+Task.asm
 Time.asm
 Timer.asm
 Uptime.asm
@@ -47,9 +50,13 @@ The current kernel provides:
   - `KcTsYield`
   - `KcTsLoadProgram`
   - `KcTsExit`
+  - `KcFsOpen`
+  - `KcFsRead`
+  - `KcFsClose`
 - simple built-in commands:
   - `Date`
   - `Delay`
+  - `FsTest`
   - `Help`
   - `KcTest`
   - `Shutdown`
@@ -57,7 +64,7 @@ The current kernel provides:
   - `Uptime`
   - `UserTest`
 
-At this stage, AsmOSx86 is still a single resident kernel with an integrated console. Userland does not exist yet.
+At this stage, AsmOSx86 is still a single resident kernel with an integrated console. Early userland exists as raw flat binaries loaded from the FAT12 floppy and run as cooperative tasks through the kernel's task service path.
 
 ---
 
@@ -250,11 +257,10 @@ higher addresses
 
 ## 5. Build and Run Workflow
 
-This section describes the repository scripts. If this document disagrees with the scripts, the scripts are authoritative.
-
 AsmOSx86 builds as flat binary components and runs from a 1.44 MB floppy image named `floppy.img`.
 
-Bochs runs the image through `AsmOSx86.bxrc`.
+The build scripts live in `Scripts\`. The expected interactive workflow is to
+change into that folder before running them.
 
 ### Tool Roles
 
@@ -265,151 +271,10 @@ ImDisk    mounts floppy.img for FAT12 file copy/inspection
 Bochs     runs the bootable floppy image
 ```
 
-### Core Build Scripts
+Detailed script usage lives in `BuildScripts.md`.
 
-Scripts are stored in `Scripts\`. The expected interactive workflow is to change into that folder before running them.
-
-`Scripts\BuildBoot1.ps1`
-
-- deletes old `Boot1.bin` and `Boot1.lst`
-- assembles `Boot1.asm`
-- writes `Boot1.bin` and `Boot1.lst`
-
-```text
-nasm -f bin Boot1.asm -o Boot1.bin -l Boot1.lst
-```
-
-`Scripts\BuildBoot2.ps1`
-
-- deletes old `Boot2.bin` and `Boot2.lst`
-- assembles `Boot2.asm`
-- writes `Boot2.bin` and `Boot2.lst`
-- accepts `noexit` when called by wrapper scripts
-
-```text
-nasm -f bin Boot2.asm -o Boot2.bin -l Boot2.lst
-```
-
-`Scripts\BuildKernel.ps1`
-
-- deletes old `Kernel.bin` and `Kernel.lst`
-- assembles `Kernel.asm`
-- writes `Kernel.bin` and `Kernel.lst`
-- accepts `noexit` when called by wrapper scripts
-
-```text
-nasm -f bin Kernel.asm -o Kernel.bin -l Kernel.lst
-```
-
-### Boot Sector Image Script
-
-`Scripts\BuildWriteBoot1.ps1`
-
-- verifies `Boot1.bin` exists and is exactly 512 bytes
-- creates or overwrites `floppy.img`
-- verifies `floppy.img` is exactly 1,474,560 bytes
-- mounts and formats `floppy.img` as FAT
-- writes `Boot1.bin` to offset 0
-- verifies the boot signature at bytes 510-511 is `55 AA`
-
-The script uses `fsutil.exe file createnew` to create the floppy image, ImDisk to mount it, and `format.com /FS:FAT` to initialize the FAT filesystem before writing the custom boot sector. It does not copy `Boot2.bin` or `Kernel.bin` into the FAT12 filesystem.
-
-Future real-hardware workflow note:
-
-- `floppy.img` is intended to remain a standard 1.44 MB FAT12 floppy image that can later be written sector-for-sector to a real floppy, for example with WinImage and a USB floppy drive.
-- The written floppy should preserve sector 0 from `Boot1.bin` and the FAT root files `BOOT2.BIN` and `KERNEL.BIN`.
-
-### FAT12 Copy and Inspection Scripts
-
-`Scripts\BuildCopy.ps1`
-
-- verifies `floppy.img`, `Boot2.bin`, and `Kernel.bin` exist
-- mounts `floppy.img` through `imdisk.exe`
-- uses the first free drive letter
-- copies `Boot2.bin` to `BOOT2.BIN`
-- copies `Kernel.bin` to `KERNEL.BIN`
-- verifies both files exist on the mounted image
-- unmounts the image, using forced detach as a fallback if needed
-
-`Scripts\BuildFloppyDir.ps1`
-
-- mounts `floppy.img` read-only as `A:`
-- lists the image root directory
-- unmounts the image
-
-`Scripts\BuildFloppyDelAll.ps1`
-
-- verifies `floppy.img` exists
-- asks for confirmation
-- mounts `floppy.img` read-write as `A:`
-- deletes all root-directory files
-- lists the directory after deletion
-- unmounts the image
-
-### Run Script
-
-`Scripts\AsmOSx86Run.ps1`
-
-- prompts before launch
-- verifies Bochs exists at `C:\Program Files\Bochs-3.0\bochs.exe`
-- verifies the config exists at the project root as `AsmOSx86.bxrc`
-- runs Bochs with `-q -f AsmOSx86.bxrc`
-- treats Bochs exit code `0` or `1` as acceptable
-
-### Wrapper Scripts
-
-`Scripts\BuildKernelAndRun.ps1`
-
-```text
-.\BuildKernel.ps1 noexit
-.\BuildCopy.ps1
-Bochs using AsmOSx86.bxrc
-```
-
-Use this after a `Kernel.asm` change when `Boot1.bin`, `Boot2.bin`, and `floppy.img` are already valid.
-
-`Scripts\BuildBoot2KernelAndRun.ps1`
-
-```text
-.\BuildBoot2.ps1 noexit
-.\BuildKernel.ps1 noexit
-.\BuildCopy.ps1
-Bochs using AsmOSx86.bxrc
-```
-
-Use this after a `Boot2.asm` change, or when both the loader and kernel should be rebuilt before running.
-
-### Typical Workflows
-
-After a `Kernel.asm` or included-kernel-file change:
-
-```text
-cd Scripts
-.\BuildKernelAndRun.ps1
-```
-
-After a `Boot2.asm` change:
-
-```text
-cd Scripts
-.\BuildBoot2KernelAndRun.ps1
-```
-
-After a `Boot1.asm` change:
-
-```text
-cd Scripts
-.\BuildBoot1.ps1
-.\BuildWriteBoot1.ps1
-.\BuildBoot2KernelAndRun.ps1
-```
-
-To run the existing floppy image without rebuilding:
-
-```text
-cd Scripts
-.\AsmOSx86Run.ps1
-```
+The floppy preparation and boot flow from BIOS handoff through `Boot1.asm`,
+`Boot2.asm`, and the protected-mode kernel live in `BootProcess.md`.
 
 ---
 
@@ -720,8 +585,11 @@ Current tested calls:
 KcTmGetUptime   - Return monotonic uptime seconds in KcResult0
 KcVdWriteStr    - Write a kernel Str through the video subsystem
 KcTsYield       - Cooperative scheduling point
-KcTsLoadProgram - Load a mock user program into a task slot
+KcTsLoadProgram - Load a raw user program from the filesystem and prepare a task
 KcTsExit        - End the current task with an exit code
+KcFsOpen        - Open an existing disk file
+KcFsRead        - Read bytes from an open file
+KcFsClose       - Close an open file handle
 ```
 
 ### Filesystem — `KcFs*`
@@ -1456,29 +1324,34 @@ KcResult0 = uptime seconds or low result value
 KcResult1 = optional high result value if needed
 ```
 
-### Placement in User Programs
+### Placement for User Programs
 
-A user program image should include or reserve a `KcBlock`-compatible area.
+Each user task should have a `KcBlock`-compatible communication area, but it does
+not need to live inside the user program image.
 
 Conceptually:
 
 ```text
-ProgA image:
+ProgA task:
   code
   data
   stack
   KcBlock
 ```
 
-When the program is loaded and prepared for execution, the loader or task setup code records the address of the program’s `KcBlock` in the task table.
+When the program is loaded and prepared for execution, the loader or task setup code records the address of the program's `KcBlock` in the task table.
 
-Early AsmOSx86 can use the simple rule:
+Early AsmOSx86 currently uses the simple rule:
 
 ```text
-Every user program contains a standard KcBlock in its data area.
+Every user task receives a separate KcBlock page.
 ```
 
-Later, the kernel could allocate the block or define it through program metadata, but the initial model should stay simple.
+The current raw user programs are assembled for virtual base `00200000h`, and
+the task's KcBlock is mapped at the fixed virtual address `00210000h`.
+
+Later, the kernel could make this address discoverable through metadata or a
+startup contract, but the initial model should stay simple.
 
 ### Blocking Calls and KcBlock Completion
 
@@ -1557,7 +1430,7 @@ They are separate concepts.
 
 The OS should not care too much how a session was started.
 
-Current AsmOSx86 can already load ASMX userland programs from the FAT12 floppy
+Current AsmOSx86 can already load raw userland binaries from the FAT12 floppy
 image and run multiple cooperative user tasks. The console is the current
 operator interface to that capability.
 
@@ -1709,9 +1582,12 @@ User programs do not call arbitrary kernel routines.
 
 Use direct calls and simple tables before introducing interrupts, privilege transitions, or gates.
 
-### Avoid premature hardware complexity
+### Add hardware complexity deliberately
 
-Do not introduce paging, privilege rings, or preemption before the basic execution model is understandable and testable.
+Introduce hardware features only when they clarify or support the execution
+model being tested. Paging is now part of the current user-program loading
+model; privilege rings, preemption, and fuller hardware enforcement can still
+come later.
 
 ---
 
@@ -1720,13 +1596,11 @@ Do not introduce paging, privilege rings, or preemption before the basic executi
 AsmOSx86 does not need these immediately:
 
 ```text
-paging
 ring 3 enforcement
-full filesystem
+full read/write filesystem
 ELF loader
 dynamic linker
 preemptive scheduler
-virtual memory
 user/kernel privilege separation
 advanced device model
 ```

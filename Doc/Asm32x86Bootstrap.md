@@ -67,7 +67,7 @@ the FAT12 floppy image for AsmOSx86 testing.
 
 As the OS grows, Bochs can be used to prove:
 
-- ASMX executable loading
+- fixed-virtual-base raw user-program loading
 - FAT12 file reading
 - kernel-call behavior
 - userland task execution
@@ -76,4 +76,3 @@ As the OS grows, Bochs can be used to prove:
 
 When updating the floppy image, Bochs should be closed first so the image file
 is not locked.
-

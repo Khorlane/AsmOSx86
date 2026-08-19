@@ -2,7 +2,9 @@
 
 AsmOSx86 uses a memory-contract ABI, not a normal register-parameter ABI.
 
-All routines must follow this pattern:
+These rules do not apply to `Boot1.asm` or `Boot2.asm`.
+
+All other routines must follow this pattern:
 
 1. Read input parameters from named global variables.
 2. Load registers only as local scratch/work registers.

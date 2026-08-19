@@ -168,12 +168,14 @@ Current initialization order in `Kernel.asm`:
 
 1. Load GDT and reload code/data segment state
 2. Load an empty IDT
-3. `TimerInit`
-4. `UptimeInit`
-5. `VdInit`
-6. `KbInit`
-7. `CnInit`
-8. Enter the main console loop
+3. `PgInit`
+4. `TimerInit`
+5. `UptimeInit`
+6. `FsInit`
+7. `VdInit`
+8. `KbInit`
+9. `CnInit`
+10. Enter the main console loop
 
 This is the active source-of-truth sequence.
 
@@ -181,9 +183,10 @@ This is the active source-of-truth sequence.
 
 - `TimerInit` must occur before timer-backed services are used.
 - `UptimeInit` must occur after timer initialization.
+- `FsInit` must occur before filesystem services are used.
 - `VdInit` must occur before normal kernel screen output is relied on.
 - `KbInit` must occur before keyboard polling is used.
-- `CnInit` occurs after timer, video, and keyboard initialization.
+- `CnInit` occurs after timer, filesystem, video, and keyboard initialization.
 
 ### Wall-Time Initialization Behavior
 
@@ -244,6 +247,7 @@ The active command set currently includes:
 ```text
 Date
 Delay
+FsTest
 Help
 KcTest
 Shutdown
@@ -1015,8 +1019,10 @@ Current major kernel components:
 ```text
 Config.asm
 Console.asm
+Fs.asm
 Keyboard.asm
 Kc.asm
+Paging.asm
 Time.asm
 Timer.asm
 Task.asm
@@ -1028,8 +1034,10 @@ Video.asm
 Current explicit boot subsystem order:
 
 ```text
+PgInit
 TimerInit
 UptimeInit
+FsInit
 VdInit
 KbInit
 CnInit

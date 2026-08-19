@@ -90,6 +90,16 @@ The goal is not to hide that space from AsmOSx86. The goal is to stop normal
 FAT copy tools from allocating visible files into the future custom filesystem
 area.
 
+## Real Hardware Note
+
+`floppy.img` is intended to remain a standard 1.44MB FAT12 floppy image that can
+later be written sector-for-sector to a real floppy, for example with WinImage
+and a USB floppy drive.
+
+The written floppy should preserve sector 0 from `Boot1.bin`, the FAT root files
+such as `BOOT2.BIN`, `KERNEL.BIN`, and `PROG*.BIN`, and the reserved
+AsmOSx86 storage area beginning at sector `512`.
+
 ## Copying Files After Preparation
 
 `BuildWriteBoot1.ps1` only prepares the floppy image and writes `Boot1.bin`.
@@ -107,6 +117,9 @@ That script copies:
 ```text
 BOOT2.BIN
 KERNEL.BIN
+PROG1.BIN
+PROG2.BIN
+PROG3.BIN
 ```
 
 `BuildCopy.ps1` also validates that copied FAT12 files remain below sector
