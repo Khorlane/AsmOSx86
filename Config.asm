@@ -14,7 +14,7 @@
 ;   - Compile-time kernel configuration values
 ;
 ; Does Not Contain
-;   - Hardware-specific equates (belong in their subsystem modules)
+;   - Hardware port/register equates (belong in their subsystem modules)
 ;   - Local implementation constants
 ;
 ; Notes

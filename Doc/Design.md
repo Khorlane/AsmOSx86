@@ -64,7 +64,7 @@ The current kernel provides:
   - `Uptime`
   - `UserTest`
 
-At this stage, AsmOSx86 is still a single resident kernel with an integrated console. Early userland exists as raw flat binaries loaded from the FAT12 floppy and run as cooperative tasks through the kernel's task service path.
+At this stage, AsmOSx86 is still a single resident kernel with an integrated console. Early userland exists as raw flat binaries loaded from the raw `ASMF` floppy manifest and run as cooperative tasks through the kernel's task service path.
 
 ---
 
@@ -267,7 +267,7 @@ change into that folder before running them.
 ```text
 NASM      assembles flat binary files
 fsutil    creates the 1.44 MB floppy image
-ImDisk    mounts floppy.img for FAT12 file copy/inspection
+BuildCopy writes the raw ASMF manifest and packed file data
 Bochs     runs the bootable floppy image
 ```
 
@@ -595,6 +595,10 @@ KcFsClose       - Close an open file handle
 ### Filesystem — `KcFs*`
 
 For AsmOSx86, `file` means a disk-backed filesystem object. It does not mean keyboard, video, console, pipe, socket, device, or memory buffer.
+
+The current implementation is read-only and manifest-backed. `Fs.asm` opens
+files from the raw `ASMF` floppy manifest, reads file sectors through a tiny
+kernel block-device layer, and the only current block device is floppy A:.
 
 ```text
 KcFsOpen        - Open an existing disk file; return file handle
@@ -1430,8 +1434,8 @@ They are separate concepts.
 
 The OS should not care too much how a session was started.
 
-Current AsmOSx86 can already load raw userland binaries from the FAT12 floppy
-image and run multiple cooperative user tasks. The console is the current
+Current AsmOSx86 can already load raw userland binaries from the raw `ASMF`
+floppy image and run multiple cooperative user tasks. The console is the current
 operator interface to that capability.
 
 A session may eventually be started by:

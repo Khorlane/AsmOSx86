@@ -9,6 +9,7 @@
 ; Contains
 ;   - File service open/read/close
 ;   - Read-only AsmOSx86 manifest lookup
+;   - Tiny block-device routing
 ;   - Bare-bones floppy sector reads
 ;
 ; Public API
@@ -26,131 +27,159 @@
 
 [bits 32]
 
-;--------------------------------------------------------------------------------------------------
-; File Service Status Constants
-;--------------------------------------------------------------------------------------------------
-FS_STATUS_OK          equ 0
-FS_STATUS_NOT_READY   equ 1
-FS_STATUS_BAD_ARG     equ 2
-FS_STATUS_BAD_HANDLE  equ 3
-FS_STATUS_EOF         equ 4
-FS_STATUS_NOT_FOUND   equ 5
-FS_STATUS_IO_ERROR    equ 6
-FS_STATUS_NO_HANDLE   equ 7
+;**************************************************************************************************
+; Filesystem Common
+;**************************************************************************************************
+KERNEL_SECTOR_SIZE       equ 512
+KERNEL_SECTOR_SHIFT      equ 9
+FS_STATUS_OK             equ 0
+FS_STATUS_NOT_READY      equ 1
+FS_STATUS_BAD_ARG        equ 2
+FS_STATUS_BAD_HANDLE     equ 3
+FS_STATUS_EOF            equ 4
+FS_STATUS_NOT_FOUND      equ 5
+FS_STATUS_IO_ERROR       equ 6
+FS_STATUS_NO_HANDLE      equ 7
 
-;--------------------------------------------------------------------------------------------------
-; File Service Constants
-;--------------------------------------------------------------------------------------------------
-FS_MAX_HANDLES        equ 4
-FS_HANDLE_FREE        equ 0
-FS_HANDLE_OPEN        equ 1
-FS_HANDLE_STATE       equ 0
-FS_HANDLE_POSITION    equ 4
-FS_HANDLE_SIZE        equ 8
-FS_HANDLE_START_SECTOR equ 12
-FS_HANDLE_RECORD_SIZE equ 16
-FS_HANDLE_TABLE_SIZE  equ FS_MAX_HANDLES*FS_HANDLE_RECORD_SIZE
-
-FS_BYTES_PER_SECTOR   equ 512
-FS_NAME_SIZE          equ 11
-ASMFS_MANIFEST_SECTOR equ 1
-ASMFS_SIGNATURE       equ 464D5341h
-ASMFS_ENTRY_COUNT     equ 6
-ASMFS_ENTRY_OFFSET    equ 16
-ASMFS_ENTRY_SIZE      equ 32
-ASMFS_ENTRY_START_SECTOR equ 12
-ASMFS_ENTRY_BYTE_SIZE equ 16
-ASMFS_MANIFEST_BYTES  equ 512
-
-FDC_BASE              equ 03F0h
-FDC_DOR               equ FDC_BASE+2
-FDC_MSR               equ FDC_BASE+4
-FDC_DATA              equ FDC_BASE+5
-FDC_CCR               equ FDC_BASE+7
-FDC_CMD_SPECIFY       equ 03h
-FDC_CMD_RECALIBRATE   equ 07h
-FDC_CMD_SENSE_INT     equ 08h
-FDC_CMD_SEEK          equ 0Fh
-FDC_CMD_READ_DATA     equ 046h
-FDC_DOR_RESET         equ 00000100b
-FDC_DOR_DMAIRQ        equ 00001000b
-FDC_DOR_MOTOR_A       equ 00010000b
-FDC_WAIT_LIMIT        equ 100000
-FDC_DMA_BUFFER        equ 00008000h
-
-DMA_MASK              equ 00Ah
-DMA_MODE              equ 00Bh
-DMA_CLEAR             equ 00Ch
-DMA_CH2_ADDR          equ 004h
-DMA_CH2_COUNT         equ 005h
-DMA_CH2_PAGE          equ 081h
-
-;--------------------------------------------------------------------------------------------------
-; File Service Globals
-;--------------------------------------------------------------------------------------------------
 align 4
-FsStatus             dd 0              ; output: FS_STATUS_*
-pFsOpenName          dd 0              ; input: pointer to kernel Str filename
-FsOpenHandle         dd 0              ; output: opened handle, or 0
-FsOpenSize           dd 0              ; output: opened file size
-FsReadHandle         dd 0              ; input: handle to read
-pFsReadBuffer        dd 0              ; input: destination buffer
-FsReadCount          dd 0              ; input: requested bytes
-FsReadBytes          dd 0              ; output: bytes read
-FsCloseHandle        dd 0              ; input: handle to close
-FsMounted            dd 0              ; 1 once manifest is loaded
-FsHandleIndex        dd 0              ; work: current handle index
-pFsHandleRecord      dd 0              ; work/output: selected handle record
-pFsHandleClear       dd 0              ; work: handle-table clear pointer
-FsHandleClearLeft    dd 0              ; work: handle-table clear bytes left
-FsWorkCount          dd 0              ; work: generic count
-FsWorkIndex          dd 0              ; work: generic index
-FsWorkPtr            dd 0              ; work: generic pointer
-FsWorkPtr2           dd 0              ; work: generic pointer
-FsCopyLeft           dd 0              ; work: bytes left to copy
-FsCopySrc            dd 0              ; work: copy source
-FsCopyDst            dd 0              ; work: copy destination
-FsCopyCount          dd 0              ; work: copy byte count
-FsFilePosition       dd 0              ; work: current file position
-FsFileSize           dd 0              ; work: current file size
-FsFileStartSector    dd 0              ; work: first file sector
-FsSectorOffset       dd 0              ; work: offset inside sector
-FsBytesThisRead      dd 0              ; work: chunk byte count
-FsFileSectorIndex    dd 0              ; work: file-relative sector index
-FsCurrentLba         dd 0              ; input/work: current logical sector
-FsNameIndex          dd 0              ; work: filename output index
-FsNameInputLeft      dd 0              ; work: chars left in input Str
-FsNameOutputLimit    dd 0              ; work: 8 before dot, 3 after dot
-FsNameOutputBase     dd 0              ; work: output base 0 or 8
-FsNamePayload        dd 0              ; work: source payload pointer
-FsEntryLeft          dd 0              ; work: manifest entries left
-pFsEntry             dd 0              ; work/output: manifest entry pointer
-FsEntryCount         dd 0              ; manifest entry count
-FsSectorsPerTrack    dd 0              ; floppy sectors per track
-FsHeads              dd 0              ; floppy heads
-FlpDorShadow         db 0              ; DOR is write-only
-FlpCylinder          db 0              ; CHS cylinder
-FlpHead              db 0              ; CHS head
-FlpSector            db 0              ; CHS sector, 1 based
-FlpResult0           db 0
-FlpResult1           db 0
-FlpResult2           db 0
-FlpResult3           db 0
-FlpResult4           db 0
-FlpResult5           db 0
-FlpResult6           db 0
-FsName83:
-  times FS_NAME_SIZE db 0
+FsWorkCount              dd 0          ; work: generic count
+FsWorkIndex              dd 0          ; work: generic index
+FsWorkPtr                dd 0          ; work: generic pointer
+FsSectorBuffer:
+  times KERNEL_SECTOR_SIZE db 0
+
+;**************************************************************************************************
+; Filesystem Global
+;**************************************************************************************************
+FsStatus                 dd 0          ; output: FS_STATUS_*
+pFsOpenName              dd 0          ; input: pointer to kernel Str filename
+FsOpenHandle             dd 0          ; output: opened handle, or 0
+FsOpenSize               dd 0          ; output: opened file size
+FsReadHandle             dd 0          ; input: handle to read
+pFsReadBuffer            dd 0          ; input: destination buffer
+FsReadCount              dd 0          ; input: requested bytes
+FsReadBytes              dd 0          ; output: bytes read
+FsCloseHandle            dd 0          ; input: handle to close
+
+;**************************************************************************************************
+; Kernel calls
+;**************************************************************************************************
+; Kernel-call handlers live in Kc.asm. They use the Filesystem Global memory
+; contract fields above and call the File service routines below.
+
+;**************************************************************************************************
+; File service
+;**************************************************************************************************
+FS_MAX_HANDLES           equ 4
+FS_HANDLE_FREE           equ 0
+FS_HANDLE_OPEN           equ 1
+FS_HANDLE_STATE          equ 0
+FS_HANDLE_POSITION       equ 4
+FS_HANDLE_SIZE           equ 8
+FS_HANDLE_START_SECTOR   equ 12
+FS_HANDLE_RECORD_SIZE    equ 16
+FS_HANDLE_TABLE_SIZE     equ FS_MAX_HANDLES*FS_HANDLE_RECORD_SIZE
+
+FsHandleIndex            dd 0          ; work: current handle index
+pFsHandleRecord          dd 0          ; work/output: selected handle record
+pFsHandleClear           dd 0          ; work: handle-table clear pointer
+FsHandleClearLeft        dd 0          ; work: handle-table clear bytes left
+FsFilePosition           dd 0          ; work: current file position
+FsFileSize               dd 0          ; work: current file size
+FsFileStartSector        dd 0          ; work: first file sector
+FsSectorOffset           dd 0          ; work: offset inside sector
+FsBytesThisRead          dd 0          ; work: chunk byte count
+FsFileSectorIndex        dd 0          ; work: file-relative sector index
 FsHandleTable:
   times FS_HANDLE_TABLE_SIZE db 0
-FsSectorBuffer:
-  times FS_BYTES_PER_SECTOR db 0
+
+;**************************************************************************************************
+; Filesystem driver
+;**************************************************************************************************
+ASMFS_MANIFEST_SECTOR    equ 1
+ASMFS_SIGNATURE          equ 464D5341h
+ASMFS_ENTRY_COUNT        equ 6
+ASMFS_ENTRY_OFFSET       equ 16
+ASMFS_ENTRY_SIZE         equ 32
+ASMFS_ENTRY_START_SECTOR equ 12
+ASMFS_ENTRY_BYTE_SIZE    equ 16
+ASMFS_MANIFEST_BYTES     equ KERNEL_SECTOR_SIZE
+ASMFS_NAME_SIZE          equ 11
+
+FsMounted                dd 0          ; 1 once manifest is loaded
+FsNameIndex              dd 0          ; work: filename output index
+FsNameInputLeft          dd 0          ; work: chars left in input Str
+FsNameOutputLimit        dd 0          ; work: 8 before dot, 3 after dot
+FsNameOutputBase         dd 0          ; work: output base 0 or 8
+FsNamePayload            dd 0          ; work: source payload pointer
+FsEntryLeft              dd 0          ; work: manifest entries left
+pFsEntry                 dd 0          ; work/output: manifest entry pointer
+FsEntryCount             dd 0          ; manifest entry count
+FsName83:
+  times ASMFS_NAME_SIZE db 0
 FsRootBuffer:
   times ASMFS_MANIFEST_BYTES db 0
 
-;--------------------------------------------------------------------------------------------------
-; External Routines
-;--------------------------------------------------------------------------------------------------
+;**************************************************************************************************
+; Block device layer
+;**************************************************************************************************
+DEV_STATUS_OK            equ 0
+DEV_STATUS_BAD_DEVICE    equ 1
+DEV_STATUS_IO_ERROR      equ 2
+DEV_BLOCK_FLOPPY_A       equ 1
+DEV_DEFAULT_BLOCK_DEVICE equ DEV_BLOCK_FLOPPY_A
+FLOPPY_A_SECTORS         equ 2880
+
+DevStatus                dd 0          ; output: DEV_STATUS_*
+DevBlockDevice           dd 0          ; input/current block device
+DevSector                dd 0          ; input: block-device sector
+DevBuffer                dd 0          ; input: destination buffer
+
+;**************************************************************************************************
+; Device driver
+;**************************************************************************************************
+FDC_BASE                 equ 03F0h
+FDC_DOR                  equ FDC_BASE+2
+FDC_MSR                  equ FDC_BASE+4
+FDC_DATA                 equ FDC_BASE+5
+FDC_CCR                  equ FDC_BASE+7
+FDC_CMD_SPECIFY          equ 03h
+FDC_CMD_RECALIBRATE      equ 07h
+FDC_CMD_SENSE_INT        equ 08h
+FDC_CMD_SEEK             equ 0Fh
+FDC_CMD_READ_DATA        equ 046h
+FDC_DOR_RESET            equ 00000100b
+FDC_DOR_DMAIRQ           equ 00001000b
+FDC_DOR_MOTOR_A          equ 00010000b
+FDC_WAIT_LIMIT           equ 100000
+FDC_DMA_BUFFER           equ 00008000h
+FLOPPY_SECTORS_PER_TRACK equ 18
+FLOPPY_HEADS             equ 2
+DMA_MASK                 equ 00Ah
+DMA_MODE                 equ 00Bh
+DMA_CLEAR                equ 00Ch
+DMA_CH2_ADDR             equ 004h
+DMA_CH2_COUNT            equ 005h
+DMA_CH2_PAGE             equ 081h
+
+FsCurrentLba             dd 0          ; input/work: current logical sector
+FsSectorsPerTrack        dd 0          ; floppy sectors per track
+FsHeads                  dd 0          ; floppy heads
+FlpDorShadow             db 0          ; DOR is write-only
+FlpCylinder              db 0          ; CHS cylinder
+FlpHead                  db 0          ; CHS head
+FlpSector                db 0          ; CHS sector, 1 based
+FlpResult0               db 0
+FlpResult1               db 0
+FlpResult2               db 0
+FlpResult3               db 0
+FlpResult4               db 0
+FlpResult5               db 0
+FlpResult6               db 0
+
+;**************************************************************************************************
+; File service
+;**************************************************************************************************
 
 ;--------------------------------------------------------------------------------------------------
 ; FsInit
@@ -159,8 +188,8 @@ FsRootBuffer:
 ;--------------------------------------------------------------------------------------------------
 FsInit:
   mov   dword[FsMounted],0
-  mov   dword[FsSectorsPerTrack],18
-  mov   dword[FsHeads],2
+  mov   dword[FsSectorsPerTrack],FLOPPY_SECTORS_PER_TRACK
+  mov   dword[FsHeads],FLOPPY_HEADS
   mov   eax,FsHandleTable
   mov   [pFsHandleClear],eax
   mov   dword[FsHandleClearLeft],FS_HANDLE_TABLE_SIZE
@@ -176,7 +205,7 @@ FsInit1:
   mov   [FsHandleClearLeft],eax
   jmp   FsInit1
 FsInit2:
-  call  FloppyInit
+  call  DevInit
   mov   dword[FsStatus],FS_STATUS_OK
   ret
 
@@ -276,9 +305,9 @@ FsReadLoop:
   cmp   eax,[FsFileSize]
   jae   FsReadEof
   mov   eax,[FsFilePosition]
-  and   eax,FS_BYTES_PER_SECTOR-1
+  and   eax,KERNEL_SECTOR_SIZE-1
   mov   [FsSectorOffset],eax
-  mov   ebx,FS_BYTES_PER_SECTOR
+  mov   ebx,KERNEL_SECTOR_SIZE
   sub   ebx,eax
   mov   [FsBytesThisRead],ebx
   mov   eax,[FsReadCount]
@@ -293,11 +322,12 @@ FsRead1:
   mov   [FsBytesThisRead],eax
 FsRead2:
   mov   eax,[FsFilePosition]
-  shr   eax,9
+  shr   eax,KERNEL_SECTOR_SHIFT
   mov   [FsFileSectorIndex],eax
   add   eax,[FsFileStartSector]
-  mov   [FsCurrentLba],eax
-  call  FloppyReadSector
+  mov   [DevSector],eax
+  mov   dword[DevBuffer],FsSectorBuffer
+  call  DevReadSector
   mov   eax,[FsStatus]
   cmp   eax,FS_STATUS_OK
   jne   FsReadDone
@@ -360,10 +390,6 @@ FsCloseDone:
   ret
 
 ;--------------------------------------------------------------------------------------------------
-; Internal Routines
-;--------------------------------------------------------------------------------------------------
-
-;--------------------------------------------------------------------------------------------------
 ; FsGetHandleRecord
 ;   Input:
 ;     FsHandleIndex = zero-based handle index.
@@ -416,13 +442,13 @@ FsFindFreeHandle3:
   mov   dword[FsStatus],FS_STATUS_OK
   ret
 
-;--------------------------------------------------------------------------------------------------
-; AsmOSx86 Manifest Filesystem
-;--------------------------------------------------------------------------------------------------
+;**************************************************************************************************
+; Filesystem driver
+;**************************************************************************************************
 AsmFsMount:
-  mov   dword[FsCurrentLba],ASMFS_MANIFEST_SECTOR
-  mov   dword[FsWorkPtr],FsRootBuffer
-  call  FloppyReadSectorTo
+  mov   dword[DevSector],ASMFS_MANIFEST_SECTOR
+  mov   dword[DevBuffer],FsRootBuffer
+  call  DevReadSector
   mov   eax,[FsStatus]
   cmp   eax,FS_STATUS_OK
   jne   AsmFsMountDone
@@ -441,7 +467,7 @@ AsmFsMountDone:
 
 AsmFsMakeName83:
   mov   edi,FsName83
-  mov   ecx,FS_NAME_SIZE
+  mov   ecx,ASMFS_NAME_SIZE
 AsmFsMakeName831:
   mov   byte[edi],' '
   inc   edi
@@ -503,7 +529,7 @@ AsmFsFindEntry1:
   jz    AsmFsFindEntryNotFound
   mov   edi,[pFsEntry]
   mov   esi,FsName83
-  mov   ecx,FS_NAME_SIZE
+  mov   ecx,ASMFS_NAME_SIZE
 AsmFsFindEntryCmp:
   mov   al,[esi]
   cmp   al,[edi]
@@ -523,9 +549,60 @@ AsmFsFindEntryNotFound:
   mov   dword[FsStatus],FS_STATUS_NOT_FOUND
   ret
 
+;**************************************************************************************************
+; Block device layer
+;**************************************************************************************************
+
 ;--------------------------------------------------------------------------------------------------
-; Floppy Block Device
+; DevInit
+;   Output:
+;     DevStatus = DEV_STATUS_OK
 ;--------------------------------------------------------------------------------------------------
+DevInit:
+  mov   dword[DevBlockDevice],DEV_DEFAULT_BLOCK_DEVICE
+  call  FloppyInit
+  mov   dword[DevStatus],DEV_STATUS_OK
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; DevReadSector
+;   Input:
+;     DevBlockDevice = block device id.
+;     DevSector      = sector to read.
+;     DevBuffer      = destination buffer.
+;   Output:
+;     DevStatus = DEV_STATUS_*
+;     FsStatus  = FS_STATUS_*
+;--------------------------------------------------------------------------------------------------
+DevReadSector:
+  mov   eax,[DevBlockDevice]
+  cmp   eax,DEV_BLOCK_FLOPPY_A
+  jne   DevReadSectorBadDevice
+  mov   eax,[DevSector]
+  cmp   eax,FLOPPY_A_SECTORS
+  jae   DevReadSectorIoError
+  mov   [FsCurrentLba],eax
+  mov   eax,[DevBuffer]
+  mov   [FsWorkPtr],eax
+  call  FloppyReadSectorTo
+  mov   eax,[FsStatus]
+  cmp   eax,FS_STATUS_OK
+  jne   DevReadSectorIoError
+  mov   dword[DevStatus],DEV_STATUS_OK
+  mov   dword[FsStatus],FS_STATUS_OK
+  ret
+DevReadSectorBadDevice:
+  mov   dword[DevStatus],DEV_STATUS_BAD_DEVICE
+  mov   dword[FsStatus],FS_STATUS_NOT_READY
+  ret
+DevReadSectorIoError:
+  mov   dword[DevStatus],DEV_STATUS_IO_ERROR
+  mov   dword[FsStatus],FS_STATUS_IO_ERROR
+  ret
+
+;**************************************************************************************************
+; Device driver
+;**************************************************************************************************
 FloppyInit:
   mov   al,FDC_DOR_RESET | FDC_DOR_DMAIRQ
   mov   [FlpDorShadow],al
@@ -535,11 +612,6 @@ FloppyInit:
   xor   al,al
   out   dx,al
   call  FloppySpecify
-  ret
-
-FloppyReadSector:
-  mov   dword[FsWorkPtr],FsSectorBuffer
-  call  FloppyReadSectorTo
   ret
 
 FloppyReadSectorTo:
@@ -553,7 +625,7 @@ FloppyReadSectorTo:
   jne   FloppyReadSectorToDone
   mov   esi,FDC_DMA_BUFFER
   mov   edi,[FsWorkPtr]
-  mov   ecx,FS_BYTES_PER_SECTOR
+  mov   ecx,KERNEL_SECTOR_SIZE
   rep   movsb
   mov   dword[FsStatus],FS_STATUS_OK
 FloppyReadSectorToDone:
@@ -565,7 +637,7 @@ FloppyLbaToChs:
   mov   ebx,[FsSectorsPerTrack]
   test  ebx,ebx
   jnz   FloppyLbaToChs1
-  mov   ebx,18
+  mov   ebx,FLOPPY_SECTORS_PER_TRACK
 FloppyLbaToChs1:
   div   ebx
   inc   dl
@@ -574,7 +646,7 @@ FloppyLbaToChs1:
   mov   ebx,[FsHeads]
   test  ebx,ebx
   jnz   FloppyLbaToChs2
-  mov   ebx,2
+  mov   ebx,FLOPPY_HEADS
 FloppyLbaToChs2:
   div   ebx
   mov   [FlpHead],dl
@@ -636,7 +708,7 @@ FloppyCommandRead:
   call  FloppyWriteByte
   mov   al,2
   call  FloppyWriteByte
-  mov   al,18
+  mov   al,FLOPPY_SECTORS_PER_TRACK
   call  FloppyWriteByte
   mov   al,01Bh
   call  FloppyWriteByte
