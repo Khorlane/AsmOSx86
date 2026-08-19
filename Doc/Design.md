@@ -1591,18 +1591,15 @@ come later.
 
 ---
 
-## 23. Non-Goals For Now
+## 23. Out of Scope For Now
 
 AsmOSx86 does not need these immediately:
 
 ```text
-ring 3 enforcement
-full read/write filesystem
-ELF loader
-dynamic linker
+filesystem
+device model
+privilege separation
 preemptive scheduler
-user/kernel privilege separation
-advanced device model
 ```
 
 Those can come later.
