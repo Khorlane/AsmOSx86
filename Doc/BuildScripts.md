@@ -1,0 +1,328 @@
+# Build Scripts
+
+AsmOSx86 build and run helpers live in `Scripts`. The normal workflow assumes the
+terminal is already in the `Scripts` folder before running a script.
+
+Most scripts pause before exiting when run interactively. A few lower-level build
+scripts accept `noexit` so wrapper scripts can call them without stopping.
+
+## Common Workflows
+
+### Rebuild Kernel and Run
+
+Use this after changing protected-mode kernel code when `Boot1.bin`,
+`Boot2.bin`, and `floppy.img` are already valid.
+
+```powershell
+.\BuildKernelAndRun.ps1
+```
+
+This runs:
+
+```text
+BuildKernel.ps1 noexit
+BuildCopy.ps1
+Bochs
+```
+
+### Rebuild Boot2, Kernel, and Run
+
+Use this after changing `Boot2.asm` or kernel code when `Boot1.bin` and
+`floppy.img` are already valid.
+
+```powershell
+.\BuildBoot2KernelAndRun.ps1
+```
+
+This runs:
+
+```text
+BuildBoot2.ps1 noexit
+BuildKernel.ps1 noexit
+BuildCopy.ps1
+Bochs
+```
+
+### Run Existing Image
+
+Use this when `floppy.img` has already been prepared and populated.
+
+```powershell
+.\AsmOSx86Run.ps1
+```
+
+This does not rebuild or copy files. It only launches Bochs with
+`AsmOSx86.bxrc`.
+
+### Prepare Floppy From Scratch
+
+Use this after changing `Boot1.asm`, after needing a clean floppy image, or after
+changing the FAT/private-storage layout.
+
+```powershell
+.\BuildBoot1.ps1
+.\BuildWriteBoot1.ps1
+.\BuildBoot2.ps1
+.\BuildKernel.ps1
+.\BuildPrograms.ps1
+.\BuildCopy.ps1
+.\AsmOSx86Run.ps1
+```
+
+`BuildWriteBoot1.ps1` recreates `floppy.img`, so anything previously copied into
+the image is removed.
+
+## Script Reference
+
+### AsmOSx86Run.ps1
+
+Launches AsmOSx86 in Bochs.
+
+Inputs:
+
+- `AsmOSx86.bxrc`
+- `floppy.img`
+- Bochs at `C:\Program Files\Bochs-3.0\bochs.exe`
+
+Output:
+
+- Starts Bochs using the current `floppy.img`
+
+Notes:
+
+- Exit code `1` from Bochs is treated as an acceptable user power-off.
+- Does not rebuild or copy anything.
+
+### BuildBoot1.ps1
+
+Assembles the stage 1 boot sector.
+
+Inputs:
+
+- `Boot1.asm`
+
+Outputs:
+
+- `Boot1.bin`
+- `Boot1.lst`
+
+Command:
+
+```text
+nasm -f bin Boot1.asm -o Boot1.bin -l Boot1.lst
+```
+
+Notes:
+
+- Deletes old `Boot1.bin` and `Boot1.lst` before assembling.
+- `Boot1.bin` must be exactly 512 bytes before `BuildWriteBoot1.ps1` can use it.
+
+### BuildBoot2.ps1
+
+Assembles the stage 2 boot loader.
+
+Inputs:
+
+- `Boot2.asm`
+
+Outputs:
+
+- `Boot2.bin`
+- `Boot2.lst`
+
+Command:
+
+```text
+nasm -f bin Boot2.asm -o Boot2.bin -l Boot2.lst
+```
+
+Arguments:
+
+- `noexit`: skip the ending pause for wrapper scripts.
+- `exit`: exit after completion for legacy behavior.
+
+### BuildBoot2KernelAndRun.ps1
+
+Wrapper script for rebuilding Boot2 and the kernel, copying files to the floppy,
+and launching Bochs.
+
+Runs:
+
+- `BuildBoot2.ps1 noexit`
+- `BuildKernel.ps1 noexit`
+- `BuildCopy.ps1`
+- Bochs
+
+Use this when `Boot2.asm` or kernel code changed, but `Boot1.bin` and the
+prepared `floppy.img` are already valid.
+
+### BuildCopy.ps1
+
+Copies boot/runtime files into the FAT12 filesystem on `floppy.img`.
+
+Required inputs:
+
+- `floppy.img`
+- `Boot2.bin`
+- `Kernel.bin`
+
+Optional inputs:
+
+- `Prog1.bin`
+- `Prog2.bin`
+- `Prog3.bin`
+
+Copies to the FAT12 root:
+
+- `BOOT2.BIN`
+- `KERNEL.BIN`
+- `PROG1.BIN`, `PROG2.BIN`, `PROG3.BIN` when present
+
+Also removes stale `PROG1.EXE`, `PROG2.EXE`, and `PROG3.EXE` files from the
+image if they exist.
+
+Validation:
+
+- Verifies `BOOT2.BIN` and `KERNEL.BIN` exist after copy.
+- Reads `floppy.img` after unmounting.
+- Walks each copied file's FAT12 cluster chain.
+- Fails if any copied file uses sector `512` or higher.
+
+Notes:
+
+- Uses ImDisk and the first free drive letter.
+- The sector-boundary check protects the custom AsmOSx86 storage area.
+
+### BuildFloppyDelAll.ps1
+
+Deletes all files from the mounted FAT12 root of `floppy.img`.
+
+Inputs:
+
+- `floppy.img`
+
+Behavior:
+
+- Prompts for confirmation.
+- Mounts `floppy.img` as `A:`.
+- Deletes all files in the FAT12 root.
+- Shows the directory after deletion.
+- Unmounts the image.
+
+Use with care. It removes FAT-visible files, but it does not recreate or format
+the image.
+
+### BuildFloppyDir.ps1
+
+Shows the FAT12 directory contents of `floppy.img`.
+
+Inputs:
+
+- `floppy.img`
+
+Behavior:
+
+- Mounts `floppy.img` read-only as `A:`.
+- Runs a directory listing.
+- Unmounts the image.
+
+### BuildKernel.ps1
+
+Assembles the protected-mode kernel.
+
+Inputs:
+
+- `Kernel.asm`
+- all assembly modules included by `Kernel.asm`
+
+Outputs:
+
+- `Kernel.bin`
+- `Kernel.lst`
+
+Command:
+
+```text
+nasm -f bin Kernel.asm -o Kernel.bin -l Kernel.lst
+```
+
+Arguments:
+
+- `noexit`: skip the ending pause for wrapper scripts.
+- `exit`: exit after completion for legacy behavior.
+
+### BuildKernelAndRun.ps1
+
+Wrapper script for rebuilding the kernel, copying files to the floppy, and
+launching Bochs.
+
+Runs:
+
+- `BuildKernel.ps1 noexit`
+- `BuildCopy.ps1`
+- Bochs
+
+Use this for the usual kernel edit/test loop.
+
+### BuildPrograms.ps1
+
+Assembles the current user-program smoke-test binaries.
+
+Inputs:
+
+- `Prog1.asm`
+- `Prog2.asm`
+- `Prog3.asm`
+
+Outputs:
+
+- `Prog1.bin`
+- `Prog1.lst`
+- `Prog2.bin`
+- `Prog2.lst`
+- `Prog3.bin`
+- `Prog3.lst`
+
+Commands:
+
+```text
+nasm -f bin Prog1.asm -o Prog1.bin -l Prog1.lst
+nasm -f bin Prog2.asm -o Prog2.bin -l Prog2.lst
+nasm -f bin Prog3.asm -o Prog3.bin -l Prog3.lst
+```
+
+Notes:
+
+- User programs are raw flat binaries.
+- They are assembled for the fixed virtual base used by the kernel's paging
+  setup.
+- There is no ASMX wrapping or relocation step in the current build path.
+
+### BuildWriteBoot1.ps1
+
+Creates and prepares `floppy.img` from scratch.
+
+Inputs:
+
+- `Boot1.bin`
+
+Outputs:
+
+- fresh `floppy.img`
+
+Behavior:
+
+- Verifies `Boot1.bin` exists and is exactly 512 bytes.
+- Deletes and recreates `floppy.img` as a 1.44MB image.
+- Mounts the image through ImDisk.
+- Formats it as FAT.
+- Marks sectors `512-2879` as bad FAT12 clusters in both FAT copies.
+- Writes `Boot1.bin` to sector 0.
+- Verifies the `55 AA` boot signature.
+
+Notes:
+
+- Formatting recreates the FAT, so the custom-area reservation happens after
+  format.
+- The FAT-visible area is intended to stay below sector `512`.
+- Sectors `512-2879` are reserved for future AsmOSx86 custom storage.
