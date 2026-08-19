@@ -196,22 +196,6 @@ Notes:
 - Does not copy files through FAT12.
 - Packs file bodies contiguously and pads each file to a whole sector.
 
-### BuildFloppyDelAll.ps1
-
-Legacy FAT-era helper. It attempts to mount `floppy.img` as FAT and delete the
-visible files.
-
-The current `floppy.img` is a raw AsmOSx86 image, not a FAT12 image, so this
-script is not part of the normal workflow.
-
-### BuildFloppyDir.ps1
-
-Legacy FAT-era helper. It attempts to mount `floppy.img` as FAT and show a
-directory listing.
-
-The current `floppy.img` is a raw AsmOSx86 image, not a FAT12 image, so this
-script is not part of the normal workflow.
-
 ### BuildKernel.ps1
 
 Assembles the protected-mode kernel.
