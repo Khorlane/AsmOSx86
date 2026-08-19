@@ -101,19 +101,6 @@ WaitOutput:
 ;--------------------------------------------------------------------------------------------------
 ; Floppy Driver Routines
 ;--------------------------------------------------------------------------------------------------
-;------------------------------------------
-; Convert CHS to LBA
-; LBA = (cluster - 2) * sectors per cluster
-;------------------------------------------
-[bits 16]
-ClusterLBA:
-    sub   ax,0002h                      ; Zero base cluster number
-    xor   cx,cx                         ; Put Sectors per
-    mov   cl,byte [SectorsPerCluster]   ;  cluster in cx
-    mul   cx                            ; ax = ax * sectors per cluster  
-    add   ax,word [DataSector]          ; ax = ax + data sector
-    ret
-
 ;---------------------------------------------------------------------------
 ; Convert LBA to CHS
 ; AX = LBA Address to convert
@@ -173,174 +160,92 @@ ReadSector2:
     loop  ReadSector                    ; Read next sector
     ret
 
-;------------------------------------
-; Load Root Directory Table to 07E00h
-;------------------------------------
+;----------------------------------
+; Load AsmOSx86 manifest to 02E0:0
+;----------------------------------
 [bits 16]
-LoadRootDir:
-    pusha                               ; Store registers
+LoadManifest:
     push  es
-    ; compute size of root directory and store in "CX"
-    xor   cx,cx                         ; Clear registers
-    xor   dx,dx
-    mov   ax,32                         ; 32 byte directory entry
-    mul   word [RootEntries]            ; Total size of directory
-    div   word [BytesPerSector]         ; Sectors used by directory
-    xchg  ax,cx                         ; Move into AX
-    ; compute location of root directory and store in "AX"
-    mov   al,byte [NumberOfFATs]        ; Number of FATs
-    mul   word [SectorsPerFAT]          ; Sectors used by FATs
-    add   ax,word [ReservedSectors]
-    mov   word [DataSector],ax          ; Base of root directory
-    add   word [DataSector],cx
-    ; read root directory into 07E00h
-    push  word RootSegment
-    pop   es
-    mov   bx,0                          ; Copy root dir
-    call  ReadSector                    ; Read in directory table
-    pop   es
-    popa                                ; Restore registers and return
-    ret
-
-;-----------------------------
-; Loads FAT table to 07C00h
-; ES:DI = Root Directory Table
-;-----------------------------
-[bits 16]
-LoadFAT:
-    pusha                               ; Store registers
-    push  es
-    ; compute size of FAT and store in "CX"
-    xor   ax,ax
-    mov   al,byte [NumberOfFATs]        ; Number of FATs
-    mul   word [SectorsPerFAT]          ; Sectors used by FATs
-    mov   cx,ax
-    ; compute location of FAT and store in "ax"
-    mov   ax,word [ReservedSectors]
-    ; read FAT into memory (Overwrite our bootloader at 07C00h)
-    push  word FatSegment
+    push  word ManifestSegment
     pop   es
     xor   bx,bx
-    call  ReadSector 
+    mov   ax,MANIFEST_SECTOR
+    mov   cx,1
+    call  ReadSector
     pop   es
-    popa                                ; Restore registers and return
     ret
 
-;----------------------------------------------------------------
-; Search for filename in root table
+;------------------------------------------------------
+; Search for filename in the AsmOSx86 manifest
 ; parm DS:SI = File name
-; ret  AX    = File index number in directory table. -1 if error
-;----------------------------------------------------------------
+; ret  AX    = -1 on error, 0 on success
+; ret  DI    = matching manifest entry
+;------------------------------------------------------
 [bits 16]
 FindFile:
-    push  cx                            ; Store registers
-    push  dx
-    push  bx
-    mov   bx,si                         ; Copy filename for later
-    ; browse root directory for binary image
-    mov   cx,word [RootEntries]         ; Load loop counter
-    mov   di,RootOffset                 ; Locate first root entry at 1 MB mark
-    cld                                 ; Clear direction flag
+    cmp   dword [ManifestOffset],MANIFEST_SIGNATURE
+    jne   FindFileNotFound
+    mov   bx,si
+    mov   di,ManifestOffset+MANIFEST_ENTRY_OFFSET
+    mov   cx,[ManifestOffset+MANIFEST_ENTRY_COUNT]
+    cld
 FindFile1:
-    push  cx
-    mov   cx,11                         ; Eleven character name. Image name is in SI
-    mov   si,bx                         ; Image name is in BX
-    push  di
-    rep   cmpsb                         ; Test for entry match
-    pop   di
-    je    FindFile2
-    pop   cx
-    add   di,32                         ; Queue next directory entry
+    mov   [FileEntryPtr],di
+    mov   si,bx
+    mov   dx,11
+FindFileCmp:
+    mov   al,[si]
+    cmp   al,[di]
+    jne   FindFileNext
+    inc   si
+    inc   di
+    dec   dx
+    jnz   FindFileCmp
+    mov   di,[FileEntryPtr]
+    xor   ax,ax
+    ret
+FindFileNext:
+    mov   di,[FileEntryPtr]
+    add   di,MANIFEST_ENTRY_SIZE
     loop  FindFile1
-    ; Not Found
-    pop   bx                            ; Restore registers and return
-    pop   dx
-    pop   cx
+FindFileNotFound:
     mov   ax,-1                         ; Set error code
     ret
-FindFile2:
-    pop   ax                            ; Return value into AX contains entry of file
-    pop   bx                            ; Restore registers and return
-    pop   dx
-    pop   cx
-    ret
 
-;-----------------------------------------
+;-------------------------------------------
 ; Load file
-; parm ES:SI  = File to load
-; parm EBX:BP = Buffer to load file to
+; parm DS:SI = File to load
+; parm BX:BP = Buffer to load file to
 ; ret  AX     = -1 on error, 0 on success
 ; ret  CX     = number of sectors read
-;-----------------------------------------
+;-------------------------------------------
 [bits 16]
 LoadFile:
-    xor   cx,cx                         ; Size of file in sectors
-    push  cx
-    push  bx                            ; BX => BP points to buffer to write to; store it for later
-    push  bp
-    call  FindFile                      ; Find our file. ES:SI contains our filename
+    mov   [LoadSegment],bx
+    mov   [LoadOffset],bp
+    call  FindFile
     cmp   ax,-1
     jne   LoadFile1
-    ; failed to find file
-    pop   bp
-    pop   bx
-    pop   cx
     mov   ax,-1
     ret
 LoadFile1:
-    sub   di,RootOffset
-    sub   ax,RootOffset
-    ; get starting cluster
-    push  word RootSegment              ; Root segment loc
-    pop   es
-    mov   dx,word [es:di + 0001Ah]      ; DI points to file entry in root directory table. Refrence the table...
-    mov   word [Cluster],dx             ; File's first cluster
-    pop   bx                            ; Get location to write to so we dont screw up the stack
-    pop   es
-    push  bx                            ; Store location for later again
-    push  es
-    call  LoadFAT
-LoadFile2:
-    ; load the cluster
-    mov   ax,word [Cluster]             ; Cluster to read
-    pop   es                            ; bx:bp=es:bx
-    pop   bx
-    call  ClusterLBA
-    xor   cx,cx
-    mov   cl,byte [SectorsPerCluster]
-    call  ReadSector 
-    pop   cx
-    inc   cx                            ; Add one more sector to counter
-    push  cx
-    push  bx
-    push  es
-    mov   ax,FatSegment                 ; Start reading from fat
+    mov   ax,[di+MANIFEST_ENTRY_START_SECTOR]
+    mov   [FileStartSector],ax
+    mov   ax,[di+MANIFEST_ENTRY_SECTOR_COUNT]
+    mov   [FileSectorCount],ax
+    test  ax,ax
+    jz    LoadFileBad
+    mov   ax,[LoadSegment]
     mov   es,ax
-    xor   bx,bx
-    ; get next cluster
-    mov   ax,word [Cluster]             ; Identify current cluster
-    mov   cx,ax                         ; Copy current cluster
-    mov   dx,ax
-    shr   dx,0001h                      ; Divide by two
-    add   cx,dx                         ; Sum for (3/2)
-    mov   bx,0                          ; Location of fat in memory
-    add   bx,cx
-    mov   dx,word [es:bx]
-    test  ax,0001h                      ; Test for odd or even cluster
-    jnz   LoadFile3
-    and   dx,0000111111111111b          ; Even cluster - take low 12 bits
-    jmp   LoadFile4
-LoadFile3:
-    shr   dx,0004h                      ; Odd cluster  - take high 12 bits
-LoadFile4:
-    mov   word [Cluster],dx
-    cmp   dx,0FF0h                      ; Test for end of file marker
-    jb    LoadFile2
-    ; We're done
-    pop   es
-    pop   bx
-    pop   cx
+    mov   bx,[LoadOffset]
+    mov   ax,[FileStartSector]
+    mov   cx,[FileSectorCount]
+    call  ReadSector
+    mov   cx,[FileSectorCount]
     xor   ax,ax
+    ret
+LoadFileBad:
+    mov   ax,-1
     ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -387,7 +292,7 @@ Main:
     ;----------------------
     ; Initialize filesystem
     ;----------------------
-    call  LoadRootDir                   ; Load root directory table
+    call  LoadManifest                  ; Load raw image file manifest
 
     ;----------------------
     ; Read Stage3 from disk
@@ -512,11 +417,17 @@ GDT2:
 ;--------------------------------------------------------------------------------------------------
 ; Working Storage
 ;--------------------------------------------------------------------------------------------------
-FatSegment            equ 2C0h
+MANIFEST_SECTOR       equ 1
+MANIFEST_SIGNATURE    equ 464D5341h
+MANIFEST_ENTRY_COUNT  equ 6
+MANIFEST_ENTRY_OFFSET equ 16
+MANIFEST_ENTRY_SIZE   equ 32
+MANIFEST_ENTRY_START_SECTOR equ 12
+MANIFEST_ENTRY_SECTOR_COUNT equ 20
+ManifestOffset        equ 2E00h
+ManifestSegment       equ 2E0h
 PModeBase             equ 100000h       ; where the kernel is to be loaded to in protected mode
 RModeBase             equ 3000h         ; where the kernel is to be loaded to in real mode
-RootOffset            equ 2E00h
-RootSegment           equ 2E0h
 
 LoadingMsg            db  0Dh
                       db  0Ah
@@ -541,15 +452,13 @@ AbsoluteHead          db  00h
 AbsoluteSector        db  00h
 AbsoluteTrack         db  00h
 BytesPerSector        dw  512
-Cluster               dw  0000h
-DataSector            dw  0000h
 DriveNumber           db  0
+FileEntryPtr          dw  0
+FileStartSector       dw  0
+FileSectorCount       dw  0
 HeadsPerCylinder      dw  2
+LoadOffset            dw  0
+LoadSegment           dw  0
 Stage3Name            db  "KERNEL  BIN" ; kernel name (Must be 11 bytes)
 Stage3Size            dw  0             ; size of kernel image in sectors
-NumberOfFATs          db  2
-ReservedSectors       dw  1
-RootEntries           dw  224
-SectorsPerCluster     db  1
-SectorsPerFAT         dw  9
 SectorsPerTrack       dw  18

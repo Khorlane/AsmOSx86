@@ -8,7 +8,7 @@
 ;
 ; Contains
 ;   - File service open/read/close
-;   - Read-only FAT12 root-directory lookup
+;   - Read-only AsmOSx86 manifest lookup
 ;   - Bare-bones floppy sector reads
 ;
 ; Public API
@@ -19,9 +19,9 @@
 ;
 ; Notes
 ;   - This is intentionally simple and optimistic.
-;   - It assumes a 1.44MB FAT12 floppy in drive A:.
+;   - It assumes a 1.44MB AsmOSx86 raw floppy image in drive A:.
 ;   - It uses a low-memory DMA bounce buffer at 00008000h.
-;   - FAT12 and floppy routines are internal implementation details.
+;   - Manifest and floppy routines are internal implementation details.
 ;**************************************************************************************************
 
 [bits 32]
@@ -47,16 +47,20 @@ FS_HANDLE_OPEN        equ 1
 FS_HANDLE_STATE       equ 0
 FS_HANDLE_POSITION    equ 4
 FS_HANDLE_SIZE        equ 8
-FS_HANDLE_CLUSTER     equ 12
+FS_HANDLE_START_SECTOR equ 12
 FS_HANDLE_RECORD_SIZE equ 16
 FS_HANDLE_TABLE_SIZE  equ FS_MAX_HANDLES*FS_HANDLE_RECORD_SIZE
 
-FAT12_BYTES_PER_SECTOR equ 512
-FAT12_ROOT_ENTRY_SIZE  equ 32
-FAT12_NAME_SIZE        equ 11
-FAT12_ROOT_MAX_BYTES   equ 7168
-FAT12_FAT_MAX_BYTES    equ 4608
-FAT12_EOC              equ 0FF0h
+FS_BYTES_PER_SECTOR   equ 512
+FS_NAME_SIZE          equ 11
+ASMFS_MANIFEST_SECTOR equ 1
+ASMFS_SIGNATURE       equ 464D5341h
+ASMFS_ENTRY_COUNT     equ 6
+ASMFS_ENTRY_OFFSET    equ 16
+ASMFS_ENTRY_SIZE      equ 32
+ASMFS_ENTRY_START_SECTOR equ 12
+ASMFS_ENTRY_BYTE_SIZE equ 16
+ASMFS_MANIFEST_BYTES  equ 512
 
 FDC_BASE              equ 03F0h
 FDC_DOR               equ FDC_BASE+2
@@ -94,7 +98,7 @@ pFsReadBuffer        dd 0              ; input: destination buffer
 FsReadCount          dd 0              ; input: requested bytes
 FsReadBytes          dd 0              ; output: bytes read
 FsCloseHandle        dd 0              ; input: handle to close
-FsMounted            dd 0              ; 1 once FAT/root are loaded
+FsMounted            dd 0              ; 1 once manifest is loaded
 FsHandleIndex        dd 0              ; work: current handle index
 pFsHandleRecord      dd 0              ; work/output: selected handle record
 pFsHandleClear       dd 0              ; work: handle-table clear pointer
@@ -109,27 +113,19 @@ FsCopyDst            dd 0              ; work: copy destination
 FsCopyCount          dd 0              ; work: copy byte count
 FsFilePosition       dd 0              ; work: current file position
 FsFileSize           dd 0              ; work: current file size
-FsFileCluster        dd 0              ; work: first/current file cluster
+FsFileStartSector    dd 0              ; work: first file sector
 FsSectorOffset       dd 0              ; work: offset inside sector
 FsBytesThisRead      dd 0              ; work: chunk byte count
 FsFileSectorIndex    dd 0              ; work: file-relative sector index
-FsCurrentCluster     dd 0              ; work/output: cluster for sector index
 FsCurrentLba         dd 0              ; input/work: current logical sector
 FsNameIndex          dd 0              ; work: filename output index
 FsNameInputLeft      dd 0              ; work: chars left in input Str
 FsNameOutputLimit    dd 0              ; work: 8 before dot, 3 after dot
 FsNameOutputBase     dd 0              ; work: output base 0 or 8
 FsNamePayload        dd 0              ; work: source payload pointer
-FsFatOffset          dd 0              ; work: FAT entry byte offset
-FsRootEntryLeft      dd 0              ; work: root entries left
-pFsRootEntry         dd 0              ; work/output: root entry pointer
-FsRootStartLba       dd 0              ; FAT12 root-directory start LBA
-FsRootSectors        dd 0              ; FAT12 root-directory sectors
-FsFatStartLba        dd 0              ; FAT12 FAT start LBA
-FsFatSectors         dd 0              ; FAT12 sectors per FAT
-FsDataStartLba       dd 0              ; FAT12 first data-sector LBA
-FsRootEntries        dd 0              ; FAT12 max root entries
-FsSectorsPerCluster  dd 0              ; FAT12 sectors per cluster
+FsEntryLeft          dd 0              ; work: manifest entries left
+pFsEntry             dd 0              ; work/output: manifest entry pointer
+FsEntryCount         dd 0              ; manifest entry count
 FsSectorsPerTrack    dd 0              ; floppy sectors per track
 FsHeads              dd 0              ; floppy heads
 FlpDorShadow         db 0              ; DOR is write-only
@@ -144,15 +140,13 @@ FlpResult4           db 0
 FlpResult5           db 0
 FlpResult6           db 0
 FsName83:
-  times FAT12_NAME_SIZE db 0
+  times FS_NAME_SIZE db 0
 FsHandleTable:
   times FS_HANDLE_TABLE_SIZE db 0
 FsSectorBuffer:
-  times FAT12_BYTES_PER_SECTOR db 0
-FsFatBuffer:
-  times FAT12_FAT_MAX_BYTES db 0
+  times FS_BYTES_PER_SECTOR db 0
 FsRootBuffer:
-  times FAT12_ROOT_MAX_BYTES db 0
+  times ASMFS_MANIFEST_BYTES db 0
 
 ;--------------------------------------------------------------------------------------------------
 ; External Routines
@@ -165,6 +159,8 @@ FsRootBuffer:
 ;--------------------------------------------------------------------------------------------------
 FsInit:
   mov   dword[FsMounted],0
+  mov   dword[FsSectorsPerTrack],18
+  mov   dword[FsHeads],2
   mov   eax,FsHandleTable
   mov   [pFsHandleClear],eax
   mov   dword[FsHandleClearLeft],FS_HANDLE_TABLE_SIZE
@@ -198,19 +194,19 @@ FsOpen:
   mov   eax,[pFsOpenName]
   test  eax,eax
   jz    FsOpenBadArg
-  call  Fat12MakeName83
+  call  AsmFsMakeName83
   mov   eax,[FsStatus]
   cmp   eax,FS_STATUS_OK
   jne   FsOpenDone
   mov   eax,[FsMounted]
   test  eax,eax
   jnz   FsOpen1
-  call  Fat12Mount
+  call  AsmFsMount
   mov   eax,[FsStatus]
   cmp   eax,FS_STATUS_OK
   jne   FsOpenDone
 FsOpen1:
-  call  Fat12FindRootEntry
+  call  AsmFsFindEntry
   mov   eax,[FsStatus]
   cmp   eax,FS_STATUS_OK
   jne   FsOpenDone
@@ -221,10 +217,10 @@ FsOpen1:
   mov   edi,[pFsHandleRecord]
   mov   dword[edi+FS_HANDLE_STATE],FS_HANDLE_OPEN
   mov   dword[edi+FS_HANDLE_POSITION],0
-  mov   esi,[pFsRootEntry]
-  movzx eax,word[esi+26]
-  mov   [edi+FS_HANDLE_CLUSTER],eax
-  mov   eax,[esi+28]
+  mov   esi,[pFsEntry]
+  mov   eax,[esi+ASMFS_ENTRY_START_SECTOR]
+  mov   [edi+FS_HANDLE_START_SECTOR],eax
+  mov   eax,[esi+ASMFS_ENTRY_BYTE_SIZE]
   mov   [edi+FS_HANDLE_SIZE],eax
   mov   [FsOpenSize],eax
   mov   eax,[FsHandleIndex]
@@ -270,8 +266,8 @@ FsRead:
   mov   [FsFilePosition],eax
   mov   eax,[edi+FS_HANDLE_SIZE]
   mov   [FsFileSize],eax
-  mov   eax,[edi+FS_HANDLE_CLUSTER]
-  mov   [FsFileCluster],eax
+  mov   eax,[edi+FS_HANDLE_START_SECTOR]
+  mov   [FsFileStartSector],eax
 FsReadLoop:
   mov   eax,[FsReadCount]
   test  eax,eax
@@ -280,9 +276,9 @@ FsReadLoop:
   cmp   eax,[FsFileSize]
   jae   FsReadEof
   mov   eax,[FsFilePosition]
-  and   eax,FAT12_BYTES_PER_SECTOR-1
+  and   eax,FS_BYTES_PER_SECTOR-1
   mov   [FsSectorOffset],eax
-  mov   ebx,FAT12_BYTES_PER_SECTOR
+  mov   ebx,FS_BYTES_PER_SECTOR
   sub   ebx,eax
   mov   [FsBytesThisRead],ebx
   mov   eax,[FsReadCount]
@@ -299,11 +295,8 @@ FsRead2:
   mov   eax,[FsFilePosition]
   shr   eax,9
   mov   [FsFileSectorIndex],eax
-  call  Fat12ClusterForSector
-  mov   eax,[FsStatus]
-  cmp   eax,FS_STATUS_OK
-  jne   FsReadDone
-  call  Fat12ClusterToLba
+  add   eax,[FsFileStartSector]
+  mov   [FsCurrentLba],eax
   call  FloppyReadSector
   mov   eax,[FsStatus]
   cmp   eax,FS_STATUS_OK
@@ -361,7 +354,7 @@ FsClose:
   mov   dword[edi+FS_HANDLE_STATE],FS_HANDLE_FREE
   mov   dword[edi+FS_HANDLE_POSITION],0
   mov   dword[edi+FS_HANDLE_SIZE],0
-  mov   dword[edi+FS_HANDLE_CLUSTER],0
+  mov   dword[edi+FS_HANDLE_START_SECTOR],0
   mov   dword[FsStatus],FS_STATUS_OK
 FsCloseDone:
   ret
@@ -424,243 +417,110 @@ FsFindFreeHandle3:
   ret
 
 ;--------------------------------------------------------------------------------------------------
-; FAT12 Driver
+; AsmOSx86 Manifest Filesystem
 ;--------------------------------------------------------------------------------------------------
-Fat12Mount:
-  mov   dword[FsCurrentLba],0
-  mov   dword[FsWorkPtr],FsSectorBuffer
+AsmFsMount:
+  mov   dword[FsCurrentLba],ASMFS_MANIFEST_SECTOR
+  mov   dword[FsWorkPtr],FsRootBuffer
   call  FloppyReadSectorTo
   mov   eax,[FsStatus]
   cmp   eax,FS_STATUS_OK
-  jne   Fat12MountDone
-  movzx eax,word[FsSectorBuffer+11]
-  cmp   eax,FAT12_BYTES_PER_SECTOR
-  jne   Fat12MountBad
-  movzx eax,byte[FsSectorBuffer+13]
-  mov   [FsSectorsPerCluster],eax
-  movzx eax,word[FsSectorBuffer+14]
-  mov   [FsFatStartLba],eax
-  movzx eax,byte[FsSectorBuffer+16]
-  mov   [FsWorkCount],eax
-  movzx eax,word[FsSectorBuffer+17]
-  mov   [FsRootEntries],eax
-  movzx eax,word[FsSectorBuffer+22]
-  mov   [FsFatSectors],eax
-  movzx eax,word[FsSectorBuffer+24]
-  mov   [FsSectorsPerTrack],eax
-  movzx eax,word[FsSectorBuffer+26]
-  mov   [FsHeads],eax
-  mov   eax,[FsRootEntries]
-  mov   ebx,FAT12_ROOT_ENTRY_SIZE
-  mul   ebx
-  add   eax,FAT12_BYTES_PER_SECTOR-1
-  shr   eax,9
-  mov   [FsRootSectors],eax
-  mov   eax,[FsFatSectors]
-  mov   ebx,[FsWorkCount]
-  mul   ebx
-  add   eax,[FsFatStartLba]
-  mov   [FsRootStartLba],eax
-  add   eax,[FsRootSectors]
-  mov   [FsDataStartLba],eax
-  call  Fat12ReadFat
-  mov   eax,[FsStatus]
-  cmp   eax,FS_STATUS_OK
-  jne   Fat12MountDone
-  call  Fat12ReadRoot
-  mov   eax,[FsStatus]
-  cmp   eax,FS_STATUS_OK
-  jne   Fat12MountDone
+  jne   AsmFsMountDone
+  mov   eax,[FsRootBuffer]
+  cmp   eax,ASMFS_SIGNATURE
+  jne   AsmFsMountBad
+  movzx eax,word[FsRootBuffer+ASMFS_ENTRY_COUNT]
+  mov   [FsEntryCount],eax
   mov   dword[FsMounted],1
   mov   dword[FsStatus],FS_STATUS_OK
-  jmp   Fat12MountDone
-Fat12MountBad:
+  jmp   AsmFsMountDone
+AsmFsMountBad:
   mov   dword[FsStatus],FS_STATUS_NOT_READY
-Fat12MountDone:
+AsmFsMountDone:
   ret
 
-Fat12ReadFat:
-  mov   dword[FsWorkIndex],0
-  mov   dword[FsWorkPtr],FsFatBuffer
-Fat12ReadFat1:
-  mov   eax,[FsWorkIndex]
-  cmp   eax,[FsFatSectors]
-  jae   Fat12ReadFat2
-  add   eax,[FsFatStartLba]
-  mov   [FsCurrentLba],eax
-  call  FloppyReadSectorTo
-  mov   eax,[FsStatus]
-  cmp   eax,FS_STATUS_OK
-  jne   Fat12ReadFatDone
-  add   dword[FsWorkPtr],FAT12_BYTES_PER_SECTOR
-  inc   dword[FsWorkIndex]
-  jmp   Fat12ReadFat1
-Fat12ReadFat2:
-  mov   dword[FsStatus],FS_STATUS_OK
-Fat12ReadFatDone:
-  ret
-
-Fat12ReadRoot:
-  mov   dword[FsWorkIndex],0
-  mov   dword[FsWorkPtr],FsRootBuffer
-Fat12ReadRoot1:
-  mov   eax,[FsWorkIndex]
-  cmp   eax,[FsRootSectors]
-  jae   Fat12ReadRoot2
-  add   eax,[FsRootStartLba]
-  mov   [FsCurrentLba],eax
-  call  FloppyReadSectorTo
-  mov   eax,[FsStatus]
-  cmp   eax,FS_STATUS_OK
-  jne   Fat12ReadRootDone
-  add   dword[FsWorkPtr],FAT12_BYTES_PER_SECTOR
-  inc   dword[FsWorkIndex]
-  jmp   Fat12ReadRoot1
-Fat12ReadRoot2:
-  mov   dword[FsStatus],FS_STATUS_OK
-Fat12ReadRootDone:
-  ret
-
-Fat12MakeName83:
+AsmFsMakeName83:
   mov   edi,FsName83
-  mov   ecx,FAT12_NAME_SIZE
-Fat12MakeName831:
+  mov   ecx,FS_NAME_SIZE
+AsmFsMakeName831:
   mov   byte[edi],' '
   inc   edi
   dec   ecx
-  jnz   Fat12MakeName831
+  jnz   AsmFsMakeName831
   mov   esi,[pFsOpenName]
   movzx ecx,word[esi]
   test  ecx,ecx
-  jz    Fat12MakeName83Bad
+  jz    AsmFsMakeName83Bad
   add   esi,2
   mov   [FsNamePayload],esi
   mov   [FsNameInputLeft],ecx
   mov   dword[FsNameOutputBase],0
   mov   dword[FsNameIndex],0
   mov   dword[FsNameOutputLimit],8
-Fat12MakeName832:
+AsmFsMakeName832:
   mov   eax,[FsNameInputLeft]
   test  eax,eax
-  jz    Fat12MakeName83Ok
+  jz    AsmFsMakeName83Ok
   mov   esi,[FsNamePayload]
   mov   al,[esi]
   inc   esi
   mov   [FsNamePayload],esi
   dec   dword[FsNameInputLeft]
   cmp   al,'.'
-  je    Fat12MakeName83Dot
+  je    AsmFsMakeName83Dot
   cmp   al,'a'
-  jb    Fat12MakeName833
+  jb    AsmFsMakeName833
   cmp   al,'z'
-  ja    Fat12MakeName833
+  ja    AsmFsMakeName833
   sub   al,32
-Fat12MakeName833:
+AsmFsMakeName833:
   mov   ebx,[FsNameIndex]
   cmp   ebx,[FsNameOutputLimit]
-  jae   Fat12MakeName832
+  jae   AsmFsMakeName832
   add   ebx,[FsNameOutputBase]
   mov   [FsName83+ebx],al
   inc   dword[FsNameIndex]
-  jmp   Fat12MakeName832
-Fat12MakeName83Dot:
+  jmp   AsmFsMakeName832
+AsmFsMakeName83Dot:
   mov   dword[FsNameOutputBase],8
   mov   dword[FsNameIndex],0
   mov   dword[FsNameOutputLimit],3
-  jmp   Fat12MakeName832
-Fat12MakeName83Ok:
+  jmp   AsmFsMakeName832
+AsmFsMakeName83Ok:
   mov   dword[FsStatus],FS_STATUS_OK
   ret
-Fat12MakeName83Bad:
+AsmFsMakeName83Bad:
   mov   dword[FsStatus],FS_STATUS_BAD_ARG
   ret
 
-Fat12FindRootEntry:
-  mov   dword[pFsRootEntry],FsRootBuffer
-  mov   eax,[FsRootEntries]
-  mov   [FsRootEntryLeft],eax
-Fat12FindRootEntry1:
-  mov   eax,[FsRootEntryLeft]
+AsmFsFindEntry:
+  mov   dword[pFsEntry],FsRootBuffer+ASMFS_ENTRY_OFFSET
+  mov   eax,[FsEntryCount]
+  mov   [FsEntryLeft],eax
+AsmFsFindEntry1:
+  mov   eax,[FsEntryLeft]
   test  eax,eax
-  jz    Fat12FindRootEntryNotFound
-  mov   edi,[pFsRootEntry]
-  mov   al,[edi]
-  test  al,al
-  jz    Fat12FindRootEntryNotFound
-  cmp   al,0E5h
-  je    Fat12FindRootEntryNext
-  mov   al,[edi+11]
-  test  al,00011000b
-  jnz   Fat12FindRootEntryNext
+  jz    AsmFsFindEntryNotFound
+  mov   edi,[pFsEntry]
   mov   esi,FsName83
-  mov   ecx,FAT12_NAME_SIZE
-Fat12FindRootEntryCmp:
+  mov   ecx,FS_NAME_SIZE
+AsmFsFindEntryCmp:
   mov   al,[esi]
   cmp   al,[edi]
-  jne   Fat12FindRootEntryNext
+  jne   AsmFsFindEntryNext
   inc   esi
   inc   edi
   dec   ecx
-  jnz   Fat12FindRootEntryCmp
+  jnz   AsmFsFindEntryCmp
   mov   dword[FsStatus],FS_STATUS_OK
   ret
-Fat12FindRootEntryNext:
-  add   dword[pFsRootEntry],FAT12_ROOT_ENTRY_SIZE
-  dec   dword[FsRootEntryLeft]
-  jmp   Fat12FindRootEntry1
-Fat12FindRootEntryNotFound:
-  mov   dword[pFsRootEntry],0
+AsmFsFindEntryNext:
+  add   dword[pFsEntry],ASMFS_ENTRY_SIZE
+  dec   dword[FsEntryLeft]
+  jmp   AsmFsFindEntry1
+AsmFsFindEntryNotFound:
+  mov   dword[pFsEntry],0
   mov   dword[FsStatus],FS_STATUS_NOT_FOUND
-  ret
-
-Fat12ClusterForSector:
-  mov   eax,[FsFileCluster]
-  mov   [FsCurrentCluster],eax
-  mov   eax,[FsFileSectorIndex]
-  mov   [FsWorkCount],eax
-Fat12ClusterForSector1:
-  mov   eax,[FsWorkCount]
-  test  eax,eax
-  jz    Fat12ClusterForSector2
-  call  Fat12NextCluster
-  mov   eax,[FsCurrentCluster]
-  cmp   eax,FAT12_EOC
-  jae   Fat12ClusterForSectorBad
-  dec   dword[FsWorkCount]
-  jmp   Fat12ClusterForSector1
-Fat12ClusterForSector2:
-  mov   dword[FsStatus],FS_STATUS_OK
-  ret
-Fat12ClusterForSectorBad:
-  mov   dword[FsStatus],FS_STATUS_IO_ERROR
-  ret
-
-Fat12NextCluster:
-  mov   eax,[FsCurrentCluster]
-  mov   ebx,eax
-  shr   ebx,1
-  add   ebx,eax
-  mov   [FsFatOffset],ebx
-  mov   esi,FsFatBuffer
-  add   esi,ebx
-  movzx edx,word[esi]
-  test  eax,1
-  jnz   Fat12NextCluster1
-  and   edx,00000FFFh
-  jmp   Fat12NextCluster2
-Fat12NextCluster1:
-  shr   edx,4
-Fat12NextCluster2:
-  mov   [FsCurrentCluster],edx
-  ret
-
-Fat12ClusterToLba:
-  mov   eax,[FsCurrentCluster]
-  sub   eax,2
-  mov   ebx,[FsSectorsPerCluster]
-  mul   ebx
-  add   eax,[FsDataStartLba]
-  mov   [FsCurrentLba],eax
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -693,7 +553,7 @@ FloppyReadSectorTo:
   jne   FloppyReadSectorToDone
   mov   esi,FDC_DMA_BUFFER
   mov   edi,[FsWorkPtr]
-  mov   ecx,FAT12_BYTES_PER_SECTOR
+  mov   ecx,FS_BYTES_PER_SECTOR
   rep   movsb
   mov   dword[FsStatus],FS_STATUS_OK
 FloppyReadSectorToDone:

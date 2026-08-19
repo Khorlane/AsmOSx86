@@ -57,7 +57,7 @@ This does not rebuild or copy files. It only launches Bochs with
 ### Prepare Floppy From Scratch
 
 Use this after changing `Boot1.asm`, after needing a clean floppy image, or after
-changing the FAT/private-storage layout.
+changing the raw floppy layout.
 
 ```powershell
 .\BuildBoot1.ps1
@@ -158,7 +158,7 @@ prepared `floppy.img` are already valid.
 
 ### BuildCopy.ps1
 
-Copies boot/runtime files into the FAT12 filesystem on `floppy.img`.
+Writes the AsmOSx86 raw floppy manifest and packed boot/runtime files.
 
 Required inputs:
 
@@ -172,59 +172,45 @@ Optional inputs:
 - `Prog2.bin`
 - `Prog3.bin`
 
-Copies to the FAT12 root:
+Writes:
 
-- `BOOT2.BIN`
-- `KERNEL.BIN`
-- `PROG1.BIN`, `PROG2.BIN`, `PROG3.BIN` when present
+- sector `1`: the `ASMF` manifest
+- sector `2+`: `BOOT2.BIN`
+- next sectors: `KERNEL.BIN`
+- next sectors: `PROG1.BIN`, `PROG2.BIN`, `PROG3.BIN` when present
 
-Also removes stale `PROG1.EXE`, `PROG2.EXE`, and `PROG3.EXE` files from the
-image if they exist.
+Manifest format:
 
-Validation:
+- offset `0`: four-byte signature `ASMF`
+- offset `4`: version word, currently `1`
+- offset `6`: entry-count word
+- offset `16`: first 32-byte file entry
 
-- Verifies `BOOT2.BIN` and `KERNEL.BIN` exist after copy.
-- Reads `floppy.img` after unmounting.
-- Walks each copied file's FAT12 cluster chain.
-- Fails if any copied file uses sector `512` or higher.
+Each file entry records an uppercase 8.3 name, starting sector, byte size, and
+sector count.
 
 Notes:
 
-- Uses ImDisk and the first free drive letter.
-- The sector-boundary check protects the custom AsmOSx86 storage area.
+- Does not mount the image.
+- Does not use ImDisk.
+- Does not copy files through FAT12.
+- Packs file bodies contiguously and pads each file to a whole sector.
 
 ### BuildFloppyDelAll.ps1
 
-Deletes all files from the mounted FAT12 root of `floppy.img`.
+Legacy FAT-era helper. It attempts to mount `floppy.img` as FAT and delete the
+visible files.
 
-Inputs:
-
-- `floppy.img`
-
-Behavior:
-
-- Prompts for confirmation.
-- Mounts `floppy.img` as `A:`.
-- Deletes all files in the FAT12 root.
-- Shows the directory after deletion.
-- Unmounts the image.
-
-Use with care. It removes FAT-visible files, but it does not recreate or format
-the image.
+The current `floppy.img` is a raw AsmOSx86 image, not a FAT12 image, so this
+script is not part of the normal workflow.
 
 ### BuildFloppyDir.ps1
 
-Shows the FAT12 directory contents of `floppy.img`.
+Legacy FAT-era helper. It attempts to mount `floppy.img` as FAT and show a
+directory listing.
 
-Inputs:
-
-- `floppy.img`
-
-Behavior:
-
-- Mounts `floppy.img` read-only as `A:`.
-- Runs a directory listing.
-- Unmounts the image.
+The current `floppy.img` is a raw AsmOSx86 image, not a FAT12 image, so this
+script is not part of the normal workflow.
 
 ### BuildKernel.ps1
 
@@ -313,16 +299,12 @@ Outputs:
 Behavior:
 
 - Verifies `Boot1.bin` exists and is exactly 512 bytes.
-- Deletes and recreates `floppy.img` as a 1.44MB image.
-- Mounts the image through ImDisk.
-- Formats it as FAT.
-- Marks sectors `512-2879` as bad FAT12 clusters in both FAT copies.
+- Deletes and recreates `floppy.img` as a blank 1.44MB image.
 - Writes `Boot1.bin` to sector 0.
 - Verifies the `55 AA` boot signature.
 
 Notes:
 
-- Formatting recreates the FAT, so the custom-area reservation happens after
-  format.
-- The FAT-visible area is intended to stay below sector `512`.
-- Sectors `512-2879` are reserved for future AsmOSx86 custom storage.
+- Does not format the image as FAT12.
+- Does not mount the image.
+- `BuildCopy.ps1` must be run after this before the image can boot past Boot1.
