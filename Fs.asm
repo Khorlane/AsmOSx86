@@ -126,8 +126,7 @@ FsRootBuffer:
 DEV_STATUS_OK            equ 0
 DEV_STATUS_BAD_DEVICE    equ 1
 DEV_STATUS_IO_ERROR      equ 2
-DEV_BLOCK_FLOPPY_A       equ 1
-DEV_DEFAULT_BLOCK_DEVICE equ DEV_BLOCK_FLOPPY_A
+DEV_DEFAULT_BLOCK_DEVICE equ DEV_ID_FLOPPY_A
 FLOPPY_A_SECTORS         equ 2880
 
 DevStatus                dd 0          ; output: DEV_STATUS_*
@@ -576,7 +575,7 @@ DevInit:
 ;--------------------------------------------------------------------------------------------------
 DevReadSector:
   mov   eax,[DevBlockDevice]
-  cmp   eax,DEV_BLOCK_FLOPPY_A
+  cmp   eax,DEV_ID_FLOPPY_A
   jne   DevReadSectorBadDevice
   mov   eax,[DevSector]
   cmp   eax,FLOPPY_A_SECTORS
