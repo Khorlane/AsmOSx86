@@ -599,7 +599,8 @@ For AsmOSx86, `file` means a disk-backed filesystem object. It does not mean key
 The current implementation is read-only and manifest-backed. `Fs.asm` opens
 files from the raw `ASMF` floppy manifest, reads file sectors through a tiny
 kernel block-device layer, and the only current block device is floppy A:.
-Shared device type IDs and device IDs are defined in `Config.asm`.
+Shared device type IDs, device IDs, and the static device registry are defined
+in `Config.asm`.
 
 ```text
 KcFsOpen        - Open an existing disk file; return file handle

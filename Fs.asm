@@ -123,14 +123,11 @@ FsRootBuffer:
 ;**************************************************************************************************
 ; Block device layer
 ;**************************************************************************************************
-DEV_STATUS_OK            equ 0
-DEV_STATUS_BAD_DEVICE    equ 1
-DEV_STATUS_IO_ERROR      equ 2
 DEV_DEFAULT_BLOCK_DEVICE equ DEV_ID_FLOPPY_A
-FLOPPY_A_SECTORS         equ 2880
 
 DevStatus                dd 0          ; output: DEV_STATUS_*
 DevBlockDevice           dd 0          ; input/current block device
+pDevBlockDeviceRecord    dd 0          ; current block device registry record
 DevSector                dd 0          ; input: block-device sector
 DevBuffer                dd 0          ; input: destination buffer
 
@@ -559,6 +556,7 @@ AsmFsFindEntryNotFound:
 ;--------------------------------------------------------------------------------------------------
 DevInit:
   mov   dword[DevBlockDevice],DEV_DEFAULT_BLOCK_DEVICE
+  mov   dword[pDevBlockDeviceRecord],DevRegistryFloppyA
   call  FloppyInit
   mov   dword[DevStatus],DEV_STATUS_OK
   ret
@@ -574,11 +572,20 @@ DevInit:
 ;     FsStatus  = FS_STATUS_*
 ;--------------------------------------------------------------------------------------------------
 DevReadSector:
+  mov   esi,[pDevBlockDeviceRecord]
+  test  esi,esi
+  jz    DevReadSectorBadDevice
   mov   eax,[DevBlockDevice]
-  cmp   eax,DEV_ID_FLOPPY_A
+  cmp   eax,[esi+DEV_RECORD_ID]
+  jne   DevReadSectorBadDevice
+  mov   eax,[esi+DEV_RECORD_TYPE]
+  cmp   eax,DEV_TYPE_BLOCK
+  jne   DevReadSectorBadDevice
+  mov   eax,[esi+DEV_RECORD_STATUS]
+  cmp   eax,DEV_STATUS_OK
   jne   DevReadSectorBadDevice
   mov   eax,[DevSector]
-  cmp   eax,FLOPPY_A_SECTORS
+  cmp   eax,[esi+DEV_RECORD_SECTOR_COUNT]
   jae   DevReadSectorIoError
   mov   [FsCurrentLba],eax
   mov   eax,[DevBuffer]
