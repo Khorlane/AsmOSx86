@@ -24,22 +24,20 @@ STATUS_OK           equ 0
 DATA_BUFFER_SIZE    equ 80
 
 Start:
-  mov   dword[Prog4ExitCode],0
-  call  OpenFile
-  mov   eax,[Prog4Status]
-  cmp   eax,STATUS_OK
-  jne   Prog4Exit
-  call  ReadData
-  mov   eax,[Prog4Status]
-  cmp   eax,STATUS_OK
-  jne   Prog4CloseAndExit
-  call  PrintLine
+  mov   dword[Prog4ExitCode],0          ; Set program exit code to zero
+  call  OpenFile                        ; Open file
+  mov   eax,[Prog4Status]               ;  check status
+  cmp   eax,STATUS_OK                   ;  if bad
+  jne   Prog4Exit                       ;    can't continue, just exit
+  call  ReadData                        ; Read file
+  mov   eax,[Prog4Status]               ;  check status
+  cmp   eax,STATUS_OK                   ;  if bad
+  jne   Prog4CloseAndExit               ;    can't continue, close file, then exit
+  call  PrintLine                       ; Print
 Prog4CloseAndExit:
-  call  CloseFile
+  call  CloseFile                       ; Close file
 Prog4Exit:
-  call  ExitProgram
-Prog4Done:
-  jmp   Prog4Done
+  call  ExitProgram                     ; Return to OS
 
 OpenFile:
   mov   dword[DataHandle],0
