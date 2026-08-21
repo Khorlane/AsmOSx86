@@ -171,46 +171,40 @@ KcBlock page is conceptually user-accessible
 
 This is groundwork for privilege separation, not the enforcement step itself.
 
-## 6. Add A Run Command For User Programs
+## 6. Run Command For User Programs
 
 Current reality:
 
 ```text
 UserTest loads and runs PROG1.BIN, PROG2.BIN, and PROG3.BIN through a hard-coded
 test path.
-Prog4.asm exists as a simple userland program that can evolve into a filesystem
-and privilege-boundary test.
+Run exists as a console command shaped like: run <program>
+Run loads the named program from the filesystem, creates task slot 1, runs it
+through the existing cooperative scheduler, and returns to the console after
+the task exits.
+Prog4.asm opens DATA.TXT, reads it, prints it through KcVdWriteStr, closes it,
+and exits through the kernel-call path.
 ```
 
-Next step:
-
-```text
-add a console command shaped like: run <program>
-load the named program from the filesystem
-create a task for it
-run it through the existing cooperative scheduler
-```
-
-Useful early tests:
+Done:
 
 ```text
 run prog4.bin
-missing file handling
-bad filename handling
 single-program task launch
+open/read/print/close through real kernel service calls
+clean return to the console after task exit
 ```
 
-Later Prog4 path:
+Still useful to improve:
 
 ```text
-open DATA.TXT
-read a record or buffer
-print the contents through kernel calls
-close DATA.TXT
-exit with a useful result code
+missing file handling
+bad filename handling
+clearer load/run status reporting
+repeatable Prog4 smoke-test expectations
 ```
 
-Future privilege test:
+Future privilege-boundary test:
 
 ```text
 Prog4 can intentionally try an illegal userland action once the kernel has
@@ -226,7 +220,7 @@ userland session model
 
 ## Preferred First Move
 
-Start with the device registry read path:
+With the first Run milestone complete, return to the device registry read path:
 
 ```text
 make DevRegistryFloppyA's read slot point to FloppyReadSectorTo
