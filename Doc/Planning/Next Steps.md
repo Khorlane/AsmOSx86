@@ -95,7 +95,7 @@ current user-program virtual range or the task KcBlock page.
 KcVdWriteStr and KcFsOpen validate full Str ranges for user-originated calls.
 KcFsRead validates the destination buffer range for user-originated calls.
 Prog4 performs one deliberate invalid KcVdWriteStr pointer test after the
-normal DATA.TXT read/print path.
+normal DATA.TXT read/print path when launched with the `bad` argument.
 Run prints the launched task's exit code so the bad-call result is visible.
 ```
 
@@ -103,7 +103,7 @@ Next step:
 
 ```text
 keep tightening service-specific validation as new Kc calls appear
-consider making bad-call tests optional once user-program arguments exist
+grow user-program startup arguments only when a real caller needs more
 ```
 
 Goal:
@@ -208,6 +208,7 @@ Run exists as a console command shaped like: run <program>
 Run loads the named program from the filesystem, creates task slot 1, runs it
 through the existing cooperative scheduler, and returns to the console after
 the task exits.
+Run copies optional text after the filename into the task startup argument area.
 Prog4.asm opens DATA.TXT, reads it, prints it through KcVdWriteStr, closes it,
 and exits through the kernel-call path.
 ```
@@ -216,7 +217,9 @@ Done:
 
 ```text
 run prog4.bin
+run prog4.bin bad
 single-program task launch
+optional user-program startup argument
 open/read/print/close through real kernel service calls
 clean return to the console after task exit
 ```
@@ -252,7 +255,7 @@ Prog4 path stable while validation grows:
 ```text
 keep normal run prog4.bin behavior working
 add service-specific checks as new Kc calls appear
-make bad-call mode optional once user-program arguments exist
+use startup arguments only where they prove a useful OS behavior
 ```
 
 This keeps userland filesystem tests useful while preparing for stricter

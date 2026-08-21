@@ -33,11 +33,14 @@ pCnCmdLine       dd 0                  ; Pointer to command line buffer
 pCnCmdArg        dd 0                  ; Pointer to command argument payload
 pCnCmdTable      dd 0                  ; Pointer to command table
 pCnLogMsg        dd 0                  ; Pointer to log message
+pCnRunInput      dd 0                  ; Pointer to Run argument scanner
 pCnTmpInput      dd 0                  ; Pointer to temp: input payload
 pCnTmpTable      dd 0                  ; Pointer to temp: command table
 CnCmdLineLen     dw 0                  ; Command line length
 CnCmdMaxLen      dw 0                  ; Command line max length
 CnCmdArgLen      dw 0                  ; Command argument length
+CnRunInputLeft   dw 0                  ; Run argument scanner bytes left
+CnRunFileLen     dw 0                  ; Run filename length
 CnTmpLen         dw 0                  ; temp: input length (u16)
 CnRlActive       db 0                  ; 1=in-progress line edit,0=idle
 CnOutHasLine     db 0                  ; 1=completed line ready in CnCmdLine
@@ -46,6 +49,7 @@ CnPad2           db 0,0                ; pad to keep alignment friendly
 ; Command line buffer as String:
 CnCmdLine: times (2 + CN_CMD_MAX_LEN) db 0
 CnRunFile: times (2 + CN_CMD_MAX_LEN) db 0
+CnRunArg: times (2 + CN_CMD_MAX_LEN) db 0
 CnFsTestBuffer:
   times 32 db 0
 
@@ -643,11 +647,10 @@ CnDoCmdRun:
   mov   ax,[CnCmdArgLen]
   test  ax,ax
   jz    CnDoCmdRunUsage
-  mov   [CnRunFile],ax
-  mov   esi,[pCnCmdArg]
-  lea   edi,[CnRunFile+2]
-  movzx ecx,ax
-  rep   movsb
+  call  CnRunParseArg
+  mov   ax,[CnRunFile]
+  test  ax,ax
+  jz    CnDoCmdRunUsage
   lea   eax,[CnRunMsg1]
   mov   [pVdStr],eax
   call  VdPutStr
@@ -662,6 +665,10 @@ CnDoCmdRun:
   mov   eax,[KcStatus]
   cmp   eax,KC_STATUS_OK
   jne   CnDoCmdRunFail
+  mov   dword[TaskProgramTaskIndex],1
+  lea   eax,[CnRunArg]
+  mov   [TaskProgramArgPtr],eax
+  call  TaskProgramSetArg
   lea   eax,[CnRunMsg2]
   mov   [pVdStr],eax
   call  VdPutStr
@@ -701,6 +708,61 @@ CnDoCmdRunFail:
   mov   [pVdStr],eax
   call  VdPutStr
   call  CnCrLf
+  ret
+
+;------------------------------------------------------------------------------
+; CnRunParseArg
+;   Input:
+;     pCnCmdArg/CnCmdArgLen = Run command text after "run ".
+;   Output:
+;     CnRunFile = first token as Str.
+;     CnRunArg  = remaining text after the filename as Str.
+;------------------------------------------------------------------------------
+CnRunParseArg:
+  mov   word[CnRunFile],0
+  mov   word[CnRunArg],0
+  mov   eax,[pCnCmdArg]
+  mov   [pCnRunInput],eax
+  mov   ax,[CnCmdArgLen]
+  mov   [CnRunInputLeft],ax
+  mov   word[CnRunFileLen],0
+CnRunParseArgFileScan:
+  mov   ax,[CnRunInputLeft]
+  test  ax,ax
+  jz    CnRunParseArgFileDone
+  mov   esi,[pCnRunInput]
+  movzx ebx,word[CnRunFileLen]
+  cmp   byte[esi+ebx],' '
+  je    CnRunParseArgFileDone
+  inc   bx
+  mov   [CnRunFileLen],bx
+  dec   word[CnRunInputLeft]
+  jmp   CnRunParseArgFileScan
+CnRunParseArgFileDone:
+  mov   ax,[CnRunFileLen]
+  mov   [CnRunFile],ax
+  mov   esi,[pCnCmdArg]
+  lea   edi,[CnRunFile+2]
+  movzx ecx,ax
+  rep   movsb
+  mov   esi,[pCnCmdArg]
+  movzx eax,word[CnRunFileLen]
+  add   esi,eax
+  mov   ax,[CnRunInputLeft]
+CnRunParseArgSkip:
+  test  ax,ax
+  jz    CnRunParseArgDone
+  cmp   byte[esi],' '
+  jne   CnRunParseArgCopy
+  inc   esi
+  dec   ax
+  jmp   CnRunParseArgSkip
+CnRunParseArgCopy:
+  mov   [CnRunArg],ax
+  lea   edi,[CnRunArg+2]
+  movzx ecx,ax
+  rep   movsb
+CnRunParseArgDone:
   ret
 
 ;------------------------------------------------------------------------------

@@ -25,6 +25,7 @@
 ;   - TaskProgramLoad
 ;   - TaskProgramInit
 ;   - TaskProgramGetExitCode
+;   - TaskProgramSetArg
 ;   - TaskProgramStartOne
 ;   - TaskProgramStart
 ;   - TaskProgramPrintExitCodes
@@ -95,6 +96,9 @@ USER_PROGRAM_VIRTUAL_BASE       equ 00200000h
 USER_PROGRAM_KCBLOCK_SIZE       equ 32
 USER_PROGRAM_KCBLOCK_OFFSET     equ USER_PROGRAM_MAX_SIZE
 USER_PROGRAM_KCBLOCK_BASE       equ USER_PROGRAM_VIRTUAL_BASE+USER_PROGRAM_KCBLOCK_OFFSET
+USER_PROGRAM_ARG_SIZE           equ 128
+USER_PROGRAM_ARG_OFFSET         equ USER_PROGRAM_KCBLOCK_OFFSET+USER_PROGRAM_KCBLOCK_SIZE
+USER_PROGRAM_ARG_BASE           equ USER_PROGRAM_VIRTUAL_BASE+USER_PROGRAM_ARG_OFFSET
 
 ;--------------------------------------------------------------------------------------------------
 ; Task Globals
@@ -124,6 +128,10 @@ TaskProgramTaskIndex dd 0               ; input: task table index to prepare
 TaskProgramStackSlot dd 0               ; input: stack slot index to assign
 TaskProgramStatus    dd 0               ; output: TASK_PROGRAM_STATUS_*
 TaskProgramExitCode  dd 0               ; output: selected task exit code
+TaskProgramArgPtr    dd 0               ; input: kernel Str argument for loaded task
+TaskProgramArgCopySrc dd 0              ; work: task argument copy source
+TaskProgramArgCopyPtr dd 0              ; work: task argument copy pointer
+TaskProgramArgCopyLeft dd 0             ; work: task argument bytes left
 TaskProgramEntryPtr  dd 0               ; output: loaded program entry address
 TaskProgramKcBlockPtr dd 0              ; output: loaded program KcBlock address
 TaskProgramNextLoadBase dd 0            ; work: next dynamic user-program load base
@@ -441,6 +449,7 @@ TaskProgramInit2:
   mov   dword[edi+TASK_PROGRAM_PHYS],0
   mov   dword[edi+TASK_PROGRAM_PAGES],0
   mov   dword[edi+TASK_KCBLOCK_PHYS],0
+  mov   dword[TaskProgramArgPtr],0
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -461,6 +470,60 @@ TaskProgramGetExitCode:
   mov   eax,[edi+TASK_EXIT_CODE]
   mov   [TaskProgramExitCode],eax
 TaskProgramGetExitCodeDone:
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; TaskProgramSetArg
+;   Input:
+;     TaskProgramTaskIndex = task table index to receive the argument.
+;     TaskProgramArgPtr    = kernel Str argument, or 0 for an empty argument.
+;   Output:
+;     Copies the argument Str to USER_PROGRAM_ARG_BASE in the task KcBlock page.
+;--------------------------------------------------------------------------------------------------
+TaskProgramSetArg:
+  mov   eax,[TaskProgramTaskIndex]
+  mov   [TaskIndex],eax
+  call  TaskGetRecord
+  mov   edi,[pTaskRecord]
+  test  edi,edi
+  jz    TaskProgramSetArgDone
+  mov   eax,[edi+TASK_KCBLOCK_PHYS]
+  test  eax,eax
+  jz    TaskProgramSetArgDone
+  add   eax,USER_PROGRAM_KCBLOCK_SIZE
+  mov   [TaskProgramArgCopyPtr],eax
+  mov   edi,eax
+  mov   word[edi],0
+  mov   esi,[TaskProgramArgPtr]
+  test  esi,esi
+  jz    TaskProgramSetArgDone
+  movzx eax,word[esi]
+  cmp   eax,USER_PROGRAM_ARG_SIZE-2
+  jbe   TaskProgramSetArg1
+  mov   eax,USER_PROGRAM_ARG_SIZE-2
+TaskProgramSetArg1:
+  mov   edi,[TaskProgramArgCopyPtr]
+  mov   [edi],ax
+  add   esi,2
+  mov   [TaskProgramArgCopySrc],esi
+  add   edi,2
+  mov   [TaskProgramArgCopyPtr],edi
+  mov   [TaskProgramArgCopyLeft],eax
+TaskProgramSetArg2:
+  mov   eax,[TaskProgramArgCopyLeft]
+  test  eax,eax
+  jz    TaskProgramSetArgDone
+  mov   esi,[TaskProgramArgCopySrc]
+  mov   edi,[TaskProgramArgCopyPtr]
+  mov   al,[esi]
+  mov   [edi],al
+  inc   esi
+  inc   edi
+  mov   [TaskProgramArgCopySrc],esi
+  mov   [TaskProgramArgCopyPtr],edi
+  dec   dword[TaskProgramArgCopyLeft]
+  jmp   TaskProgramSetArg2
+TaskProgramSetArgDone:
   ret
 
 ;--------------------------------------------------------------------------------------------------
