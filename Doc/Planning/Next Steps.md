@@ -25,6 +25,7 @@ Storage and boot:
 Boot.asm is the single-stage boot loader.
 The floppy uses the ASMF manifest layout, not FAT12.
 BuildCopy.ps1 writes KERNEL.BIN, PROG*.BIN, and DATA.TXT into the image.
+BuildCopy.ps1 also reserves LOG.TXT for the kernel-owned console mirror.
 ```
 
 Device and filesystem path:
@@ -33,8 +34,10 @@ Device and filesystem path:
 Config.asm owns the static DevRegistry.
 DevRegistryFloppyA has FloppyReadSectorTo in its read slot.
 Fs.asm routes sector reads through DevReadSector and DevFindById.
+Fs.asm routes the internal LOG.TXT writer through DevWriteSector.
 Floppy A: is still the only working block device.
 FsOpen/FsRead/FsClose provide the current read-only file service.
+LOG.TXT is the only current kernel-owned write path.
 ```
 
 User program launch:
@@ -46,6 +49,16 @@ Run loads 1..3 named programs, creates task slots 1..N, copies each optional
 argument into that task's startup argument area, starts cooperative dispatch only
 after all requested programs are loaded, prints task exit information, and
 returns to the console.
+Run rejects malformed launch specs and reports the task slot and status when a
+program load fails.
+```
+
+Console log mirror:
+
+```text
+The kernel clears LOG.TXT during startup.
+VdPutStr mirrors console output into LOG.TXT after logging is initialized.
+After Bochs shuts down, Scripts\ExtractFile.ps1 LOG.TXT extracts the test log.
 ```
 
 Current userland smoke tests:
@@ -159,6 +172,17 @@ leave flag bits unchanged until ring 3 work begins
 later add the x86 user/supervisor bit to user-facing mappings
 keep kernel mappings supervisor-only
 ```
+
+## Standard Smoke-Test Loop
+
+Run a test session in Bochs, shut down AsmOSx86 cleanly, close Bochs, then
+extract the captured console log:
+
+```powershell
+Scripts\ExtractFile.ps1 LOG.TXT
+```
+
+Use `Extracted\LOG.TXT` as the test artifact.
 
 ## Preferred Next Move
 

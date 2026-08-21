@@ -40,6 +40,7 @@ pCnTmpInput      dd 0                  ; Pointer to temp: input payload
 pCnTmpTable      dd 0                  ; Pointer to temp: command table
 CnRunCount       dd 0                  ; Run program count
 CnRunParseOk     dd 0                  ; 1 when Run parse succeeds
+CnRunFailTask    dd 0                  ; Run load failure task index
 CnCmdLineLen     dw 0                  ; Command line length
 CnCmdMaxLen      dw 0                  ; Command line max length
 CnCmdArgLen      dw 0                  ; Command argument length
@@ -83,7 +84,7 @@ String  CnRunMsg2,"Run: running programs"
 String  CnRunMsg3,"Run: complete"
 String  CnRunExit,"Run: task exit 0000"
 String  CnRunUsage,"Run usage: run <program> [-- <arg>] [| <program> [-- <arg>]]"
-String  CnRunFail,"Run: load failed 0000"
+String  CnRunFail,"Run: load failed task 0 status 0000"
 
 ; ----- Console commands -----
 String  CnCmdClear,    "Clear"
@@ -748,9 +749,12 @@ CnDoCmdRunUsage:
   call  CnCrLf
   ret
 CnDoCmdRunFail:
+  mov   eax,[CnRunFailTask]
+  add   al,'0'
+  mov   [CnRunFail+24],al
   mov   eax,[KcResult0]
   mov   [TaskPut4DecVal],eax
-  lea   eax,[CnRunFail+19]
+  lea   eax,[CnRunFail+33]
   mov   [pTaskPut4DecDst],eax
   call  TaskPut4Dec
   lea   eax,[CnRunFail]
@@ -974,6 +978,7 @@ CnRunCopyArgDone:
 ;------------------------------------------------------------------------------
 CnRunLoadTask:
   mov   eax,[KcArg1]
+  mov   [CnRunFailTask],eax
   mov   [TaskProgramTaskIndex],eax
   mov   dword[KcNumber],KcTsLoadProgram
   call  KcDispatch
