@@ -34,14 +34,19 @@ pCnCmdArg        dd 0                  ; Pointer to command argument payload
 pCnCmdTable      dd 0                  ; Pointer to command table
 pCnLogMsg        dd 0                  ; Pointer to log message
 pCnRunInput      dd 0                  ; Pointer to Run argument scanner
+pCnRunFileDst    dd 0                  ; Pointer to Run file destination
+pCnRunArgDst     dd 0                  ; Pointer to Run argument destination
 pCnRun3FileDst   dd 0                  ; Pointer to Run3 file destination
 pCnTmpInput      dd 0                  ; Pointer to temp: input payload
 pCnTmpTable      dd 0                  ; Pointer to temp: command table
+CnRunCount       dd 0                  ; Run program count
+CnRunParseOk     dd 0                  ; 1 when Run parse succeeds
 CnCmdLineLen     dw 0                  ; Command line length
 CnCmdMaxLen      dw 0                  ; Command line max length
 CnCmdArgLen      dw 0                  ; Command argument length
 CnRunInputLeft   dw 0                  ; Run argument scanner bytes left
 CnRunFileLen     dw 0                  ; Run filename length
+CnRunArgLen      dw 0                  ; Run argument length
 CnTmpLen         dw 0                  ; temp: input length (u16)
 CnRlActive       db 0                  ; 1=in-progress line edit,0=idle
 CnOutHasLine     db 0                  ; 1=completed line ready in CnCmdLine
@@ -54,6 +59,9 @@ CnRunArg: times (2 + CN_CMD_MAX_LEN) db 0
 CnRun3File1: times (2 + CN_CMD_MAX_LEN) db 0
 CnRun3File2: times (2 + CN_CMD_MAX_LEN) db 0
 CnRun3File3: times (2 + CN_CMD_MAX_LEN) db 0
+CnRunArg1: times (2 + CN_CMD_MAX_LEN) db 0
+CnRunArg2: times (2 + CN_CMD_MAX_LEN) db 0
+CnRunArg3: times (2 + CN_CMD_MAX_LEN) db 0
 CnFsTestBuffer:
   times 32 db 0
 
@@ -73,11 +81,11 @@ String  CnFsTestReadBytes,"FsTest: read bytes 0000"
 String  CnFsTestCloseStatus,"FsTest: close status 0000"
 String  CnKcTestMsg1,"KcTest: KcVdWriteStr dispatch OK"
 String  CnKcTestMsg2,"KcTest: KcTmGetUptime dispatch result:"
-String  CnRunMsg1,"Run: loading program"
-String  CnRunMsg2,"Run: running program"
+String  CnRunMsg1,"Run: loading programs"
+String  CnRunMsg2,"Run: running programs"
 String  CnRunMsg3,"Run: complete"
 String  CnRunExit,"Run: task exit 0000"
-String  CnRunUsage,"Run usage: run <program>"
+String  CnRunUsage,"Run usage: run <program> [-- <arg>] [| <program> [-- <arg>]]"
 String  CnRunFail,"Run: load failed 0000"
 String  CnRun3Msg1,"Run3: loading programs"
 String  CnRun3Msg2,"Run3: running programs"
@@ -641,43 +649,71 @@ CnDoCmdKcTest:
 ;------------------------------------------------------------------------------
 ; CnDoCmdRun
 ;   Input:
-;     pCnCmdArg/CnCmdArgLen = program filename from command line.
+;     pCnCmdArg/CnCmdArgLen = run launch specs from command line.
 ;   Output:
-;     Loads one named user program into task slot 1 and runs until it exits.
+;     Loads 1..3 named user programs, then runs them cooperatively together.
 ;------------------------------------------------------------------------------
 CnDoCmdRun:
   mov   ax,[CnCmdArgLen]
   test  ax,ax
   jz    CnDoCmdRunUsage
-  call  CnRunParseArg
-  mov   ax,[CnRunFile]
-  test  ax,ax
+  call  CnRunParseSpecs
+  mov   eax,[CnRunParseOk]
+  test  eax,eax
   jz    CnDoCmdRunUsage
   lea   eax,[CnRunMsg1]
   mov   [pVdStr],eax
   call  VdPutStr
   call  CnCrLf
   call  TaskProgramInit
-  mov   dword[KcNumber],KcTsLoadProgram
-  lea   eax,[CnRunFile]
+  mov   eax,[CnRunCount]
+  mov   [TaskProgramRunCount],eax
+  lea   eax,[CnRun3File1]
   mov   [KcArg0],eax
   mov   dword[KcArg1],1
   mov   dword[KcArg2],1
-  call  KcDispatch
+  lea   eax,[CnRunArg1]
+  mov   [TaskProgramArgPtr],eax
+  call  CnRunLoadTask
   mov   eax,[KcStatus]
   cmp   eax,KC_STATUS_OK
   jne   CnDoCmdRunFail
-  mov   dword[TaskProgramTaskIndex],1
-  lea   eax,[CnRunArg]
+  mov   eax,[CnRunCount]
+  cmp   eax,2
+  jb    CnDoCmdRunStart
+  lea   eax,[CnRun3File2]
+  mov   [KcArg0],eax
+  mov   dword[KcArg1],2
+  mov   dword[KcArg2],2
+  lea   eax,[CnRunArg2]
   mov   [TaskProgramArgPtr],eax
-  call  TaskProgramSetArg
+  call  CnRunLoadTask
+  mov   eax,[KcStatus]
+  cmp   eax,KC_STATUS_OK
+  jne   CnDoCmdRunFail
+  mov   eax,[CnRunCount]
+  cmp   eax,3
+  jb    CnDoCmdRunStart
+  lea   eax,[CnRun3File3]
+  mov   [KcArg0],eax
+  mov   dword[KcArg1],3
+  mov   dword[KcArg2],3
+  lea   eax,[CnRunArg3]
+  mov   [TaskProgramArgPtr],eax
+  call  CnRunLoadTask
+  mov   eax,[KcStatus]
+  cmp   eax,KC_STATUS_OK
+  jne   CnDoCmdRunFail
+CnDoCmdRunStart:
   lea   eax,[CnRunMsg2]
   mov   [pVdStr],eax
   call  VdPutStr
   call  CnCrLf
-  mov   dword[TaskProgramTaskIndex],1
-  call  TaskProgramStartOne
+  call  TaskProgramStartN
   call  CnCrLf
+  mov   eax,[CnRunCount]
+  cmp   eax,1
+  jne   CnDoCmdRunPrintMany
   mov   dword[TaskProgramTaskIndex],1
   call  TaskProgramGetExitCode
   mov   eax,[TaskProgramExitCode]
@@ -689,6 +725,10 @@ CnDoCmdRun:
   mov   [pVdStr],eax
   call  VdPutStr
   call  CnCrLf
+  jmp   CnDoCmdRunComplete
+CnDoCmdRunPrintMany:
+  call  TaskProgramPrintExitCodesN
+CnDoCmdRunComplete:
   lea   eax,[CnRunMsg3]
   mov   [pVdStr],eax
   call  VdPutStr
@@ -710,6 +750,231 @@ CnDoCmdRunFail:
   mov   [pVdStr],eax
   call  VdPutStr
   call  CnCrLf
+  ret
+
+;------------------------------------------------------------------------------
+; CnRunParseSpecs
+;   Input:
+;     pCnCmdArg/CnCmdArgLen = run command text after "run ".
+;   Output:
+;     CnRunCount = number of parsed launch specs.
+;     CnRun3File1..3/CnRunArg1..3 = parsed filenames and optional arguments.
+;     CnRunParseOk = 1 when the command matches the supported run grammar.
+;------------------------------------------------------------------------------
+CnRunParseSpecs:
+  mov   dword[CnRunCount],0
+  mov   dword[CnRunParseOk],0
+  mov   word[CnRun3File1],0
+  mov   word[CnRun3File2],0
+  mov   word[CnRun3File3],0
+  mov   word[CnRunArg1],0
+  mov   word[CnRunArg2],0
+  mov   word[CnRunArg3],0
+  mov   eax,[pCnCmdArg]
+  mov   [pCnRunInput],eax
+  mov   ax,[CnCmdArgLen]
+  mov   [CnRunInputLeft],ax
+  call  CnRunSkipSpaces
+  mov   ax,[CnRunInputLeft]
+  test  ax,ax
+  jz    CnRunParseSpecsDone
+CnRunParseSpecsLoop:
+  mov   eax,[CnRunCount]
+  cmp   eax,3
+  jae   CnRunParseSpecsDone
+  call  CnRunSelectDsts
+  call  CnRunCopyFile
+  mov   ax,[CnRunFileLen]
+  test  ax,ax
+  jz    CnRunParseSpecsDone
+  inc   dword[CnRunCount]
+  call  CnRunSkipSpaces
+  mov   ax,[CnRunInputLeft]
+  test  ax,ax
+  jz    CnRunParseSpecsOk
+  mov   esi,[pCnRunInput]
+  cmp   ax,2
+  jb    CnRunParseSpecsPipe
+  cmp   byte[esi],'-'
+  jne   CnRunParseSpecsPipe
+  cmp   byte[esi+1],'-'
+  jne   CnRunParseSpecsPipe
+  add   esi,2
+  mov   [pCnRunInput],esi
+  sub   ax,2
+  mov   [CnRunInputLeft],ax
+  call  CnRunSkipSpaces
+  call  CnRunCopyArg
+  call  CnRunSkipSpaces
+  mov   ax,[CnRunInputLeft]
+  test  ax,ax
+  jz    CnRunParseSpecsOk
+CnRunParseSpecsPipe:
+  mov   esi,[pCnRunInput]
+  cmp   byte[esi],'|'
+  jne   CnRunParseSpecsDone
+  inc   esi
+  mov   [pCnRunInput],esi
+  dec   word[CnRunInputLeft]
+  call  CnRunSkipSpaces
+  mov   ax,[CnRunInputLeft]
+  test  ax,ax
+  jz    CnRunParseSpecsDone
+  jmp   CnRunParseSpecsLoop
+CnRunParseSpecsOk:
+  mov   dword[CnRunParseOk],1
+CnRunParseSpecsDone:
+  ret
+
+;------------------------------------------------------------------------------
+; CnRunSkipSpaces
+;   Output:
+;     Advances pCnRunInput/CnRunInputLeft past leading spaces.
+;------------------------------------------------------------------------------
+CnRunSkipSpaces:
+  mov   ax,[CnRunInputLeft]
+CnRunSkipSpaces1:
+  test  ax,ax
+  jz    CnRunSkipSpacesDone
+  mov   esi,[pCnRunInput]
+  cmp   byte[esi],' '
+  jne   CnRunSkipSpacesDone
+  inc   esi
+  mov   [pCnRunInput],esi
+  dec   ax
+  jmp   CnRunSkipSpaces1
+CnRunSkipSpacesDone:
+  mov   [CnRunInputLeft],ax
+  ret
+
+;------------------------------------------------------------------------------
+; CnRunSelectDsts
+;   Output:
+;     pCnRunFileDst/pCnRunArgDst point at the current launch-spec buffers.
+;------------------------------------------------------------------------------
+CnRunSelectDsts:
+  mov   eax,[CnRunCount]
+  cmp   eax,1
+  je    CnRunSelectDsts2
+  cmp   eax,2
+  je    CnRunSelectDsts3
+  lea   eax,[CnRun3File1]
+  mov   [pCnRunFileDst],eax
+  lea   eax,[CnRunArg1]
+  mov   [pCnRunArgDst],eax
+  ret
+CnRunSelectDsts2:
+  lea   eax,[CnRun3File2]
+  mov   [pCnRunFileDst],eax
+  lea   eax,[CnRunArg2]
+  mov   [pCnRunArgDst],eax
+  ret
+CnRunSelectDsts3:
+  lea   eax,[CnRun3File3]
+  mov   [pCnRunFileDst],eax
+  lea   eax,[CnRunArg3]
+  mov   [pCnRunArgDst],eax
+  ret
+
+;------------------------------------------------------------------------------
+; CnRunCopyFile
+;   Output:
+;     Current file destination receives one filename token.
+;------------------------------------------------------------------------------
+CnRunCopyFile:
+  mov   word[CnRunFileLen],0
+  mov   edi,[pCnRunFileDst]
+  mov   word[edi],0
+CnRunCopyFile1:
+  mov   ax,[CnRunInputLeft]
+  test  ax,ax
+  jz    CnRunCopyFileDone
+  mov   esi,[pCnRunInput]
+  cmp   byte[esi],' '
+  je    CnRunCopyFileDone
+  cmp   byte[esi],'|'
+  je    CnRunCopyFileDone
+  movzx ebx,word[CnRunFileLen]
+  cmp   ebx,CN_CMD_MAX_LEN
+  jae   CnRunCopyFileAdvance
+  mov   edi,[pCnRunFileDst]
+  mov   al,[esi]
+  mov   [edi+ebx+2],al
+  inc   word[CnRunFileLen]
+CnRunCopyFileAdvance:
+  inc   esi
+  mov   [pCnRunInput],esi
+  dec   word[CnRunInputLeft]
+  jmp   CnRunCopyFile1
+CnRunCopyFileDone:
+  mov   edi,[pCnRunFileDst]
+  mov   ax,[CnRunFileLen]
+  mov   [edi],ax
+  ret
+
+;------------------------------------------------------------------------------
+; CnRunCopyArg
+;   Output:
+;     Current argument destination receives text through the next pipe or end.
+;------------------------------------------------------------------------------
+CnRunCopyArg:
+  mov   word[CnRunArgLen],0
+  mov   edi,[pCnRunArgDst]
+  mov   word[edi],0
+CnRunCopyArg1:
+  mov   ax,[CnRunInputLeft]
+  test  ax,ax
+  jz    CnRunCopyArgTrim
+  mov   esi,[pCnRunInput]
+  cmp   byte[esi],'|'
+  je    CnRunCopyArgTrim
+  movzx ebx,word[CnRunArgLen]
+  cmp   ebx,CN_CMD_MAX_LEN
+  jae   CnRunCopyArgAdvance
+  mov   edi,[pCnRunArgDst]
+  mov   al,[esi]
+  mov   [edi+ebx+2],al
+  inc   word[CnRunArgLen]
+CnRunCopyArgAdvance:
+  inc   esi
+  mov   [pCnRunInput],esi
+  dec   word[CnRunInputLeft]
+  jmp   CnRunCopyArg1
+CnRunCopyArgTrim:
+  movzx ebx,word[CnRunArgLen]
+  test  ebx,ebx
+  jz    CnRunCopyArgDone
+  mov   edi,[pCnRunArgDst]
+  cmp   byte[edi+ebx+1],' '
+  jne   CnRunCopyArgDone
+  dec   word[CnRunArgLen]
+  jmp   CnRunCopyArgTrim
+CnRunCopyArgDone:
+  mov   edi,[pCnRunArgDst]
+  mov   ax,[CnRunArgLen]
+  mov   [edi],ax
+  ret
+
+;------------------------------------------------------------------------------
+; CnRunLoadTask
+;   Input:
+;     KcArg0 = program filename Str.
+;     KcArg1 = task table index.
+;     KcArg2 = stack slot index.
+;     TaskProgramArgPtr = task startup argument Str.
+;   Output:
+;     KcStatus/KcResult0 from KcTsLoadProgram.
+;------------------------------------------------------------------------------
+CnRunLoadTask:
+  mov   eax,[KcArg1]
+  mov   [TaskProgramTaskIndex],eax
+  mov   dword[KcNumber],KcTsLoadProgram
+  call  KcDispatch
+  mov   eax,[KcStatus]
+  cmp   eax,KC_STATUS_OK
+  jne   CnRunLoadTaskDone
+  call  TaskProgramSetArg
+CnRunLoadTaskDone:
   ret
 
 ;------------------------------------------------------------------------------

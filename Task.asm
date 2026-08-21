@@ -29,7 +29,9 @@
 ;   - TaskProgramSetArg
 ;   - TaskProgramStartOne
 ;   - TaskProgramStart
+;   - TaskProgramStartN
 ;   - TaskProgramPrintExitCodes
+;   - TaskProgramPrintExitCodesN
 ;   - TaskExit
 ;   - TaskYield
 ;
@@ -142,6 +144,9 @@ TaskProgramArgPtr    dd 0               ; input: kernel Str argument for loaded 
 TaskProgramArgCopySrc dd 0              ; work: task argument copy source
 TaskProgramArgCopyPtr dd 0              ; work: task argument copy pointer
 TaskProgramArgCopyLeft dd 0             ; work: task argument bytes left
+TaskProgramRunCount dd 0                ; input: count of task slots 1..N to run
+TaskProgramCheckIndex dd 0              ; work: task completion scan index
+TaskProgramPrintIndex dd 0              ; work: task exit-code print index
 TaskProgramEntryPtr  dd 0               ; output: loaded program entry address
 TaskProgramKcBlockPtr dd 0              ; output: loaded program KcBlock address
 TaskProgramNextLoadBase dd 0            ; work: next dynamic user-program load base
@@ -161,6 +166,7 @@ TaskExitCode         dd 0               ; input: current task exit code
 String  TaskProgramExitStr1,"Task 1 exit 0000 0000"
 String  TaskProgramExitStr2,"Task 2 exit 0000 0000"
 String  TaskProgramExitStr3,"Task 3 exit 0000 0000"
+String  TaskProgramExitStr,"Task 0 exit 0000 0000"
 TaskTable:
   times MAX_TASKS * TASK_RECORD_SIZE db 0
 
@@ -622,6 +628,23 @@ TaskProgramStart1:
   ret
 
 ;--------------------------------------------------------------------------------------------------
+; TaskProgramStartN
+;   Input:
+;     TaskProgramRunCount = count of task slots 1..N to wait for.
+;   Output:
+;     Starts cooperative dispatch of ready tasks and returns when selected tasks exit.
+;--------------------------------------------------------------------------------------------------
+TaskProgramStartN:
+  mov   dword[TaskProgramDone],0
+TaskProgramStartN1:
+  call  TaskYield
+  call  TaskProgramCheckDoneN
+  mov   eax,[TaskProgramDone]
+  test  eax,eax
+  jz    TaskProgramStartN1
+  ret
+
+;--------------------------------------------------------------------------------------------------
 ; TaskProgramPrintExitCodes
 ;   Output:
 ;     Prints recorded exit codes for tasks 1, 2, and 3.
@@ -686,6 +709,49 @@ TaskProgramPrintExitCodes:
   mov   [pVdStr],eax
   call  VdPutStr
   call  CnCrLf
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; TaskProgramPrintExitCodesN
+;   Input:
+;     TaskProgramRunCount = count of task slots 1..N to print.
+;   Output:
+;     Prints recorded exit codes for task slots 1..N.
+;--------------------------------------------------------------------------------------------------
+TaskProgramPrintExitCodesN:
+  mov   dword[TaskProgramPrintIndex],1
+TaskProgramPrintExitCodesN1:
+  mov   eax,[TaskProgramPrintIndex]
+  cmp   eax,[TaskProgramRunCount]
+  ja    TaskProgramPrintExitCodesNDone
+  mov   [TaskIndex],eax
+  call  TaskGetRecord
+  mov   edi,[pTaskRecord]
+  test  edi,edi
+  jz    TaskProgramPrintExitCodesNNext
+  mov   eax,[TaskProgramPrintIndex]
+  add   al,'0'
+  mov   [TaskProgramExitStr+7],al
+  mov   eax,[edi+TASK_EXIT_CODE]
+  call  TaskProgramSplitExitCode
+  mov   eax,[TaskExitCodeSum]
+  mov   [TaskPut4DecVal],eax
+  lea   eax,[TaskProgramExitStr+14]
+  mov   [pTaskPut4DecDst],eax
+  call  TaskPut4Dec
+  mov   eax,[TaskExitCodeYield]
+  mov   [TaskPut4DecVal],eax
+  lea   eax,[TaskProgramExitStr+19]
+  mov   [pTaskPut4DecDst],eax
+  call  TaskPut4Dec
+  lea   eax,[TaskProgramExitStr]
+  mov   [pVdStr],eax
+  call  VdPutStr
+  call  CnCrLf
+TaskProgramPrintExitCodesNNext:
+  inc   dword[TaskProgramPrintIndex]
+  jmp   TaskProgramPrintExitCodesN1
+TaskProgramPrintExitCodesNDone:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -1043,6 +1109,34 @@ TaskProgramCheckDone:
   jne   TaskProgramCheckDoneDone
   mov   dword[TaskProgramDone],1
 TaskProgramCheckDoneDone:
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; TaskProgramCheckDoneN
+;   Input:
+;     TaskProgramRunCount = count of task slots 1..N to check.
+;   Output:
+;     TaskProgramDone = 1 when task slots 1..N are EXITED, else 0.
+;--------------------------------------------------------------------------------------------------
+TaskProgramCheckDoneN:
+  mov   dword[TaskProgramDone],0
+  mov   dword[TaskProgramCheckIndex],1
+TaskProgramCheckDoneN1:
+  mov   eax,[TaskProgramCheckIndex]
+  cmp   eax,[TaskProgramRunCount]
+  ja    TaskProgramCheckDoneNOk
+  mov   [TaskIndex],eax
+  call  TaskGetRecord
+  mov   edi,[pTaskRecord]
+  test  edi,edi
+  jz    TaskProgramCheckDoneNDone
+  cmp   dword[edi+TASK_STATE],TASK_STATE_EXITED
+  jne   TaskProgramCheckDoneNDone
+  inc   dword[TaskProgramCheckIndex]
+  jmp   TaskProgramCheckDoneN1
+TaskProgramCheckDoneNOk:
+  mov   dword[TaskProgramDone],1
+TaskProgramCheckDoneNDone:
   ret
 
 ;--------------------------------------------------------------------------------------------------
