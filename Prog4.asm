@@ -208,9 +208,13 @@ BadPrintTest:
   mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
   cmp   eax,STATUS_BAD_ARG
   jne   BadPrintTestFailed
+  mov   dword[pProg4Msg],MsgBadPrintOk
+  call  PrintProg4Msg
   mov   dword[Prog4ExitCode],42
   ret
 BadPrintTestFailed:
+  mov   dword[pProg4Msg],MsgBadPrintFail
+  call  PrintProg4Msg
   mov   dword[Prog4ExitCode],99
   ret
 
@@ -222,9 +226,13 @@ BadOpenTest:
   mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
   cmp   eax,STATUS_BAD_ARG
   jne   BadOpenTestFailed
+  mov   dword[pProg4Msg],MsgBadOpenOk
+  call  PrintProg4Msg
   mov   dword[Prog4ExitCode],43
   ret
 BadOpenTestFailed:
+  mov   dword[pProg4Msg],MsgBadOpenFail
+  call  PrintProg4Msg
   mov   dword[Prog4ExitCode],98
   ret
 
@@ -239,10 +247,22 @@ BadReadTest:
   mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
   cmp   eax,STATUS_BAD_ARG
   jne   BadReadTestFailed
+  mov   dword[pProg4Msg],MsgBadReadOk
+  call  PrintProg4Msg
   mov   dword[Prog4ExitCode],44
   ret
 BadReadTestFailed:
+  mov   dword[pProg4Msg],MsgBadReadFail
+  call  PrintProg4Msg
   mov   dword[Prog4ExitCode],97
+  ret
+
+PrintProg4Msg:
+  mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],KC_VD_WRITE_STR
+  mov   eax,[pProg4Msg]
+  mov   [KC_BLOCK+KC_BLOCK_ARG0],eax
+  mov   ebx,KERNEL_CALL_GATEWAY
+  call  ebx
   ret
 
 CloseFile:
@@ -268,8 +288,21 @@ align 4
 DataHandle           dd 0
 Prog4ExitCode        dd 0
 Prog4Status          dd 0
+pProg4Msg            dd 0
 DataFileName         dw 8
                      db "DATA.TXT"
+MsgBadPrintOk        dw 21
+                     db "Prog4: bad-print OK",13,10
+MsgBadPrintFail      dw 23
+                     db "Prog4: bad-print FAIL",13,10
+MsgBadOpenOk         dw 20
+                     db "Prog4: bad-open OK",13,10
+MsgBadOpenFail       dw 22
+                     db "Prog4: bad-open FAIL",13,10
+MsgBadReadOk         dw 20
+                     db "Prog4: bad-read OK",13,10
+MsgBadReadFail       dw 22
+                     db "Prog4: bad-read FAIL",13,10
 DataBuffer           dw 0
 DataBufferText:
   times DATA_BUFFER_SIZE db 0
