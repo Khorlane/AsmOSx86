@@ -128,6 +128,8 @@ DEV_DEFAULT_BLOCK_DEVICE equ DEV_ID_FLOPPY_A
 DevStatus                dd 0          ; output: DEV_STATUS_*
 DevBlockDevice           dd 0          ; input/current block device
 pDevBlockDeviceRecord    dd 0          ; current block device registry record
+DevRegistryLeft          dd 0          ; work: registry records left to scan
+DevReadHandler           dd 0          ; work: selected block-device read routine
 DevSector                dd 0          ; input: block-device sector
 DevBuffer                dd 0          ; input: destination buffer
 
@@ -556,7 +558,7 @@ AsmFsFindEntryNotFound:
 ;--------------------------------------------------------------------------------------------------
 DevInit:
   mov   dword[DevBlockDevice],DEV_DEFAULT_BLOCK_DEVICE
-  mov   dword[pDevBlockDeviceRecord],DevRegistryFloppyA
+  call  DevFindById
   call  FloppyInit
   mov   dword[DevStatus],DEV_STATUS_OK
   ret
@@ -572,12 +574,13 @@ DevInit:
 ;     FsStatus  = FS_STATUS_*
 ;--------------------------------------------------------------------------------------------------
 DevReadSector:
+  call  DevFindById
+  mov   eax,[DevStatus]
+  cmp   eax,DEV_STATUS_OK
+  jne   DevReadSectorBadDevice
   mov   esi,[pDevBlockDeviceRecord]
   test  esi,esi
   jz    DevReadSectorBadDevice
-  mov   eax,[DevBlockDevice]
-  cmp   eax,[esi+DEV_RECORD_ID]
-  jne   DevReadSectorBadDevice
   mov   eax,[esi+DEV_RECORD_TYPE]
   cmp   eax,DEV_TYPE_BLOCK
   jne   DevReadSectorBadDevice
@@ -587,10 +590,16 @@ DevReadSector:
   mov   eax,[DevSector]
   cmp   eax,[esi+DEV_RECORD_SECTOR_COUNT]
   jae   DevReadSectorIoError
+  mov   eax,[esi+DEV_RECORD_READ]
+  test  eax,eax
+  jz    DevReadSectorBadDevice
+  mov   [DevReadHandler],eax
+  mov   eax,[DevSector]
   mov   [FsCurrentLba],eax
   mov   eax,[DevBuffer]
   mov   [FsWorkPtr],eax
-  call  FloppyReadSectorTo
+  mov   eax,[DevReadHandler]
+  call  eax
   mov   eax,[FsStatus]
   cmp   eax,FS_STATUS_OK
   jne   DevReadSectorIoError
@@ -604,6 +613,36 @@ DevReadSectorBadDevice:
 DevReadSectorIoError:
   mov   dword[DevStatus],DEV_STATUS_IO_ERROR
   mov   dword[FsStatus],FS_STATUS_IO_ERROR
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; DevFindById
+;   Input:
+;     DevBlockDevice = requested device id.
+;   Output:
+;     DevStatus             = DEV_STATUS_OK or DEV_STATUS_BAD_DEVICE.
+;     pDevBlockDeviceRecord = matching registry record, or 0.
+;--------------------------------------------------------------------------------------------------
+DevFindById:
+  mov   dword[pDevBlockDeviceRecord],0
+  mov   esi,DevRegistry
+  mov   dword[DevRegistryLeft],DEV_REGISTRY_COUNT
+DevFindById1:
+  mov   eax,[DevRegistryLeft]
+  test  eax,eax
+  jz    DevFindByIdBad
+  mov   eax,[DevBlockDevice]
+  cmp   eax,[esi+DEV_RECORD_ID]
+  je    DevFindByIdOk
+  add   esi,DEV_RECORD_SIZE
+  dec   dword[DevRegistryLeft]
+  jmp   DevFindById1
+DevFindByIdOk:
+  mov   [pDevBlockDeviceRecord],esi
+  mov   dword[DevStatus],DEV_STATUS_OK
+  ret
+DevFindByIdBad:
+  mov   dword[DevStatus],DEV_STATUS_BAD_DEVICE
   ret
 
 ;**************************************************************************************************
