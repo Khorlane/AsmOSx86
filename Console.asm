@@ -34,6 +34,7 @@ pCnCmdArg        dd 0                  ; Pointer to command argument payload
 pCnCmdTable      dd 0                  ; Pointer to command table
 pCnLogMsg        dd 0                  ; Pointer to log message
 pCnRunInput      dd 0                  ; Pointer to Run argument scanner
+pCnRun3FileDst   dd 0                  ; Pointer to Run3 file destination
 pCnTmpInput      dd 0                  ; Pointer to temp: input payload
 pCnTmpTable      dd 0                  ; Pointer to temp: command table
 CnCmdLineLen     dw 0                  ; Command line length
@@ -50,6 +51,9 @@ CnPad2           db 0,0                ; pad to keep alignment friendly
 CnCmdLine: times (2 + CN_CMD_MAX_LEN) db 0
 CnRunFile: times (2 + CN_CMD_MAX_LEN) db 0
 CnRunArg: times (2 + CN_CMD_MAX_LEN) db 0
+CnRun3File1: times (2 + CN_CMD_MAX_LEN) db 0
+CnRun3File2: times (2 + CN_CMD_MAX_LEN) db 0
+CnRun3File3: times (2 + CN_CMD_MAX_LEN) db 0
 CnFsTestBuffer:
   times 32 db 0
 
@@ -82,6 +86,11 @@ String  CnRunMsg3,"Run: complete"
 String  CnRunExit,"Run: task exit 0000"
 String  CnRunUsage,"Run usage: run <program>"
 String  CnRunFail,"Run: load failed 0000"
+String  CnRun3Msg1,"Run3: loading programs"
+String  CnRun3Msg2,"Run3: running programs"
+String  CnRun3Msg3,"Run3: complete"
+String  CnRun3Usage,"Run3 usage: run3 <prog1> <prog2> <prog3>"
+String  CnRun3Fail,"Run3: load failed 0000"
 
 ; ----- Console commands -----
 String  CnCmdDate,     "Date"
@@ -90,6 +99,7 @@ String  CnCmdFsTest,   "FsTest"
 String  CnCmdHelp,     "Help"
 String  CnCmdKcTest,   "KcTest"
 String  CnCmdRun,      "Run"
+String  CnCmdRun3,     "Run3"
 String  CnCmdShutdown, "Shutdown"
 String  CnCmdTime,     "Time"
 String  CnCmdUptime,   "Uptime"
@@ -104,6 +114,7 @@ CnCmdTable:
   dd CnCmdHelp,     CnDoCmdHelp
   dd CnCmdKcTest,   CnDoCmdKcTest
   dd CnCmdRun,      CnDoCmdRun
+  dd CnCmdRun3,     CnDoCmdRun3
   dd CnCmdShutdown, CnDoCmdShutdown
   dd CnCmdTime,     CnDoCmdTime
   dd CnCmdUptime,   CnDoCmdUptime
@@ -711,6 +722,93 @@ CnDoCmdRunFail:
   ret
 
 ;------------------------------------------------------------------------------
+; CnDoCmdRun3
+;   Input:
+;     pCnCmdArg/CnCmdArgLen = three program filenames from command line.
+;   Output:
+;     Loads three named user programs into task slots 1..3 and runs them.
+;------------------------------------------------------------------------------
+CnDoCmdRun3:
+  mov   ax,[CnCmdArgLen]
+  test  ax,ax
+  jz    CnDoCmdRun3Usage
+  lea   eax,[CnRun3File1]
+  mov   [pCnRun3FileDst],eax
+  call  CnRun3NextFile
+  mov   ax,[CnRun3File1]
+  test  ax,ax
+  jz    CnDoCmdRun3Usage
+  lea   eax,[CnRun3File2]
+  mov   [pCnRun3FileDst],eax
+  call  CnRun3NextFile
+  mov   ax,[CnRun3File2]
+  test  ax,ax
+  jz    CnDoCmdRun3Usage
+  lea   eax,[CnRun3File3]
+  mov   [pCnRun3FileDst],eax
+  call  CnRun3NextFile
+  mov   ax,[CnRun3File3]
+  test  ax,ax
+  jz    CnDoCmdRun3Usage
+  lea   eax,[CnRun3Msg1]
+  mov   [pVdStr],eax
+  call  VdPutStr
+  call  CnCrLf
+  call  TaskProgramInit
+  lea   eax,[CnRun3File1]
+  mov   [KcArg0],eax
+  mov   dword[KcArg1],1
+  mov   dword[KcArg2],1
+  call  CnRun3LoadTask
+  mov   eax,[KcStatus]
+  cmp   eax,KC_STATUS_OK
+  jne   CnDoCmdRun3Fail
+  lea   eax,[CnRun3File2]
+  mov   [KcArg0],eax
+  mov   dword[KcArg1],2
+  mov   dword[KcArg2],2
+  call  CnRun3LoadTask
+  mov   eax,[KcStatus]
+  cmp   eax,KC_STATUS_OK
+  jne   CnDoCmdRun3Fail
+  lea   eax,[CnRun3File3]
+  mov   [KcArg0],eax
+  mov   dword[KcArg1],3
+  mov   dword[KcArg2],3
+  call  CnRun3LoadTask
+  mov   eax,[KcStatus]
+  cmp   eax,KC_STATUS_OK
+  jne   CnDoCmdRun3Fail
+  lea   eax,[CnRun3Msg2]
+  mov   [pVdStr],eax
+  call  VdPutStr
+  call  CnCrLf
+  call  TaskProgramStart
+  call  TaskProgramPrintExitCodes
+  lea   eax,[CnRun3Msg3]
+  mov   [pVdStr],eax
+  call  VdPutStr
+  call  CnCrLf
+  ret
+CnDoCmdRun3Usage:
+  lea   eax,[CnRun3Usage]
+  mov   [pVdStr],eax
+  call  VdPutStr
+  call  CnCrLf
+  ret
+CnDoCmdRun3Fail:
+  mov   eax,[KcResult0]
+  mov   [TaskPut4DecVal],eax
+  lea   eax,[CnRun3Fail+20]
+  mov   [pTaskPut4DecDst],eax
+  call  TaskPut4Dec
+  lea   eax,[CnRun3Fail]
+  mov   [pVdStr],eax
+  call  VdPutStr
+  call  CnCrLf
+  ret
+
+;------------------------------------------------------------------------------
 ; CnRunParseArg
 ;   Input:
 ;     pCnCmdArg/CnCmdArgLen = Run command text after "run ".
@@ -763,6 +861,42 @@ CnRunParseArgCopy:
   movzx ecx,ax
   rep   movsb
 CnRunParseArgDone:
+  ret
+
+;------------------------------------------------------------------------------
+; CnRun3NextFile
+;   Input:
+;     pCnCmdArg/CnCmdArgLen = remaining Run3 command arguments.
+;     pCnRun3FileDst = destination Str for the next filename.
+;   Output:
+;     Destination receives next filename Str.
+;     pCnCmdArg/CnCmdArgLen advance to remaining text after that filename.
+;------------------------------------------------------------------------------
+CnRun3NextFile:
+  call  CnRunParseArg
+  mov   esi,CnRunFile
+  mov   edi,[pCnRun3FileDst]
+  movzx ecx,word[CnRunFile]
+  add   ecx,2
+  rep   movsb
+  lea   eax,[CnRunArg+2]
+  mov   [pCnCmdArg],eax
+  mov   ax,[CnRunArg]
+  mov   [CnCmdArgLen],ax
+  ret
+
+;------------------------------------------------------------------------------
+; CnRun3LoadTask
+;   Input:
+;     KcArg0 = program filename Str.
+;     KcArg1 = task table index.
+;     KcArg2 = stack slot index.
+;   Output:
+;     KcStatus/KcResult0 from KcTsLoadProgram.
+;------------------------------------------------------------------------------
+CnRun3LoadTask:
+  mov   dword[KcNumber],KcTsLoadProgram
+  call  KcDispatch
   ret
 
 ;------------------------------------------------------------------------------

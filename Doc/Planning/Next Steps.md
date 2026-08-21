@@ -44,6 +44,9 @@ Run exists as: run <program> <optional argument text>
 Run loads the named program, creates task slot 1, starts cooperative dispatch,
 prints the task exit code, and returns to the console.
 Run copies optional text after the filename into the task startup argument area.
+Run3 exists as: run3 <prog1> <prog2> <prog3>
+Run3 loads three named programs into task slots 1..3 and runs them together
+through the existing cooperative scheduler.
 ```
 
 Current userland smoke tests:
@@ -67,6 +70,11 @@ run prog4.bin sleep
   calls KcTmSleep
   wakes through cooperative scheduler checks
   exits 0007
+
+run3 prog1.bin prog2.bin prog3.bin
+  loads three named programs from the console command line
+  proves file-loaded multi-task cooperative scheduling without hard-coded names
+  prints task 1..3 exit codes
 ```
 
 Kernel-call boundary:
@@ -137,7 +145,6 @@ possible candidates:
 
 ```text
 possible future improvements:
-  multiple user tasks launched from console
   clearer process/session identity
   richer startup arguments
   optional current-working-device or file context
@@ -159,6 +166,7 @@ Run the three `Prog4` modes as a regular smoke test before the next code step:
 run prog4.bin
 run prog4.bin bad
 run prog4.bin sleep
+run3 prog1.bin prog2.bin prog3.bin
 ```
 
 After that, choose the next feature based on what feels most useful:
@@ -166,6 +174,6 @@ After that, choose the next feature based on what feels most useful:
 ```text
 another blocking service
 more filesystem behavior
-multiple console-launched user tasks
+multiple console-launched user tasks with independent arguments
 more precise kernel-call validation
 ```
