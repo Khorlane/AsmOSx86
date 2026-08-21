@@ -74,6 +74,7 @@ KcArg2             dd 0                 ; input: argument 2
 KcArg3             dd 0                 ; input: argument 3
 KcResult0          dd 0                 ; output: result 0
 KcResult1          dd 0                 ; output: result 1
+KcCallFromUser     dd 0                 ; 1 while dispatching a user KcBlock call
 KcHandler          dd 0                 ; work: resolved handler address
 pKcTable           dd 0                 ; work: current table entry pointer
 KcTableLeft        dd 0                 ; work: remaining table entries
@@ -157,7 +158,9 @@ KcUserDispatch:
   mov   [KcArg2],eax
   mov   eax,[esi+KC_BLOCK_ARG3]
   mov   [KcArg3],eax
+  mov   dword[KcCallFromUser],1
   call  KcDispatch
+  mov   dword[KcCallFromUser],0
   call  TaskGetCurrentRecord
   mov   edi,[pTaskRecord]
   test  edi,edi
@@ -247,6 +250,69 @@ KcLookupDone:
   ret
 
 ;--------------------------------------------------------------------------------------------------
+; KcValidateUserStrArg0
+;   Input:
+;     KcArg0 = Str pointer.
+;   Output:
+;     KcStatus = KC_STATUS_OK or KC_STATUS_BAD_ARG.
+;   Notes:
+;     Kernel-originated KcDispatch calls skip user range checks.
+;--------------------------------------------------------------------------------------------------
+KcValidateUserStrArg0:
+  mov   dword[KcStatus],KC_STATUS_OK
+  mov   eax,[KcCallFromUser]
+  test  eax,eax
+  jz    KcValidateUserStrArg0Done
+  mov   eax,[KcArg0]
+  mov   [TaskUserPtr],eax
+  mov   dword[TaskUserSize],2
+  call  TaskValidateUserRange
+  mov   eax,[TaskUserOk]
+  test  eax,eax
+  jz    KcValidateUserStrArg0Bad
+  mov   esi,[KcArg0]
+  movzx eax,word[esi]
+  add   eax,2
+  mov   [TaskUserSize],eax
+  call  TaskValidateUserRange
+  mov   eax,[TaskUserOk]
+  test  eax,eax
+  jz    KcValidateUserStrArg0Bad
+  mov   dword[KcStatus],KC_STATUS_OK
+  ret
+KcValidateUserStrArg0Bad:
+  mov   dword[KcStatus],KC_STATUS_BAD_ARG
+KcValidateUserStrArg0Done:
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; KcValidateUserReadBuffer
+;   Input:
+;     KcArg1 = destination buffer pointer.
+;     KcArg2 = requested byte count.
+;   Output:
+;     KcStatus = KC_STATUS_OK or KC_STATUS_BAD_ARG.
+;   Notes:
+;     Kernel-originated KcDispatch calls skip user range checks.
+;--------------------------------------------------------------------------------------------------
+KcValidateUserReadBuffer:
+  mov   dword[KcStatus],KC_STATUS_OK
+  mov   eax,[KcCallFromUser]
+  test  eax,eax
+  jz    KcValidateUserReadBufferDone
+  mov   eax,[KcArg1]
+  mov   [TaskUserPtr],eax
+  mov   eax,[KcArg2]
+  mov   [TaskUserSize],eax
+  call  TaskValidateUserRange
+  mov   eax,[TaskUserOk]
+  test  eax,eax
+  jnz   KcValidateUserReadBufferDone
+  mov   dword[KcStatus],KC_STATUS_BAD_ARG
+KcValidateUserReadBufferDone:
+  ret
+
+;--------------------------------------------------------------------------------------------------
 ; KcTmGetUptimeHandler
 ;   Output:
 ;     KcStatus  = KC_STATUS_OK
@@ -270,13 +336,17 @@ KcTmGetUptimeHandler:
 ;   Output:
 ;     KcStatus = KC_STATUS_OK or KC_STATUS_BAD_ARG
 ;   Notes:
-;     Current early version trusts the pointer if nonzero.
-;     Future userland version must validate that the pointer is inside caller memory.
+;     Userland pointers must be inside the caller's user virtual range.
 ;--------------------------------------------------------------------------------------------------
 KcVdWriteStrHandler:
   mov   eax,[KcArg0]
   test  eax,eax
   jz    KcVdWriteStrHandler1
+  call  KcValidateUserStrArg0
+  mov   eax,[KcStatus]
+  cmp   eax,KC_STATUS_OK
+  jne   KcVdWriteStrHandler1
+  mov   eax,[KcArg0]
   mov   [pVdStr],eax
   call  VdPutStr
   mov   dword[KcStatus],KC_STATUS_OK
@@ -314,6 +384,11 @@ KcTsLoadProgramHandler:
   mov   eax,[KcArg0]
   test  eax,eax
   jz    KcTsLoadProgramHandler1
+  call  KcValidateUserStrArg0
+  mov   eax,[KcStatus]
+  cmp   eax,KC_STATUS_OK
+  jne   KcTsLoadProgramHandler1
+  mov   eax,[KcArg0]
   mov   [pTaskProgramName],eax
   mov   eax,[KcArg1]
   mov   [TaskProgramTaskIndex],eax
@@ -360,6 +435,11 @@ KcFsOpenHandler:
   mov   eax,[KcArg0]
   test  eax,eax
   jz    KcFsOpenHandler1
+  call  KcValidateUserStrArg0
+  mov   eax,[KcStatus]
+  cmp   eax,KC_STATUS_OK
+  jne   KcFsOpenHandler1
+  mov   eax,[KcArg0]
   mov   [pFsOpenName],eax
   call  FsOpen
   mov   eax,[FsStatus]
@@ -400,6 +480,11 @@ KcFsReadHandler:
   mov   eax,[KcArg2]
   test  eax,eax
   jz    KcFsReadHandler1
+  call  KcValidateUserReadBuffer
+  mov   eax,[KcStatus]
+  cmp   eax,KC_STATUS_OK
+  jne   KcFsReadHandler1
+  mov   eax,[KcArg2]
   mov   [FsReadCount],eax
   call  FsRead
   mov   eax,[FsStatus]

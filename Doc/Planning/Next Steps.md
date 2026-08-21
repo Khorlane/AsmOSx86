@@ -90,14 +90,18 @@ There is not yet ring 3 enforcement.
 KcDispatch rejects call number zero and KcLookup rejects unknown service numbers.
 KcUserDispatch requires a current task and KcBlock before dispatching.
 File and video kernel-call handlers reject basic null/zero arguments.
+TaskValidateUserRange checks that user-provided pointers stay inside the
+current user-program virtual range or the task KcBlock page.
+KcVdWriteStr and KcFsOpen validate full Str ranges for user-originated calls.
+KcFsRead validates the destination buffer range for user-originated calls.
 ```
 
 Next step:
 
 ```text
-validate user pointers are inside expected user virtual ranges
-validate read/write buffer ranges before services use them
 define useful bad-call behavior for Prog4-style privilege-boundary tests
+add a deliberate bad-call user program path
+keep tightening service-specific validation as new Kc calls appear
 ```
 
 Goal:
@@ -221,14 +225,13 @@ userland session model
 
 ## Preferred First Move
 
-With the first device registry routing milestone complete, continue kernel-call
-validation:
+With basic user pointer validation in place, add a deliberate userland bad-call
+test path:
 
 ```text
-define user pointer range helpers
-validate KcVdWriteStr string pointers
-validate KcFsOpen filename pointers
-validate KcFsRead destination buffer ranges
+make Prog4 or a later test program trigger one invalid kernel call
+verify the kernel call fails cleanly
+keep normal run prog4.bin behavior working
 ```
 
 This keeps userland filesystem tests useful while preparing for stricter

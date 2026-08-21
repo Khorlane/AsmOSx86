@@ -18,6 +18,7 @@
 ; Public API
 ;   - TaskGetCurrentRecord
 ;   - TaskPut4Dec
+;   - TaskValidateUserRange
 ;   - TaskProgramLoad
 ;   - TaskProgramInit
 ;   - TaskProgramStartOne
@@ -104,6 +105,10 @@ TaskStackTop         dd 0               ; output: stack slot top address
 pTaskRecord          dd 0               ; output: selected task record pointer
 TaskPut4DecVal       dd 0               ; input: value 0..9999
 pTaskPut4DecDst      dd 0               ; input: destination payload pointer
+TaskUserPtr          dd 0               ; input: user pointer to validate
+TaskUserSize         dd 0               ; input: validation byte count
+TaskUserLimit        dd 0               ; work: exclusive range limit
+TaskUserOk           dd 0               ; output: 1 if range is valid, else 0
 TaskInitPtr          dd 0               ; work: table clear pointer
 TaskInitLeft         dd 0               ; work: table clear byte count
 pTaskProgramName     dd 0               ; input: pointer to kernel Str filename
@@ -178,6 +183,39 @@ TaskPut4Dec:
   mov   al,dl
   add   al,'0'
   mov   [edi+3],al
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; TaskValidateUserRange
+;   Input:
+;     TaskUserPtr  = first byte of user range.
+;     TaskUserSize = byte count to validate.
+;   Output:
+;     TaskUserOk = 1 if the range is inside the user program or KcBlock area.
+;--------------------------------------------------------------------------------------------------
+TaskValidateUserRange:
+  mov   dword[TaskUserOk],0
+  mov   eax,[TaskUserSize]
+  test  eax,eax
+  jz    TaskValidateUserRangeDone
+  mov   ebx,[TaskUserPtr]
+  test  ebx,ebx
+  jz    TaskValidateUserRangeDone
+  add   eax,ebx
+  jc    TaskValidateUserRangeDone
+  mov   [TaskUserLimit],eax
+  cmp   ebx,USER_PROGRAM_VIRTUAL_BASE
+  jb    TaskValidateUserRangeKcBlock
+  cmp   eax,USER_PROGRAM_VIRTUAL_BASE+USER_PROGRAM_MAX_SIZE
+  jbe   TaskValidateUserRangeOk
+TaskValidateUserRangeKcBlock:
+  cmp   ebx,USER_PROGRAM_KCBLOCK_BASE
+  jb    TaskValidateUserRangeDone
+  cmp   eax,USER_PROGRAM_KCBLOCK_BASE+USER_PROGRAM_KCBLOCK_SIZE
+  ja    TaskValidateUserRangeDone
+TaskValidateUserRangeOk:
+  mov   dword[TaskUserOk],1
+TaskValidateUserRangeDone:
   ret
 
 ;--------------------------------------------------------------------------------------------------
