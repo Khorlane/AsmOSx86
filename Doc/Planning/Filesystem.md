@@ -4,12 +4,75 @@
 
 This document captures the future native filesystem direction for AsmOSx86.
 
-It is separate from the current FAT12 support used to boot from `floppy.img` and
-load early user programs. Current FAT12 support is intentionally small and
-practical. This document is about the longer-term filesystem model.
+It is separate from the current `ASMF` manifest-based floppy layout used to boot
+from `floppy.img` and load early user programs. The current manifest support is
+intentionally small and practical. This document is about the longer-term native
+filesystem model.
 
 The central idea is to keep device-level storage concepts, filesystem allocation
 policy, and file-level logical semantics distinct.
+
+## Current Code Reality
+
+AsmOSx86 does not currently use FAT12 for the active boot or file-loading path.
+
+The current disk layout is a raw 1.44MB floppy image:
+
+```text
+Sector 0  Boot.bin
+Sector 1  ASMF manifest
+Sector 2+ packed file bodies
+```
+
+The current `BuildCopy.ps1` script writes the manifest and packs file bodies
+contiguously after it. The manifest records:
+
+```text
+uppercase 8.3 file name
+starting sector
+file byte size
+file sector count
+```
+
+The current kernel file path is:
+
+```text
+KcFsOpen / KcFsRead / KcFsClose
+  -> Kc.asm handlers
+  -> FsOpen / FsRead / FsClose
+  -> ASMF manifest lookup
+  -> DevReadSector
+  -> FloppyReadSectorTo
+  -> floppy controller / DMA
+```
+
+The current file service is read-only and handle-based:
+
+```text
+open existing file by name
+read bytes from an open file handle
+track current file position
+detect EOF
+close file handle
+```
+
+Current limits and simplifications:
+
+```text
+files are packed contiguously by the build script
+no free-space map
+no create/delete/rename
+no write path
+no directories
+no extent table
+no per-file BlockSize
+no allocation policy in the kernel
+floppy A: is the only active block device
+```
+
+So the current `ASMF` manifest is not the native filesystem described below. It
+is a useful early file table that gives the boot loader, kernel, and user-program
+loader a shared way to locate files on the raw floppy image.
 
 ## Layer Overview
 

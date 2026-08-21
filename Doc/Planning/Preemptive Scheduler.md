@@ -16,7 +16,7 @@ The kernel can then choose the next ready task and switch to it.
 The current user-program tests prove useful groundwork:
 
 ```text
-raw user programs loaded from FAT12
+raw user programs loaded from the ASMF manifest filesystem
 programs mapped at a fixed virtual base
 programs take turns running
 programs yield more than once
@@ -25,6 +25,53 @@ exit codes prove each program completed its own work
 
 This is the right foundation because task switches happen at explicit,
 understandable points.
+
+## Current Code Reality
+
+The current scheduler is cooperative, not preemptive.
+
+Implemented pieces:
+
+```text
+Task table with up to 8 task records
+task states: Free, Ready, Running, Blocked, Exited
+saved ESP per task
+low-memory stack-slot assignment
+file-backed raw user-program loading
+per-task physical program allocation above the kernel
+fixed user virtual base at 00200000h
+per-task KcBlock page at 00210000h
+round-robin scan for the next Ready task
+```
+
+The current user-program loader reads raw `PROG*.BIN` files through the
+`KcFsOpen` / `KcFsRead` / `KcFsClose` path, which currently resolves files
+through the `ASMF` manifest on the raw floppy image.
+
+The current switch point is `TaskYield`. It saves the current task's `ESP`,
+marks the current task ready unless it has exited, scans the task table for the
+next `Ready` task, maps that task's program into the shared user virtual range,
+loads the selected task's saved `ESP`, and returns through that task's stack.
+
+The current user/kernel entry path for user tasks is `KcUserDispatch`.
+`KcTsYield` and `KcTsExit` are handled specially because they can change which
+task resumes after the kernel call.
+
+What does not exist yet:
+
+```text
+timer interrupt scheduling
+preemptive task interruption
+sleep/block wait queues
+runtime budget accounting
+runaway-task enforcement
+interrupt-safe scheduler state
+ring 3 enforcement
+```
+
+The empty IDT is loaded during kernel startup, and the PIT is polled for current
+timekeeping. The current kernel still does not depend on hardware interrupts for
+normal scheduling.
 
 ## Cooperative vs Preemptive
 

@@ -10,13 +10,51 @@ Today, AsmOSx86 has an early userland model:
 
 ```text
 raw user program binaries
-loaded from FAT12 floppy
+loaded from the ASMF manifest filesystem
 mapped at a fixed virtual base
 cooperative task switching
 kernel calls by convention
 ```
 
 That is userland as an execution model, but not yet hardware-enforced user mode.
+
+## Current Code Reality
+
+AsmOSx86 has useful groundwork, but it does not yet have hardware-enforced
+privilege separation.
+
+Current implemented groundwork:
+
+```text
+Kernel runs in protected mode at 00100000h
+Kernel owns GDT and IDT setup
+Paging is enabled
+First 16 MiB are identity-mapped
+Shared user virtual range begins at 00200000h
+User KcBlock virtual page is at 00210000h
+Each loaded user task has its own physical program pages
+Task switches remap the shared user virtual range to the selected task
+Kernel-call gateway exists at 00100005h
+KcUserDispatch copies arguments/results through the current task's KcBlock
+Page-fault IDT vector 14 is installed
+Page faults currently halt forever
+```
+
+Current important limitations:
+
+```text
+No ring 3 code/data descriptors
+No TSS
+No ring transition stack switching
+No trap/interrupt gate for user kernel calls
+No general-protection fault handler
+Paging entries are present/writable but not user-accessible
+Kernel and user tasks still run with ring 0 segment selectors
+User programs are constrained by convention, not by CPU privilege checks
+```
+
+So the current system has a useful userland execution model and paging-backed
+address layout, but not actual user/kernel privilege enforcement yet.
 
 Future privilege separation would mean:
 
