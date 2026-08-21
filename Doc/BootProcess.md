@@ -2,7 +2,7 @@
 
 This document describes how AsmOSx86 gets from a blank floppy image to a
 bootable disk, and then how the boot path proceeds from BIOS handoff through
-`Boot1.asm`, `Boot2.asm`, and finally the protected-mode kernel.
+`Boot1.asm` and into the protected-mode kernel.
 
 ## From Blank Image to Boot Disk
 
@@ -10,8 +10,8 @@ AsmOSx86 currently uses a 1.44MB raw floppy image named `floppy.img`.
 
 The boot disk is created in two broad phases:
 
-1. Prepare the blank floppy image and write the stage 1 boot sector.
-2. Write the AsmOSx86 manifest and packed boot/runtime files.
+1. Prepare the blank floppy image and write the boot sector.
+2. Write the AsmOSx86 manifest and packed kernel/runtime files.
 
 The main preparation script is:
 
@@ -23,8 +23,7 @@ That script assumes it is run from the `Scripts` folder.
 
 ## BuildWriteBoot1.ps1
 
-`BuildWriteBoot1.ps1` creates a fresh floppy image and installs the stage 1 boot
-sector.
+`BuildWriteBoot1.ps1` creates a fresh floppy image and installs the boot sector.
 
 Its input is:
 
@@ -56,11 +55,12 @@ The current floppy layout is:
 ```text
 Sector 0      Boot1.bin
 Sector 1      AsmOSx86 file manifest
-Sector 2+     Boot2.bin
-Next sectors  Kernel.bin
+Sector 2+     Kernel.bin
 Next sectors  Prog1.bin
 Next sectors  Prog2.bin
 Next sectors  Prog3.bin
+Next sectors  Prog4.bin, if present
+Next sectors  Data.txt, if present
 ```
 
 The manifest is one 512-byte sector.
@@ -94,18 +94,21 @@ After `floppy.img` exists, the normal copy script is:
 .\BuildCopy.ps1
 ```
 
-That script writes manifest entries and raw file data for:
+That script writes the manifest and raw file data.
+
+`KERNEL.BIN` is required.
+
+The script also includes optional files when they exist:
 
 ```text
-BOOT2.BIN
-KERNEL.BIN
 PROG1.BIN
 PROG2.BIN
 PROG3.BIN
+PROG4.BIN
+DATA.TXT
 ```
 
-`BOOT2.BIN` and `KERNEL.BIN` are required. The user programs are optional, but
-`UserTest` expects all three to be present.
+`UserTest` expects `PROG1.BIN`, `PROG2.BIN`, and `PROG3.BIN` to be present.
 
 ## Real Hardware Note
 
@@ -127,108 +130,121 @@ Then the BIOS jumps to that loaded boot sector.
 
 At this point, AsmOSx86 is executing `Boot1.asm`.
 
-The BIOS also provides the boot drive number in `DL`. `Boot1.asm` stores that
-value so later BIOS disk reads use the same drive the BIOS booted from.
-
 ## Boot1 Role
 
-`Boot1.asm` is the stage 1 boot loader.
+`Boot1.asm` is the current AsmOSx86 boot loader.
 
-Its job is deliberately small because it must fit in one 512-byte boot sector.
+It is deliberately small because it must fit in one 512-byte boot sector, but it
+now performs the whole boot handoff itself. There is no separate `Boot2.asm`
+stage in the current boot path.
 
 Boot1 is responsible for:
 
-- printing the stage 1 startup message
+- setting up enough real-mode state to run predictably
+- installing a small IRQ6 handler for floppy-controller interrupts
+- initializing the floppy controller directly
 - reading the AsmOSx86 manifest from sector 1
-- finding `BOOT2.BIN` in the manifest
-- loading Boot2 into memory at `0050:0000`
-- transferring control to Boot2 with a far return
+- finding `KERNEL.BIN` in the manifest
+- enabling A20
+- loading `KERNEL.BIN` directly to physical address `00100000h`
+- installing a minimal GDT
+- entering protected mode
+- jumping to the kernel entry point
 
-Boot1 uses BIOS interrupts because it is still in 16-bit real mode.
-
-For screen output it uses:
-
-```text
-INT 10h
-```
-
-For floppy reads it uses:
-
-```text
-INT 13h
-```
+Boot1 does not use BIOS interrupts after the BIOS transfers control to it.
 
 Boot1 does not read a FAT12 root directory or FAT table.
 
-## Boot2 Role
+## What Boot1.asm Does
 
-`Boot2.asm` is the stage 2 boot loader.
+Boot1 starts in 16-bit real mode at `0000:7C00`.
 
-Boot2 is larger than Boot1 and is loaded from the raw sectors named by the
-manifest. Its job is to do the work that is too large or too awkward for the
-512-byte boot sector.
+The first setup step clears interrupts, sets `DS` and `SS` to zero, places the
+stack at `0000:7C00`, and clears the direction flag. With `org 07C00h`, labels in
+Boot1 line up with the address where the BIOS loaded the sector.
 
-Boot2 is responsible for:
+Boot1 then installs its own real-mode IRQ6 handler at interrupt vector `0Eh`.
+IRQ6 is the floppy-controller interrupt. The handler only marks
+`FdcDone = 1`, sends an end-of-interrupt to the PIC, and returns.
 
-- setting up real-mode segment registers and stack
-- installing a Global Descriptor Table
-- enabling the A20 line
-- reading the AsmOSx86 manifest from sector 1
-- finding `KERNEL.BIN` in the manifest
-- loading `KERNEL.BIN` into low memory
-- entering protected mode
-- setting 32-bit segment registers
-- copying the kernel to 1MB
-- jumping to the kernel entry point
-
-Boot2 is assembled with:
+Next, Boot1 unmasks IRQ6 on the master PIC and initializes the primary floppy
+controller. The current loader assumes a simple PC-compatible 1.44MB drive A:
+configuration:
 
 ```text
-org 0500h
+18 sectors per track
+2 heads
+512-byte sectors
+500 Kbit/s data rate
 ```
 
-That matches where Boot1 loads it:
+Once the controller is ready, Boot1 reads logical sector 1 into memory at:
 
 ```text
-0050:0000
+0000:0500
 ```
 
-## Boot2 Loading the Kernel
-
-Boot2 searches the AsmOSx86 manifest for:
+That sector contains the `ASMF` manifest. Boot1 walks the manifest entries,
+looking for the uppercase 8.3 name:
 
 ```text
 KERNEL  BIN
 ```
 
-It loads the manifest to:
+When the entry is found, Boot1 reads the starting sector and sector count from
+the manifest entry.
+
+Before loading the kernel, Boot1 enables A20 using the fast A20 gate at port
+`092h`. This is needed because the kernel is loaded above the 1MB boundary.
+
+Boot1 then reads each kernel sector from the floppy and writes it directly to
+physical memory starting at:
 
 ```text
-ManifestSegment:0000 = 02E0:0000
+00100000h
 ```
 
-It loads `KERNEL.BIN` into real-mode memory at:
+The floppy DMA setup uses `BX` for the low 16 bits of the destination address
+and `FdcDmaPage` for the DMA page register. For the kernel load, `FdcDmaPage` is
+set to `10h`, which makes the destination physical page `00100000h`.
+
+After the kernel sectors are loaded, Boot1 disables interrupts, loads a minimal
+GDT, sets `CR0.PE`, and performs a far jump:
+
+```asm
+jmp   CODE_SEL:Protected
+```
+
+The far jump reloads `CS` with the protected-mode code selector and lands at the
+`Protected` label in Boot1.
+
+At `Protected`, Boot1 switches `DS`, `ES`, and `SS` to the protected-mode data
+selector, sets the stack to:
 
 ```text
-RModeBase = 00003000h
+00090000h
 ```
 
-The loader tracks how many sectors were read in `Stage3Size`.
+and then jumps to:
 
-This is still done in 16-bit real mode using BIOS disk services.
+```text
+CODE_SEL:00100000h
+```
+
+That is the start of `Kernel.asm`. At that point Boot1 is finished and the
+protected-mode kernel owns execution.
 
 ## Entering Protected Mode
 
-Before switching modes, Boot2 installs a small GDT with:
+Before switching modes, Boot1 installs a small GDT with:
 
 - a null descriptor
 - a flat 32-bit code descriptor
 - a flat 32-bit data descriptor
 
-Boot2 also enables the A20 line through the 8042 keyboard controller. A20 must
-be enabled before using memory above 1MB.
+Boot1 enables A20 before loading the kernel above 1MB.
 
-To enter protected mode, Boot2 sets bit 0 in `CR0`:
+To enter protected mode, Boot1 sets bit 0 in `CR0`:
 
 ```text
 CR0.PE = 1
@@ -237,40 +253,7 @@ CR0.PE = 1
 Then it performs a far jump to reload `CS` with the protected-mode code
 selector.
 
-Boot2 intentionally does not enable interrupts.
-
-## Boot2 Jumping to the Kernel
-
-Once in protected mode, Boot2 switches to 32-bit code and sets:
-
-```text
-DS = data selector
-SS = data selector
-ES = data selector
-ESP = 00090000h
-```
-
-Then it copies the kernel from its temporary real-mode load address:
-
-```text
-00003000h
-```
-
-to its protected-mode runtime address:
-
-```text
-00100000h
-```
-
-Finally, Boot2 jumps to:
-
-```text
-CodeDesc:00100000h
-```
-
-That is the start of `Kernel.asm`.
-
-At that point Boot2 is finished and the protected-mode kernel owns execution.
+Boot1 intentionally does not leave interrupts enabled for the kernel handoff.
 
 ## End-to-End Summary
 
@@ -284,32 +267,26 @@ BuildWriteBoot1.ps1
   -> creates blank floppy.img
   -> writes Boot1.bin to sector 0
 
-BuildBoot2.ps1
-  -> Boot2.asm becomes Boot2.bin
-
 BuildKernel.ps1
   -> Kernel.asm and included modules become Kernel.bin
 
 BuildPrograms.ps1
-  -> Prog1/2/3.asm become raw Prog1/2/3.bin
+  -> Prog1/2/3/4.asm become raw Prog*.bin
 
 BuildCopy.ps1
   -> writes the ASMF manifest to sector 1
-  -> writes Boot2, Kernel, and Prog*.bin contiguously from sector 2
+  -> writes Kernel.bin and optional runtime files contiguously from sector 2
 
 BIOS
   -> loads sector 0 to 0000:7C00
   -> jumps to Boot1
 
 Boot1
+  -> initializes enough floppy-controller hardware to read sectors directly
   -> reads sector 1 manifest
-  -> finds and loads BOOT2.BIN at 0050:0000
-  -> jumps to Boot2
-
-Boot2
-  -> reads sector 1 manifest
-  -> finds and loads KERNEL.BIN at 00003000h
+  -> finds KERNEL.BIN
+  -> enables A20
+  -> loads KERNEL.BIN directly to 00100000h
   -> enters protected mode
-  -> copies kernel to 00100000h
   -> jumps to Kernel.asm
 ```
