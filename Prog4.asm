@@ -38,7 +38,9 @@ Start:
   jne   Prog4CloseAndExit               ;    can't continue, close file, then exit
   call  PrintLine                       ; Print
   call  MaybeSleepTest                  ; Optional cooperative sleep proof
-  call  MaybeBadCallTest                ; Optional bad-call proof
+  call  MaybeBadPrintTest               ; Optional bad-print proof
+  call  MaybeBadOpenTest                ; Optional bad-open proof
+  call  MaybeBadReadTest                ; Optional bad-read proof
 Prog4CloseAndExit:
   call  CloseFile                       ; Close file
 Prog4Exit:
@@ -95,17 +97,86 @@ PrintLine:
   call  ebx
   ret
 
-MaybeBadCallTest:
+MaybeBadPrintTest:
   cmp   word[USER_ARG],3
-  jne   MaybeBadCallTestDone
+  jne   MaybeBadPrintTestLong
   cmp   byte[USER_ARG+2],'b'
-  jne   MaybeBadCallTestDone
+  jne   MaybeBadPrintTestDone
   cmp   byte[USER_ARG+3],'a'
-  jne   MaybeBadCallTestDone
+  jne   MaybeBadPrintTestDone
   cmp   byte[USER_ARG+4],'d'
-  jne   MaybeBadCallTestDone
-  call  BadCallTest
-MaybeBadCallTestDone:
+  jne   MaybeBadPrintTestDone
+  call  BadPrintTest
+  ret
+MaybeBadPrintTestLong:
+  cmp   word[USER_ARG],9
+  jne   MaybeBadPrintTestDone
+  cmp   byte[USER_ARG+2],'b'
+  jne   MaybeBadPrintTestDone
+  cmp   byte[USER_ARG+3],'a'
+  jne   MaybeBadPrintTestDone
+  cmp   byte[USER_ARG+4],'d'
+  jne   MaybeBadPrintTestDone
+  cmp   byte[USER_ARG+5],'-'
+  jne   MaybeBadPrintTestDone
+  cmp   byte[USER_ARG+6],'p'
+  jne   MaybeBadPrintTestDone
+  cmp   byte[USER_ARG+7],'r'
+  jne   MaybeBadPrintTestDone
+  cmp   byte[USER_ARG+8],'i'
+  jne   MaybeBadPrintTestDone
+  cmp   byte[USER_ARG+9],'n'
+  jne   MaybeBadPrintTestDone
+  cmp   byte[USER_ARG+10],'t'
+  jne   MaybeBadPrintTestDone
+  call  BadPrintTest
+MaybeBadPrintTestDone:
+  ret
+
+MaybeBadOpenTest:
+  cmp   word[USER_ARG],8
+  jne   MaybeBadOpenTestDone
+  cmp   byte[USER_ARG+2],'b'
+  jne   MaybeBadOpenTestDone
+  cmp   byte[USER_ARG+3],'a'
+  jne   MaybeBadOpenTestDone
+  cmp   byte[USER_ARG+4],'d'
+  jne   MaybeBadOpenTestDone
+  cmp   byte[USER_ARG+5],'-'
+  jne   MaybeBadOpenTestDone
+  cmp   byte[USER_ARG+6],'o'
+  jne   MaybeBadOpenTestDone
+  cmp   byte[USER_ARG+7],'p'
+  jne   MaybeBadOpenTestDone
+  cmp   byte[USER_ARG+8],'e'
+  jne   MaybeBadOpenTestDone
+  cmp   byte[USER_ARG+9],'n'
+  jne   MaybeBadOpenTestDone
+  call  BadOpenTest
+MaybeBadOpenTestDone:
+  ret
+
+MaybeBadReadTest:
+  cmp   word[USER_ARG],8
+  jne   MaybeBadReadTestDone
+  cmp   byte[USER_ARG+2],'b'
+  jne   MaybeBadReadTestDone
+  cmp   byte[USER_ARG+3],'a'
+  jne   MaybeBadReadTestDone
+  cmp   byte[USER_ARG+4],'d'
+  jne   MaybeBadReadTestDone
+  cmp   byte[USER_ARG+5],'-'
+  jne   MaybeBadReadTestDone
+  cmp   byte[USER_ARG+6],'r'
+  jne   MaybeBadReadTestDone
+  cmp   byte[USER_ARG+7],'e'
+  jne   MaybeBadReadTestDone
+  cmp   byte[USER_ARG+8],'a'
+  jne   MaybeBadReadTestDone
+  cmp   byte[USER_ARG+9],'d'
+  jne   MaybeBadReadTestDone
+  call  BadReadTest
+MaybeBadReadTestDone:
   ret
 
 MaybeSleepTest:
@@ -129,18 +200,49 @@ MaybeSleepTest:
 MaybeSleepTestDone:
   ret
 
-BadCallTest:
+BadPrintTest:
   mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],KC_VD_WRITE_STR
   mov   dword[KC_BLOCK+KC_BLOCK_ARG0],00100000h
   mov   ebx,KERNEL_CALL_GATEWAY
   call  ebx
   mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
   cmp   eax,STATUS_BAD_ARG
-  jne   BadCallTestFailed
+  jne   BadPrintTestFailed
   mov   dword[Prog4ExitCode],42
   ret
-BadCallTestFailed:
+BadPrintTestFailed:
   mov   dword[Prog4ExitCode],99
+  ret
+
+BadOpenTest:
+  mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],KC_FS_OPEN
+  mov   dword[KC_BLOCK+KC_BLOCK_ARG0],00100000h
+  mov   ebx,KERNEL_CALL_GATEWAY
+  call  ebx
+  mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
+  cmp   eax,STATUS_BAD_ARG
+  jne   BadOpenTestFailed
+  mov   dword[Prog4ExitCode],43
+  ret
+BadOpenTestFailed:
+  mov   dword[Prog4ExitCode],98
+  ret
+
+BadReadTest:
+  mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],KC_FS_READ
+  mov   eax,[DataHandle]
+  mov   [KC_BLOCK+KC_BLOCK_ARG0],eax
+  mov   dword[KC_BLOCK+KC_BLOCK_ARG1],00100000h
+  mov   dword[KC_BLOCK+KC_BLOCK_ARG2],DATA_BUFFER_SIZE
+  mov   ebx,KERNEL_CALL_GATEWAY
+  call  ebx
+  mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
+  cmp   eax,STATUS_BAD_ARG
+  jne   BadReadTestFailed
+  mov   dword[Prog4ExitCode],44
+  ret
+BadReadTestFailed:
+  mov   dword[Prog4ExitCode],97
   ret
 
 CloseFile:

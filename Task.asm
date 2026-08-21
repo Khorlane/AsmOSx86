@@ -104,6 +104,15 @@ USER_PROGRAM_ARG_OFFSET         equ USER_PROGRAM_KCBLOCK_OFFSET+USER_PROGRAM_KCB
 USER_PROGRAM_ARG_BASE           equ USER_PROGRAM_VIRTUAL_BASE+USER_PROGRAM_ARG_OFFSET
 
 ;--------------------------------------------------------------------------------------------------
+; User Memory Contract
+;--------------------------------------------------------------------------------------------------
+; User-originated Kc pointer arguments are valid only when fully contained in:
+;   - USER_PROGRAM_VIRTUAL_BASE .. USER_PROGRAM_VIRTUAL_BASE+USER_PROGRAM_MAX_SIZE
+;   - USER_PROGRAM_KCBLOCK_BASE .. USER_PROGRAM_KCBLOCK_BASE+USER_PROGRAM_KCBLOCK_SIZE
+; The startup argument area immediately after the KcBlock is kernel-populated
+; task startup data, not a general Kc validation range.
+
+;--------------------------------------------------------------------------------------------------
 ; Task Globals
 ;--------------------------------------------------------------------------------------------------
 align 4
@@ -219,6 +228,9 @@ TaskPut4Dec:
 ;     TaskUserSize = byte count to validate.
 ;   Output:
 ;     TaskUserOk = 1 if the range is inside the user program or KcBlock area.
+;   Notes:
+;     This is convention enforcement today. Future ring 3 paging enforcement
+;     should make illegal user memory access fault before kernel use.
 ;--------------------------------------------------------------------------------------------------
 TaskValidateUserRange:
   mov   dword[TaskUserOk],0

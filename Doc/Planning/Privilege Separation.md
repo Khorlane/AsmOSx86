@@ -36,8 +36,11 @@ Each loaded user task has its own physical program pages
 Task switches remap the shared user virtual range to the selected task
 Kernel-call gateway exists at 00100005h
 KcUserDispatch copies arguments/results through the current task's KcBlock
+KcDispatch is the kernel-originated path and may receive kernel pointers
+KcUserDispatch is the user-originated path and requires service validation
 Page-fault IDT vector 14 is installed
 Page faults currently halt forever
+Prog4 has denial probes for invalid KcVdWriteStr, KcFsOpen, and KcFsRead pointers
 ```
 
 Current important limitations:
@@ -131,6 +134,7 @@ TSS setup for ring transition stack switching
 fault handlers for page faults and general-protection faults
 task state that records user-mode CS/DS/SS/ESP/EIP
 validation of user pointers passed through Kc*
+denial tests that prove invalid user pointers are rejected before use
 ```
 
 ## Foundational Groundwork
@@ -150,6 +154,7 @@ Recommended groundwork:
 - Keep hardware access inside kernel-owned drivers.
 - Keep filesystem access behind `KcFs*` and filesystem/block-device layers.
 - Avoid teaching user programs to depend on kernel globals or kernel labels.
+- Keep adding small userland denial tests before turning on hardware enforcement.
 - Start adding fault handlers before relying on faults for enforcement.
 - Keep boot-stage code separate from protected-mode kernel/userland rules.
 

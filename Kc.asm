@@ -26,6 +26,8 @@
 ;   - Kernel calls use memory-backed inputs and outputs.
 ;   - Registers are scratch only.
 ;   - User programs must not call subsystem routines directly in the future.
+;   - KcDispatch is for kernel-originated calls and may receive kernel pointers.
+;   - KcUserDispatch is for user-originated calls and must validate user pointers.
 ;   - Handler routines are internal dispatch-table entries.
 ;**************************************************************************************************
 
@@ -110,7 +112,8 @@ KcTableCount equ (KcTableEnd-KcTable)/8
 ;     KcStatus = KC_STATUS_OK or error
 ;     KcResult0..KcResult1 = service-specific results
 ;   Notes:
-;     Dispatches through KcTable after validation and lookup.
+;     Kernel-originated dispatch path. Kernel callers may pass kernel pointers.
+;     Userland must enter through KcUserDispatch so pointer validation can run.
 ;--------------------------------------------------------------------------------------------------
 KcDispatch:
   mov   dword[KcResult0],0
@@ -137,6 +140,8 @@ KcDispatchDone:
 ;     the call returns to the same task.
 ;   Notes:
 ;     Fixed gateway entry lives at 00100005h in Kernel.asm.
+;     User pointer arguments must be validated by service-specific handlers
+;     before they are used as kernel addresses.
 ;--------------------------------------------------------------------------------------------------
 KcUserDispatch:
   call  TaskGetCurrentRecord
@@ -212,7 +217,7 @@ KcUserDispatchSleep:
 ;   Notes:
 ;     Basic validation rejects call number zero.
 ;     KcLookup rejects unknown nonzero call numbers.
-;     Future validation should check caller/task state and argument ranges.
+;     Service handlers validate their own argument shape and user pointers.
 ;--------------------------------------------------------------------------------------------------
 KcValidate:
   mov   dword[KcStatus],KC_STATUS_INVALID

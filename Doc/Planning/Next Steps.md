@@ -77,6 +77,22 @@ run prog4.bin -- bad
   expects KC_STATUS_BAD_ARG
   exits 0042 when validation works
 
+run prog4.bin -- bad-print
+  explicit alias for the same bad KcVdWriteStr pointer validation path
+  exits 0042 when validation works
+
+run prog4.bin -- bad-open
+  runs the normal DATA.TXT path
+  deliberately passes a bad filename pointer to KcFsOpen
+  expects KC_STATUS_BAD_ARG
+  exits 0043 when validation works
+
+run prog4.bin -- bad-read
+  runs the normal DATA.TXT path
+  deliberately passes a bad destination pointer to KcFsRead
+  expects KC_STATUS_BAD_ARG
+  exits 0044 when validation works
+
 run prog4.bin -- sleep
   runs the normal DATA.TXT path
   calls KcTmSleep
@@ -104,6 +120,7 @@ TaskValidateUserRange checks user-provided ranges against the user virtual
 program area and the KcBlock page.
 KcVdWriteStr and KcFsOpen validate full Str ranges for user-originated calls.
 KcFsRead validates destination buffer ranges for user-originated calls.
+Prog4 has denial modes for bad print, bad open, and bad read user pointers.
 ```
 
 Tasking and scheduling:
@@ -137,6 +154,7 @@ Ring 3 and user/supervisor enforcement are future work.
 ```text
 normal mode proves file I/O and print calls
 bad mode proves user pointer validation
+bad-open and bad-read prove file-service pointer validation
 sleep mode proves cooperative blocking and waking
 ```
 
@@ -191,6 +209,8 @@ Run the three `Prog4` modes as a regular smoke test before the next code step:
 ```text
 run prog4.bin
 run prog4.bin -- bad
+run prog4.bin -- bad-open
+run prog4.bin -- bad-read
 run prog4.bin -- sleep
 run prog1.bin | prog2.bin | prog3.bin
 run prog4.bin -- sleep | prog1.bin | prog4.bin -- bad
