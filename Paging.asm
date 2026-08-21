@@ -27,7 +27,9 @@
 ;--------------------------------------------------------------------------------------------------
 PG_PRESENT      equ 00000001h
 PG_WRITABLE     equ 00000002h
-PG_FLAGS        equ PG_PRESENT|PG_WRITABLE
+PG_KERNEL_FLAGS equ PG_PRESENT|PG_WRITABLE
+PG_USER_FLAGS   equ PG_PRESENT|PG_WRITABLE
+PG_KCBLOCK_FLAGS equ PG_PRESENT|PG_WRITABLE
 PG_PAGE_SIZE    equ 00001000h
 PG_ENTRY_COUNT  equ 1024
 PG_CR0_ENABLE   equ 80000000h
@@ -118,7 +120,7 @@ PgMapUserProgram3:
   mov   [PgUserPteAddr],eax
 PgMapUserProgram2:
   mov   eax,[PgUserMapPhys]
-  or    eax,PG_FLAGS
+  or    eax,PG_USER_FLAGS
   mov   edi,[PgUserPteAddr]
   mov   [edi],eax
   add   edi,4
@@ -149,7 +151,7 @@ PgMapUserProgram4:
 PgMapUserProgram5:
   mov   eax,[PgUserKcPhysBase]
   and   eax,0FFFFF000h
-  or    eax,PG_FLAGS
+  or    eax,PG_KCBLOCK_FLAGS
   mov   [PgTable0+(PG_USER_KC_PTE*4)],eax
   mov   eax,PgDirectory
   mov   cr3,eax
@@ -198,16 +200,16 @@ PgBuildIdentityMap:
   mov   [PgTableAddr],eax
   call  PgFillTable
   mov   eax,PgTable0
-  or    eax,PG_FLAGS
+  or    eax,PG_KERNEL_FLAGS
   mov   [PgDirectory],eax
   mov   eax,PgTable1
-  or    eax,PG_FLAGS
+  or    eax,PG_KERNEL_FLAGS
   mov   [PgDirectory+4],eax
   mov   eax,PgTable2
-  or    eax,PG_FLAGS
+  or    eax,PG_KERNEL_FLAGS
   mov   [PgDirectory+8],eax
   mov   eax,PgTable3
-  or    eax,PG_FLAGS
+  or    eax,PG_KERNEL_FLAGS
   mov   [PgDirectory+12],eax
   ret
 
@@ -226,7 +228,7 @@ PgFillTable:
   mov   edi,[PgTableAddr]
 PgFillTable1:
   mov   eax,[PgPhysAddr]
-  or    eax,PG_FLAGS
+  or    eax,PG_KERNEL_FLAGS
   mov   [edi],eax
   add   edi,4
   mov   eax,[PgPhysAddr]

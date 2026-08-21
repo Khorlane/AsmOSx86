@@ -164,18 +164,28 @@ Current reality:
 Paging is enabled.
 User programs are mapped at a shared virtual base.
 Pages are not yet using user/supervisor permission separation.
+Paging flag names now express intent for kernel, user program, and KcBlock
+mappings.
 ```
 
-Next step:
+Done:
 
 ```text
 PG_KERNEL_FLAGS
 PG_USER_FLAGS
-PG_SUPERVISOR_FLAGS
+PG_KCBLOCK_FLAGS
 ```
 
 Current mappings can still remain effectively supervisor-only until ring 3 work
 begins.
+
+Next step:
+
+```text
+leave the actual flag bits unchanged until ring 3 work begins
+later add the x86 user/supervisor bit to user-facing mappings
+keep kernel mappings supervisor-only
+```
 
 Goal:
 
