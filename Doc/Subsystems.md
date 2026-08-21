@@ -246,6 +246,7 @@ Current boot flow brings the console up early in startup, after timer, uptime, v
 The active command set currently includes:
 
 ```text
+Clear
 Date
 Delay
 FsTest
@@ -264,11 +265,16 @@ Current command-dispatch rules:
 - exact match only
 - case-insensitive
 - length must match after input trimming
-- no argument parsing
+- command name and argument text are split before dispatch
 
 If no command matches, the console currently does nothing and simply returns to the input loop.
 
 ### Command Semantics
+
+#### Clear
+
+- Clears the console screen.
+- Resets the input cursor to row 25, column 1.
 
 #### Help
 

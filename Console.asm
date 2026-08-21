@@ -86,6 +86,7 @@ String  CnRunUsage,"Run usage: run <program> [-- <arg>] [| <program> [-- <arg>]]
 String  CnRunFail,"Run: load failed 0000"
 
 ; ----- Console commands -----
+String  CnCmdClear,    "Clear"
 String  CnCmdDate,     "Date"
 String  CnCmdDelay,    "Delay"
 String  CnCmdFsTest,   "FsTest"
@@ -99,6 +100,7 @@ String  CnCmdUptime,   "Uptime"
 ; Console Command Table and Handlers
 align 4
 CnCmdTable:
+  dd CnCmdClear,    CnDoCmdClear
   dd CnCmdDate,     CnDoCmdDate
   dd CnCmdDelay,    CnDoCmdDelay
   dd CnCmdFsTest,   CnDoCmdFsTest
@@ -424,6 +426,21 @@ CnCmdSplitArgDone:
 ; Each handler corresponds to a command in CnCmdTable.
 ; Handlers are internal command-table entries.
 ;------------------------------------------------------------------------------
+
+;------------------------------------------------------------------------------
+; CnDoCmdClear
+;   Output:
+;     Clears the console screen and restores the input cursor to row 25.
+;------------------------------------------------------------------------------
+CnDoCmdClear:
+  call  VdClear
+  mov   ax,25
+  mov   [VdCurRow],ax
+  mov   ax,1
+  mov   [VdCurCol],ax
+  call  VdSetCursor
+  ret
+
 ;------------------------------------------------------------------------------
 ; CnDoCmdDate
 ;   Output:

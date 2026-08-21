@@ -54,6 +54,7 @@ The current kernel provides:
   - `KcFsRead`
   - `KcFsClose`
 - simple built-in commands:
+  - `Clear`
   - `Date`
   - `Delay`
   - `FsTest`
@@ -721,6 +722,7 @@ It provides:
 Current commands:
 
 ```text
+Clear
 Date
 Delay
 FsTest
