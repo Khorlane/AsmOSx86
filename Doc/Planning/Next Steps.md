@@ -94,14 +94,16 @@ TaskValidateUserRange checks that user-provided pointers stay inside the
 current user-program virtual range or the task KcBlock page.
 KcVdWriteStr and KcFsOpen validate full Str ranges for user-originated calls.
 KcFsRead validates the destination buffer range for user-originated calls.
+Prog4 performs one deliberate invalid KcVdWriteStr pointer test after the
+normal DATA.TXT read/print path.
+Run prints the launched task's exit code so the bad-call result is visible.
 ```
 
 Next step:
 
 ```text
-define useful bad-call behavior for Prog4-style privilege-boundary tests
-add a deliberate bad-call user program path
 keep tightening service-specific validation as new Kc calls appear
+consider making bad-call tests optional once user-program arguments exist
 ```
 
 Goal:
@@ -225,13 +227,13 @@ userland session model
 
 ## Preferred First Move
 
-With basic user pointer validation in place, add a deliberate userland bad-call
-test path:
+With the first deliberate userland bad-call test in place, keep the normal
+Prog4 path stable while validation grows:
 
 ```text
-make Prog4 or a later test program trigger one invalid kernel call
-verify the kernel call fails cleanly
 keep normal run prog4.bin behavior working
+add service-specific checks as new Kc calls appear
+make bad-call mode optional once user-program arguments exist
 ```
 
 This keeps userland filesystem tests useful while preparing for stricter

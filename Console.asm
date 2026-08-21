@@ -75,6 +75,7 @@ String  CnUserTestFail,"UserTest: load failed"
 String  CnRunMsg1,"Run: loading program"
 String  CnRunMsg2,"Run: running program"
 String  CnRunMsg3,"Run: complete"
+String  CnRunExit,"Run: task exit 0000"
 String  CnRunUsage,"Run usage: run <program>"
 String  CnRunFail,"Run: load failed"
 
@@ -667,6 +668,18 @@ CnDoCmdRun:
   call  CnCrLf
   mov   dword[TaskProgramTaskIndex],1
   call  TaskProgramStartOne
+  call  CnCrLf
+  mov   dword[TaskProgramTaskIndex],1
+  call  TaskProgramGetExitCode
+  mov   eax,[TaskProgramExitCode]
+  mov   [TaskPut4DecVal],eax
+  lea   eax,[CnRunExit+17]
+  mov   [pTaskPut4DecDst],eax
+  call  TaskPut4Dec
+  lea   eax,[CnRunExit]
+  mov   [pVdStr],eax
+  call  VdPutStr
+  call  CnCrLf
   lea   eax,[CnRunMsg3]
   mov   [pVdStr],eax
   call  VdPutStr

@@ -21,6 +21,7 @@ KC_BLOCK_ARG2       equ 16
 KC_BLOCK_RESULT0    equ 24
 KC_BLOCK_RESULT1    equ 28
 STATUS_OK           equ 0
+STATUS_BAD_ARG      equ 2
 DATA_BUFFER_SIZE    equ 80
 
 Start:
@@ -34,6 +35,7 @@ Start:
   cmp   eax,STATUS_OK                   ;  if bad
   jne   Prog4CloseAndExit               ;    can't continue, close file, then exit
   call  PrintLine                       ; Print
+  call  BadCallTest                     ; Prove bad user pointer is rejected
 Prog4CloseAndExit:
   call  CloseFile                       ; Close file
 Prog4Exit:
@@ -88,6 +90,20 @@ PrintLine:
   mov   dword[KC_BLOCK+KC_BLOCK_ARG0],DataBuffer
   mov   ebx,KERNEL_CALL_GATEWAY
   call  ebx
+  ret
+
+BadCallTest:
+  mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],KC_VD_WRITE_STR
+  mov   dword[KC_BLOCK+KC_BLOCK_ARG0],00100000h
+  mov   ebx,KERNEL_CALL_GATEWAY
+  call  ebx
+  mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
+  cmp   eax,STATUS_BAD_ARG
+  jne   BadCallTestFailed
+  mov   dword[Prog4ExitCode],42
+  ret
+BadCallTestFailed:
+  mov   dword[Prog4ExitCode],99
   ret
 
 CloseFile:

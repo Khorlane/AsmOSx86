@@ -21,6 +21,7 @@
 ;   - TaskValidateUserRange
 ;   - TaskProgramLoad
 ;   - TaskProgramInit
+;   - TaskProgramGetExitCode
 ;   - TaskProgramStartOne
 ;   - TaskProgramStart
 ;   - TaskProgramPrintExitCodes
@@ -115,6 +116,7 @@ pTaskProgramName     dd 0               ; input: pointer to kernel Str filename
 TaskProgramTaskIndex dd 0               ; input: task table index to prepare
 TaskProgramStackSlot dd 0               ; input: stack slot index to assign
 TaskProgramStatus    dd 0               ; output: TASK_PROGRAM_STATUS_*
+TaskProgramExitCode  dd 0               ; output: selected task exit code
 TaskProgramEntryPtr  dd 0               ; output: loaded program entry address
 TaskProgramKcBlockPtr dd 0              ; output: loaded program KcBlock address
 TaskProgramNextLoadBase dd 0            ; work: next dynamic user-program load base
@@ -379,6 +381,26 @@ TaskProgramInit2:
   mov   dword[edi+TASK_PROGRAM_PHYS],0
   mov   dword[edi+TASK_PROGRAM_PAGES],0
   mov   dword[edi+TASK_KCBLOCK_PHYS],0
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; TaskProgramGetExitCode
+;   Input:
+;     TaskProgramTaskIndex = task table index to inspect.
+;   Output:
+;     TaskProgramExitCode = selected task exit code, or 0 if invalid.
+;--------------------------------------------------------------------------------------------------
+TaskProgramGetExitCode:
+  mov   dword[TaskProgramExitCode],0
+  mov   eax,[TaskProgramTaskIndex]
+  mov   [TaskIndex],eax
+  call  TaskGetRecord
+  mov   edi,[pTaskRecord]
+  test  edi,edi
+  jz    TaskProgramGetExitCodeDone
+  mov   eax,[edi+TASK_EXIT_CODE]
+  mov   [TaskProgramExitCode],eax
+TaskProgramGetExitCodeDone:
   ret
 
 ;--------------------------------------------------------------------------------------------------
