@@ -2,7 +2,7 @@
 
 This document describes how AsmOSx86 gets from a blank floppy image to a
 bootable disk, and then how the boot path proceeds from BIOS handoff through
-`Boot1.asm` and into the protected-mode kernel.
+`Boot.asm` and into the protected-mode kernel.
 
 ## From Blank Image to Boot Disk
 
@@ -16,19 +16,19 @@ The boot disk is created in two broad phases:
 The main preparation script is:
 
 ```powershell
-.\BuildWriteBoot1.ps1
+.\BuildWriteBoot.ps1
 ```
 
 That script assumes it is run from the `Scripts` folder.
 
-## BuildWriteBoot1.ps1
+## BuildWriteBoot.ps1
 
-`BuildWriteBoot1.ps1` creates a fresh floppy image and installs the boot sector.
+`BuildWriteBoot.ps1` creates a fresh floppy image and installs the boot sector.
 
 Its input is:
 
 ```text
-Boot1.bin
+Boot.bin
 ```
 
 Its output is:
@@ -39,11 +39,11 @@ floppy.img
 
 The script does this:
 
-1. Verifies `Boot1.bin` exists.
-2. Verifies `Boot1.bin` is exactly 512 bytes.
+1. Verifies `Boot.bin` exists.
+2. Verifies `Boot.bin` is exactly 512 bytes.
 3. Deletes any existing `floppy.img`.
 4. Creates a new 1,474,560-byte image.
-5. Writes `Boot1.bin` directly to byte offset 0.
+5. Writes `Boot.bin` directly to byte offset 0.
 6. Verifies the boot signature at bytes `510-511` is `55 AA`.
 
 The script does not format the image as FAT12.
@@ -53,7 +53,7 @@ The script does not format the image as FAT12.
 The current floppy layout is:
 
 ```text
-Sector 0      Boot1.bin
+Sector 0      Boot.bin
 Sector 1      AsmOSx86 file manifest
 Sector 2+     Kernel.bin
 Next sectors  Prog1.bin
@@ -128,17 +128,17 @@ When the machine boots from the floppy, the BIOS loads sector 0 into memory at:
 
 Then the BIOS jumps to that loaded boot sector.
 
-At this point, AsmOSx86 is executing `Boot1.asm`.
+At this point, AsmOSx86 is executing `Boot.asm`.
 
-## Boot1 Role
+## Boot Role
 
-`Boot1.asm` is the current AsmOSx86 boot loader.
+`Boot.asm` is the current AsmOSx86 boot loader.
 
 It is deliberately small because it must fit in one 512-byte boot sector, but it
 now performs the whole boot handoff itself. There is no separate `Boot2.asm`
 stage in the current boot path.
 
-Boot1 is responsible for:
+Boot is responsible for:
 
 - setting up enough real-mode state to run predictably
 - installing a small IRQ6 handler for floppy-controller interrupts
@@ -151,23 +151,23 @@ Boot1 is responsible for:
 - entering protected mode
 - jumping to the kernel entry point
 
-Boot1 does not use BIOS interrupts after the BIOS transfers control to it.
+Boot does not use BIOS interrupts after the BIOS transfers control to it.
 
-Boot1 does not read a FAT12 root directory or FAT table.
+Boot does not read a FAT12 root directory or FAT table.
 
-## What Boot1.asm Does
+## What Boot.asm Does
 
-Boot1 starts in 16-bit real mode at `0000:7C00`.
+Boot starts in 16-bit real mode at `0000:7C00`.
 
 The first setup step clears interrupts, sets `DS` and `SS` to zero, places the
 stack at `0000:7C00`, and clears the direction flag. With `org 07C00h`, labels in
-Boot1 line up with the address where the BIOS loaded the sector.
+Boot line up with the address where the BIOS loaded the sector.
 
-Boot1 then installs its own real-mode IRQ6 handler at interrupt vector `0Eh`.
+Boot then installs its own real-mode IRQ6 handler at interrupt vector `0Eh`.
 IRQ6 is the floppy-controller interrupt. The handler only marks
 `FdcDone = 1`, sends an end-of-interrupt to the PIC, and returns.
 
-Next, Boot1 unmasks IRQ6 on the master PIC and initializes the primary floppy
+Next, Boot unmasks IRQ6 on the master PIC and initializes the primary floppy
 controller. The current loader assumes a simple PC-compatible 1.44MB drive A:
 configuration:
 
@@ -178,26 +178,26 @@ configuration:
 500 Kbit/s data rate
 ```
 
-Once the controller is ready, Boot1 reads logical sector 1 into memory at:
+Once the controller is ready, Boot reads logical sector 1 into memory at:
 
 ```text
 0000:0500
 ```
 
-That sector contains the `ASMF` manifest. Boot1 walks the manifest entries,
+That sector contains the `ASMF` manifest. Boot walks the manifest entries,
 looking for the uppercase 8.3 name:
 
 ```text
 KERNEL  BIN
 ```
 
-When the entry is found, Boot1 reads the starting sector and sector count from
+When the entry is found, Boot reads the starting sector and sector count from
 the manifest entry.
 
-Before loading the kernel, Boot1 enables A20 using the fast A20 gate at port
+Before loading the kernel, Boot enables A20 using the fast A20 gate at port
 `092h`. This is needed because the kernel is loaded above the 1MB boundary.
 
-Boot1 then reads each kernel sector from the floppy and writes it directly to
+Boot then reads each kernel sector from the floppy and writes it directly to
 physical memory starting at:
 
 ```text
@@ -208,7 +208,7 @@ The floppy DMA setup uses `BX` for the low 16 bits of the destination address
 and `FdcDmaPage` for the DMA page register. For the kernel load, `FdcDmaPage` is
 set to `10h`, which makes the destination physical page `00100000h`.
 
-After the kernel sectors are loaded, Boot1 disables interrupts, loads a minimal
+After the kernel sectors are loaded, Boot disables interrupts, loads a minimal
 GDT, sets `CR0.PE`, and performs a far jump:
 
 ```asm
@@ -216,9 +216,9 @@ jmp   CODE_SEL:Protected
 ```
 
 The far jump reloads `CS` with the protected-mode code selector and lands at the
-`Protected` label in Boot1.
+`Protected` label in Boot.
 
-At `Protected`, Boot1 switches `DS`, `ES`, and `SS` to the protected-mode data
+At `Protected`, Boot switches `DS`, `ES`, and `SS` to the protected-mode data
 selector, sets the stack to:
 
 ```text
@@ -231,20 +231,20 @@ and then jumps to:
 CODE_SEL:00100000h
 ```
 
-That is the start of `Kernel.asm`. At that point Boot1 is finished and the
+That is the start of `Kernel.asm`. At that point Boot is finished and the
 protected-mode kernel owns execution.
 
 ## Entering Protected Mode
 
-Before switching modes, Boot1 installs a small GDT with:
+Before switching modes, Boot installs a small GDT with:
 
 - a null descriptor
 - a flat 32-bit code descriptor
 - a flat 32-bit data descriptor
 
-Boot1 enables A20 before loading the kernel above 1MB.
+Boot enables A20 before loading the kernel above 1MB.
 
-To enter protected mode, Boot1 sets bit 0 in `CR0`:
+To enter protected mode, Boot sets bit 0 in `CR0`:
 
 ```text
 CR0.PE = 1
@@ -253,19 +253,19 @@ CR0.PE = 1
 Then it performs a far jump to reload `CS` with the protected-mode code
 selector.
 
-Boot1 intentionally does not leave interrupts enabled for the kernel handoff.
+Boot intentionally does not leave interrupts enabled for the kernel handoff.
 
 ## End-to-End Summary
 
 The full path looks like this:
 
 ```text
-BuildBoot1.ps1
-  -> Boot1.asm becomes Boot1.bin
+BuildBoot.ps1
+  -> Boot.asm becomes Boot.bin
 
-BuildWriteBoot1.ps1
+BuildWriteBoot.ps1
   -> creates blank floppy.img
-  -> writes Boot1.bin to sector 0
+  -> writes Boot.bin to sector 0
 
 BuildKernel.ps1
   -> Kernel.asm and included modules become Kernel.bin
@@ -279,9 +279,9 @@ BuildCopy.ps1
 
 BIOS
   -> loads sector 0 to 0000:7C00
-  -> jumps to Boot1
+  -> jumps to Boot
 
-Boot1
+Boot
   -> initializes enough floppy-controller hardware to read sectors directly
   -> reads sector 1 manifest
   -> finds KERNEL.BIN

@@ -1,7 +1,7 @@
 <#
 BuildCopy.ps1
 Writes the AsmOSx86 raw floppy manifest and packed boot/runtime files.
-- Sector 0 is Boot1.bin and is written by BuildWriteBoot1.ps1.
+- Sector 0 is Boot.bin and is written by BuildWriteBoot.ps1.
 - Sector 1 is the AsmOSx86 file manifest.
 - Sector 2 and onward contain KERNEL.BIN and optional runtime files.
 #>

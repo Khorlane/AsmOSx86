@@ -1,6 +1,6 @@
 <#
-BuildWriteBoot1.ps1
-Creates a blank 1.44MB floppy image, writes Boot1.bin to sector 0, and verifies
+BuildWriteBoot.ps1
+Creates a blank 1.44MB floppy image, writes Boot.bin to sector 0, and verifies
 the 0x55AA boot signature at bytes 510-511.
 #>
 
@@ -27,11 +27,11 @@ function Fail([string]$Message) {
 
 try {
   $ImagePath = Join-Path $RepoRoot "floppy.img"
-  $BootPath  = Join-Path $RepoRoot "Boot1.bin"
+  $BootPath  = Join-Path $RepoRoot "Boot.bin"
   $ExpectedImageSize = 1474560
   $ExpectedBootSize  = 512
 
-  Write-Host "[1/5] Checking Boot1.bin exists and is exactly 512 bytes..."
+  Write-Host "[1/5] Checking Boot.bin exists and is exactly 512 bytes..."
   if (-not (Test-Path -LiteralPath $BootPath -PathType Leaf)) {
     Fail "Boot file not found: $BootPath"
   }
@@ -58,7 +58,7 @@ try {
     Fail "Image size is $($imgInfo.Length) bytes; expected $ExpectedImageSize bytes."
   }
 
-  Write-Host "[4/5] Writing Boot1.bin to boot sector..."
+  Write-Host "[4/5] Writing Boot.bin to boot sector..."
   $bootBytes = [System.IO.File]::ReadAllBytes($BootPath)
   $fs = $null
   try {
@@ -83,7 +83,7 @@ try {
     Fail "Invalid boot signature at 510-511: $sig"
   }
 
-  Write-Host "SUCCESS: blank AsmOSx86 floppy image created and Boot1 written ($sig)."
+  Write-Host "SUCCESS: blank AsmOSx86 floppy image created and Boot written ($sig)."
   Write-Host "Image: $ImagePath"
   Wait-ForKey
 }

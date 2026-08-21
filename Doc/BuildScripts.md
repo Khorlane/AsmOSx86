@@ -10,7 +10,7 @@ scripts accept `noexit` so wrapper scripts can call them without stopping.
 
 ### Rebuild Kernel and Run
 
-Use this after changing protected-mode kernel code when `Boot1.bin`,
+Use this after changing protected-mode kernel code when `Boot.bin`,
 `Boot2.bin`, and `floppy.img` are already valid.
 
 ```powershell
@@ -27,7 +27,7 @@ Bochs
 
 ### Rebuild Boot2, Kernel, and Run
 
-Use this after changing `Boot2.asm` or kernel code when `Boot1.bin` and
+Use this after changing `Boot2.asm` or kernel code when `Boot.bin` and
 `floppy.img` are already valid.
 
 ```powershell
@@ -56,12 +56,12 @@ This does not rebuild or copy files. It only launches Bochs with
 
 ### Prepare Floppy From Scratch
 
-Use this after changing `Boot1.asm`, after needing a clean floppy image, or after
+Use this after changing `Boot.asm`, after needing a clean floppy image, or after
 changing the raw floppy layout.
 
 ```powershell
-.\BuildBoot1.ps1
-.\BuildWriteBoot1.ps1
+.\BuildBoot.ps1
+.\BuildWriteBoot.ps1
 .\BuildBoot2.ps1
 .\BuildKernel.ps1
 .\BuildPrograms.ps1
@@ -69,7 +69,7 @@ changing the raw floppy layout.
 .\AsmOSx86Run.ps1
 ```
 
-`BuildWriteBoot1.ps1` recreates `floppy.img`, so anything previously copied into
+`BuildWriteBoot.ps1` recreates `floppy.img`, so anything previously copied into
 the image is removed.
 
 ## Script Reference
@@ -93,29 +93,29 @@ Notes:
 - Exit code `1` from Bochs is treated as an acceptable user power-off.
 - Does not rebuild or copy anything.
 
-### BuildBoot1.ps1
+### BuildBoot.ps1
 
 Assembles the stage 1 boot sector.
 
 Inputs:
 
-- `Boot1.asm`
+- `Boot.asm`
 
 Outputs:
 
-- `Boot1.bin`
-- `Boot1.lst`
+- `Boot.bin`
+- `Boot.lst`
 
 Command:
 
 ```text
-nasm -f bin Boot1.asm -o Boot1.bin -l Boot1.lst
+nasm -f bin Boot.asm -o Boot.bin -l Boot.lst
 ```
 
 Notes:
 
-- Deletes old `Boot1.bin` and `Boot1.lst` before assembling.
-- `Boot1.bin` must be exactly 512 bytes before `BuildWriteBoot1.ps1` can use it.
+- Deletes old `Boot.bin` and `Boot.lst` before assembling.
+- `Boot.bin` must be exactly 512 bytes before `BuildWriteBoot.ps1` can use it.
 
 ### BuildBoot2.ps1
 
@@ -153,7 +153,7 @@ Runs:
 - `BuildCopy.ps1`
 - Bochs
 
-Use this when `Boot2.asm` or kernel code changed, but `Boot1.bin` and the
+Use this when `Boot2.asm` or kernel code changed, but `Boot.bin` and the
 prepared `floppy.img` are already valid.
 
 ### BuildCopy.ps1
@@ -268,13 +268,13 @@ Notes:
   setup.
 - There is no ASMX wrapping or relocation step in the current build path.
 
-### BuildWriteBoot1.ps1
+### BuildWriteBoot.ps1
 
 Creates and prepares `floppy.img` from scratch.
 
 Inputs:
 
-- `Boot1.bin`
+- `Boot.bin`
 
 Outputs:
 
@@ -282,13 +282,13 @@ Outputs:
 
 Behavior:
 
-- Verifies `Boot1.bin` exists and is exactly 512 bytes.
+- Verifies `Boot.bin` exists and is exactly 512 bytes.
 - Deletes and recreates `floppy.img` as a blank 1.44MB image.
-- Writes `Boot1.bin` to sector 0.
+- Writes `Boot.bin` to sector 0.
 - Verifies the `55 AA` boot signature.
 
 Notes:
 
 - Does not format the image as FAT12.
 - Does not mount the image.
-- `BuildCopy.ps1` must be run after this before the image can boot past Boot1.
+- `BuildCopy.ps1` must be run after this before the image can boot past Boot.

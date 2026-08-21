@@ -1,5 +1,5 @@
-<# BuildBoot1.ps1
-PowerShell equivalent of BuildBoot1.bat
+<# BuildBoot.ps1
+PowerShell equivalent of BuildBoot.bat
 #>
 
 Set-StrictMode -Version Latest
@@ -24,16 +24,16 @@ try {
 
   Write-Host ""
   Write-Host "------------------"
-  Write-Host "- Assemble Boot1 -"
+  Write-Host "- Assemble Boot -"
   Write-Host "------------------"
   Write-Host ""
 
   # Delete outputs (ignore if missing)
-  Remove-Item ".\Boot1.bin", ".\Boot1.lst" -Force -ErrorAction SilentlyContinue
+  Remove-Item ".\Boot.bin", ".\Boot.lst" -Force -ErrorAction SilentlyContinue
 
   # Assemble
-  Write-Host "nasm -f bin Boot1.asm -o Boot1.bin -l Boot1.lst"
-  & nasm -f bin Boot1.asm -o Boot1.bin -l Boot1.lst
+  Write-Host "nasm -f bin Boot.asm -o Boot.bin -l Boot.lst"
+  & nasm -f bin Boot.asm -o Boot.bin -l Boot.lst
 
   if ($LASTEXITCODE -ne 0) {
     throw "nasm failed with exit code $LASTEXITCODE."

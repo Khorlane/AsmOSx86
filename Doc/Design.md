@@ -122,7 +122,7 @@ It also fits the future kernel-call model: user programs will request services b
 The boot flow is currently staged:
 
 ```text
-Boot1.asm  -> stage 1 boot sector
+Boot.asm  -> stage 1 boot sector
 Boot2.asm  -> stage 2 loader
 Kernel.asm -> protected-mode kernel at 00100000h
 ```
@@ -273,7 +273,7 @@ Bochs     runs the bootable floppy image
 
 Detailed script usage lives in `BuildScripts.md`.
 
-The floppy preparation and boot flow from BIOS handoff through `Boot1.asm`,
+The floppy preparation and boot flow from BIOS handoff through `Boot.asm`,
 `Boot2.asm`, and the protected-mode kernel live in `BootProcess.md`.
 
 ---

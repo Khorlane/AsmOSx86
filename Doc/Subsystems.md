@@ -70,7 +70,7 @@ Boot-stage code and kernel code are separate implementation domains.
 
 Boot-stage code:
 
-- `Boot1.asm`
+- `Boot.asm`
 - `Boot2.asm`
 
 Boot stages run before the protected-mode kernel is established. They may use BIOS services, real-mode assumptions, boot-sector constraints, bootloader-specific disk loading logic, and other conventions that do not apply to the kernel.

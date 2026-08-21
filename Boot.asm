@@ -1,8 +1,8 @@
 ;**************************************************************************************************
-; Boot1.asm - AsmOSx86 Single-Stage Boot Loader
+; Boot.asm - AsmOSx86 Single-Stage Boot Loader
 ;   BIOS responsibility ends after loading sector 0 and transferring control here.
 ;
-;   Boot1:
+;   Boot:
 ;   1. is exactly 512 bytes long
 ;   2. uses NO BIOS interrupts
 ;   3. initializes enough floppy-controller hardware to read sectors directly
@@ -12,7 +12,7 @@
 ;   7. installs a minimal GDT and enters 32-bit protected mode
 ;   8. transfers control directly to the kernel
 ;
-; nasm -f bin Boot1.asm -o Boot1.bin -l Boot1.lst
+; nasm -f bin Boot.asm -o Boot.bin -l Boot.lst
 ;
 ; NOTE:
 ;   This is intentionally a minimal first-pass loader aimed at Bochs/PC-compatible
