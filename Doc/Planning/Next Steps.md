@@ -171,6 +171,59 @@ KcBlock page is conceptually user-accessible
 
 This is groundwork for privilege separation, not the enforcement step itself.
 
+## 6. Add A Run Command For User Programs
+
+Current reality:
+
+```text
+UserTest loads and runs PROG1.BIN, PROG2.BIN, and PROG3.BIN through a hard-coded
+test path.
+Prog4.asm exists as a simple userland program that can evolve into a filesystem
+and privilege-boundary test.
+```
+
+Next step:
+
+```text
+add a console command shaped like: run <program>
+load the named program from the filesystem
+create a task for it
+run it through the existing cooperative scheduler
+```
+
+Useful early tests:
+
+```text
+run prog4.bin
+missing file handling
+bad filename handling
+single-program task launch
+```
+
+Later Prog4 path:
+
+```text
+open DATA.TXT
+read a record or buffer
+print the contents through kernel calls
+close DATA.TXT
+exit with a useful result code
+```
+
+Future privilege test:
+
+```text
+Prog4 can intentionally try an illegal userland action once the kernel has
+enough validation or hardware enforcement to catch it.
+```
+
+Goal:
+
+```text
+move from hard-coded user program demos toward an actual console-launched
+userland session model
+```
+
 ## Preferred First Move
 
 Start with the device registry read path:
