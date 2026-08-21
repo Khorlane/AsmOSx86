@@ -22,6 +22,7 @@
 ;   - TaskSetReady
 ;   - TaskBlock
 ;   - TaskWake
+;   - TaskSleep
 ;   - TaskProgramLoad
 ;   - TaskProgramInit
 ;   - TaskProgramGetExitCode
@@ -69,7 +70,10 @@ TASK_RUN_COUNT       equ 32
 TASK_PROGRAM_PHYS    equ 36
 TASK_PROGRAM_PAGES   equ 40
 TASK_KCBLOCK_PHYS    equ 44
-TASK_RECORD_SIZE     equ 48
+TASK_WAKE_LO         equ 48
+TASK_WAKE_HI         equ 52
+TASK_SLEEP_ACTIVE    equ 56
+TASK_RECORD_SIZE     equ 60
 
 ;--------------------------------------------------------------------------------------------------
 ; Task Table and Stack-Slot Constants
@@ -109,6 +113,12 @@ TaskNextIndex        dd 0               ; next task index
 TaskIndex            dd 0               ; input: task index for lookup helpers
 TaskStateIndex       dd 0               ; input: task index for state helpers
 TaskStateStatus      dd 0               ; output: TASK_STATUS_*
+TaskSleepMs          dd 0               ; input: cooperative sleep duration
+TaskSleepTicks       dd 0               ; work: sleep duration in PIT ticks
+TaskWakeNowLo        dd 0               ; work: current ticks low
+TaskWakeNowHi        dd 0               ; work: current ticks high
+TaskWakeScanIndex    dd 0               ; work: sleep wake scan index
+TaskWakeScanLeft     dd 0               ; work: sleep wake scan entries left
 TaskScanIndex        dd 0               ; work: scheduler table scan index
 TaskScanLeft         dd 0               ; work: scheduler entries left to scan
 TaskStackSlot        dd 0               ; input: stack slot index
@@ -289,6 +299,49 @@ TaskWakeDone:
   ret
 
 ;--------------------------------------------------------------------------------------------------
+; TaskSleep
+;   Input:
+;     TaskSleepMs = cooperative sleep duration in milliseconds.
+;   Output:
+;     Blocks the current task until its wake deadline, then yields.
+;   Notes:
+;     Wake checks happen when TaskYield is entered; no timer IRQ is required.
+;--------------------------------------------------------------------------------------------------
+TaskSleep:
+  mov   eax,[TaskSleepMs]
+  cmp   eax,3600000
+  jbe   TaskSleep1
+  mov   eax,3600000
+TaskSleep1:
+  mov   ebx,PIT_HZ
+  mul   ebx
+  add   eax,500
+  adc   edx,0
+  mov   ecx,1000
+  div   ecx
+  mov   [TaskSleepTicks],eax
+  call  TimerNowTicks
+  mov   eax,[TaskCurrentIndex]
+  mov   [TaskIndex],eax
+  call  TaskGetRecord
+  mov   edi,[pTaskRecord]
+  test  edi,edi
+  jz    TaskSleepDone
+  mov   eax,[TimerOutTicksLo]
+  mov   edx,[TimerOutTicksHi]
+  add   eax,[TaskSleepTicks]
+  adc   edx,0
+  mov   [edi+TASK_WAKE_LO],eax
+  mov   [edi+TASK_WAKE_HI],edx
+  mov   dword[edi+TASK_SLEEP_ACTIVE],1
+  mov   eax,[TaskCurrentIndex]
+  mov   [TaskStateIndex],eax
+  call  TaskBlock
+  call  TaskYield
+TaskSleepDone:
+  ret
+
+;--------------------------------------------------------------------------------------------------
 ; TaskProgramLoad
 ;   Input:
 ;     pTaskProgramName     = pointer to kernel Str filename.
@@ -376,6 +429,9 @@ TaskProgramLoad:
   mov   [edi+TASK_PROGRAM_PAGES],ebx
   mov   ebx,[TaskProgramKcBlockPhysPtr]
   mov   [edi+TASK_KCBLOCK_PHYS],ebx
+  mov   dword[edi+TASK_WAKE_LO],0
+  mov   dword[edi+TASK_WAKE_HI],0
+  mov   dword[edi+TASK_SLEEP_ACTIVE],0
   mov   dword[edi+TASK_EXIT_CODE],0
   mov   dword[edi+TASK_RUN_COUNT],0
   mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_OK
@@ -449,6 +505,9 @@ TaskProgramInit2:
   mov   dword[edi+TASK_PROGRAM_PHYS],0
   mov   dword[edi+TASK_PROGRAM_PAGES],0
   mov   dword[edi+TASK_KCBLOCK_PHYS],0
+  mov   dword[edi+TASK_WAKE_LO],0
+  mov   dword[edi+TASK_WAKE_HI],0
+  mov   dword[edi+TASK_SLEEP_ACTIVE],0
   mov   dword[TaskProgramArgPtr],0
   ret
 
@@ -646,6 +705,7 @@ TaskExit:
   mov   eax,[edi+TASK_RUN_COUNT]
   inc   eax
   mov   [edi+TASK_RUN_COUNT],eax
+  mov   dword[edi+TASK_SLEEP_ACTIVE],0
   mov   dword[edi+TASK_STATE],TASK_STATE_EXITED
   call  TaskYield
   ret
@@ -667,6 +727,8 @@ TaskYield:
   mov   [edi+TASK_SAVED_ESP],esp
   cmp   dword[edi+TASK_STATE],TASK_STATE_EXITED
   je    TaskYield1
+  cmp   dword[edi+TASK_STATE],TASK_STATE_BLOCKED
+  je    TaskYield1
   mov   dword[edi+TASK_STATE],TASK_STATE_READY
   mov   eax,[TaskCurrentIndex]
   inc   eax
@@ -682,6 +744,7 @@ TaskYield1:
   xor   eax,eax
 TaskYield2:
   mov   [TaskScanIndex],eax
+  call  TaskWakeSleepers
   mov   dword[TaskScanLeft],MAX_TASKS
 TaskYield3:
   mov   eax,[TaskScanLeft]
@@ -725,6 +788,52 @@ TaskYield7:
 ;--------------------------------------------------------------------------------------------------
 ; Internal Routines
 ;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; TaskWakeSleepers
+;   Output:
+;     Wakes blocked sleep tasks whose deadlines are at or before current ticks.
+;--------------------------------------------------------------------------------------------------
+TaskWakeSleepers:
+  call  TimerNowTicks
+  mov   eax,[TimerOutTicksLo]
+  mov   [TaskWakeNowLo],eax
+  mov   eax,[TimerOutTicksHi]
+  mov   [TaskWakeNowHi],eax
+  mov   dword[TaskWakeScanIndex],0
+  mov   dword[TaskWakeScanLeft],MAX_TASKS
+TaskWakeSleepers1:
+  mov   eax,[TaskWakeScanLeft]
+  test  eax,eax
+  jz    TaskWakeSleepersDone
+  mov   eax,[TaskWakeScanIndex]
+  mov   [TaskIndex],eax
+  call  TaskGetRecord
+  mov   edi,[pTaskRecord]
+  test  edi,edi
+  jz    TaskWakeSleepersNext
+  cmp   dword[edi+TASK_STATE],TASK_STATE_BLOCKED
+  jne   TaskWakeSleepersNext
+  cmp   dword[edi+TASK_SLEEP_ACTIVE],1
+  jne   TaskWakeSleepersNext
+  mov   eax,[TaskWakeNowHi]
+  cmp   eax,[edi+TASK_WAKE_HI]
+  jb    TaskWakeSleepersNext
+  ja    TaskWakeSleepersWake
+  mov   eax,[TaskWakeNowLo]
+  cmp   eax,[edi+TASK_WAKE_LO]
+  jb    TaskWakeSleepersNext
+TaskWakeSleepersWake:
+  mov   dword[edi+TASK_SLEEP_ACTIVE],0
+  mov   eax,[TaskWakeScanIndex]
+  mov   [TaskStateIndex],eax
+  call  TaskWake
+TaskWakeSleepersNext:
+  inc   dword[TaskWakeScanIndex]
+  dec   dword[TaskWakeScanLeft]
+  jmp   TaskWakeSleepers1
+TaskWakeSleepersDone:
+  ret
 
 ;--------------------------------------------------------------------------------------------------
 ; TaskGetStateRecord

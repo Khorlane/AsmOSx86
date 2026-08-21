@@ -49,6 +49,7 @@ KcTsExit           equ 5
 KcFsOpen           equ 6
 KcFsRead           equ 7
 KcFsClose          equ 8
+KcTmSleep          equ 9
 
 ;--------------------------------------------------------------------------------------------------
 ; User Kernel-Call Block Layout
@@ -92,6 +93,7 @@ KcTable:
   dd KcFsOpen,      KcFsOpenHandler
   dd KcFsRead,      KcFsReadHandler
   dd KcFsClose,     KcFsCloseHandler
+  dd KcTmSleep,     KcTmSleepHandler
 KcTableEnd:
 KcTableCount equ (KcTableEnd-KcTable)/8
 
@@ -149,6 +151,8 @@ KcUserDispatch:
   je    KcUserDispatchYield
   cmp   eax,KcTsExit
   je    KcUserDispatchExit
+  cmp   eax,KcTmSleep
+  je    KcUserDispatchSleep
   mov   [KcNumber],eax
   mov   eax,[esi+KC_BLOCK_ARG0]
   mov   [KcArg0],eax
@@ -185,6 +189,14 @@ KcUserDispatchExit:
   mov   [TaskExitCode],eax
   mov   dword[esi+KC_BLOCK_STATUS],KC_STATUS_OK
   call  TaskExit
+  ret
+KcUserDispatchSleep:
+  mov   eax,[esi+KC_BLOCK_ARG0]
+  mov   [TaskSleepMs],eax
+  mov   dword[esi+KC_BLOCK_STATUS],KC_STATUS_OK
+  mov   dword[esi+KC_BLOCK_RESULT0],0
+  mov   dword[esi+KC_BLOCK_RESULT1],0
+  call  TaskSleep
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -327,6 +339,27 @@ KcTmGetUptimeHandler:
   mov   [KcResult0],eax
   mov   dword[KcResult1],0
   mov   dword[KcStatus],KC_STATUS_OK
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; KcTmSleepHandler
+;   Input:
+;     KcArg0 = sleep duration in milliseconds.
+;   Output:
+;     KcStatus  = KC_STATUS_OK.
+;     KcResult0 = 0.
+;     KcResult1 = 0.
+;   Notes:
+;     Cooperative sleep blocks the current task and resumes when a later
+;     scheduler pass observes that the wake deadline has passed.
+;--------------------------------------------------------------------------------------------------
+KcTmSleepHandler:
+  mov   eax,[KcArg0]
+  mov   [TaskSleepMs],eax
+  mov   dword[KcResult0],0
+  mov   dword[KcResult1],0
+  mov   dword[KcStatus],KC_STATUS_OK
+  call  TaskSleep
   ret
 
 ;--------------------------------------------------------------------------------------------------

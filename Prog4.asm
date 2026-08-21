@@ -7,6 +7,7 @@
   org   00200000h
 
 KERNEL_CALL_GATEWAY equ 00100005h
+KC_TM_SLEEP         equ 9
 KC_VD_WRITE_STR     equ 2
 KC_TS_EXIT          equ 5
 KC_FS_OPEN          equ 6
@@ -36,6 +37,7 @@ Start:
   cmp   eax,STATUS_OK                   ;  if bad
   jne   Prog4CloseAndExit               ;    can't continue, close file, then exit
   call  PrintLine                       ; Print
+  call  MaybeSleepTest                  ; Optional cooperative sleep proof
   call  MaybeBadCallTest                ; Optional bad-call proof
 Prog4CloseAndExit:
   call  CloseFile                       ; Close file
@@ -104,6 +106,27 @@ MaybeBadCallTest:
   jne   MaybeBadCallTestDone
   call  BadCallTest
 MaybeBadCallTestDone:
+  ret
+
+MaybeSleepTest:
+  cmp   word[USER_ARG],5
+  jne   MaybeSleepTestDone
+  cmp   byte[USER_ARG+2],'s'
+  jne   MaybeSleepTestDone
+  cmp   byte[USER_ARG+3],'l'
+  jne   MaybeSleepTestDone
+  cmp   byte[USER_ARG+4],'e'
+  jne   MaybeSleepTestDone
+  cmp   byte[USER_ARG+5],'e'
+  jne   MaybeSleepTestDone
+  cmp   byte[USER_ARG+6],'p'
+  jne   MaybeSleepTestDone
+  mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],KC_TM_SLEEP
+  mov   dword[KC_BLOCK+KC_BLOCK_ARG0],1000
+  mov   ebx,KERNEL_CALL_GATEWAY
+  call  ebx
+  mov   dword[Prog4ExitCode],7
+MaybeSleepTestDone:
   ret
 
 BadCallTest:

@@ -1,12 +1,12 @@
 # Next Steps
 
-These are near-term implementation steps that fit the current AsmOSx86 direction
-without pulling hardware interrupts, ring 3, or preemptive scheduling to the top
-of the list.
+These are near-term implementation notes for AsmOSx86. They intentionally keep
+hardware interrupts, ring 3, and preemptive scheduling near the bottom of the
+list for now.
 
 ## Guiding Bias
 
-Keep the next changes small, concrete, and useful immediately.
+Keep changes small, concrete, and useful immediately.
 
 Prefer work that:
 
@@ -15,248 +15,157 @@ Prefer work that:
 - keeps `Fs.asm`, `Task.asm`, `Kc.asm`, `Paging.asm`, and `Config.asm` ready for
   later growth
 - avoids large rewrites
-- keeps interrupts near the bottom of the list for now
+- keeps interrupts out of the critical path for now
 
-## 1. Use The Device Registry For Real Routing
+## Current Checkpoint
 
-Current reality:
+Storage and boot:
 
 ```text
-Config.asm has DevRegistry records.
-Fs.asm has a tiny block-device layer.
-DevReadSector now resolves DevBlockDevice through DevRegistry.
+Boot.asm is the single-stage boot loader.
+The floppy uses the ASMF manifest layout, not FAT12.
+BuildCopy.ps1 writes KERNEL.BIN, PROG*.BIN, and DATA.TXT into the image.
+```
+
+Device and filesystem path:
+
+```text
+Config.asm owns the static DevRegistry.
+DevRegistryFloppyA has FloppyReadSectorTo in its read slot.
+Fs.asm routes sector reads through DevReadSector and DevFindById.
 Floppy A: is still the only working block device.
+FsOpen/FsRead/FsClose provide the current read-only file service.
 ```
 
-Done:
+User program launch:
 
 ```text
-DevFindById scans DevRegistry by device id.
-DevReadSector uses the selected registry record.
+Run exists as: run <program> <optional argument text>
+Run loads the named program, creates task slot 1, starts cooperative dispatch,
+prints the task exit code, and returns to the console.
+Run copies optional text after the filename into the task startup argument area.
 ```
 
-Useful shape:
+Current userland smoke tests:
 
 ```text
-DevFindById
-DevGetBlockDevice
-DevReadSector
+run prog4.bin
+  opens DATA.TXT
+  reads DATA.TXT
+  prints through KcVdWriteStr
+  closes DATA.TXT
+  exits 0000
+
+run prog4.bin bad
+  runs the normal DATA.TXT path
+  deliberately passes a bad pointer to KcVdWriteStr
+  expects KC_STATUS_BAD_ARG
+  exits 0042 when validation works
+
+run prog4.bin sleep
+  runs the normal DATA.TXT path
+  calls KcTmSleep
+  wakes through cooperative scheduler checks
+  exits 0007
 ```
 
-Goal:
+Kernel-call boundary:
 
 ```text
-filesystem asks block layer
-block layer resolves device
-device record identifies the backing driver
-driver reads the sector
-```
-
-This makes the Advanced Device Model more real without adding a hard disk yet.
-
-## 2. Make Device Read Slots Meaningful
-
-Current registry records already reserve:
-
-```text
-Read entry point
-Write entry point
-Control entry point
-```
-
-Done:
-
-```text
-DevRegistryFloppyA.Read = FloppyReadSectorTo
-DevReadSector calls through the registry read slot
-```
-
-For now, write/control can remain zero.
-
-Goal:
-
-```text
-the block layer no longer hardcodes the floppy read routine
-future hard disk support has an obvious place to plug in
-```
-
-## 3. Strengthen Kernel Call Validation
-
-Current reality:
-
-```text
-User programs use KcUserDispatch and KcBlock by convention.
-There is not yet ring 3 enforcement.
-KcDispatch rejects call number zero and KcLookup rejects unknown service numbers.
+KcDispatch rejects call number zero.
+KcLookup rejects unknown service numbers.
 KcUserDispatch requires a current task and KcBlock before dispatching.
-File and video kernel-call handlers reject basic null/zero arguments.
-TaskValidateUserRange checks that user-provided pointers stay inside the
-current user-program virtual range or the task KcBlock page.
+File and video Kc handlers reject basic null/zero arguments.
+TaskValidateUserRange checks user-provided ranges against the user virtual
+program area and the KcBlock page.
 KcVdWriteStr and KcFsOpen validate full Str ranges for user-originated calls.
-KcFsRead validates the destination buffer range for user-originated calls.
-Prog4 performs one deliberate invalid KcVdWriteStr pointer test after the
-normal DATA.TXT read/print path when launched with the `bad` argument.
-Run prints the launched task's exit code so the bad-call result is visible.
+KcFsRead validates destination buffer ranges for user-originated calls.
 ```
 
-Next step:
+Tasking and scheduling:
 
 ```text
-keep tightening service-specific validation as new Kc calls appear
-grow user-program startup arguments only when a real caller needs more
+The scheduler is cooperative.
+Task states include Free, Ready, Running, Blocked, and Exited.
+TaskSetReady, TaskBlock, and TaskWake exist.
+KcTmSleep is the first real cooperative blocking service.
+TaskYield wakes blocked sleep tasks whose deadlines have expired.
+Timer wake checks happen only when the cooperative scheduler runs.
 ```
 
-Goal:
-
-```text
-kernel code starts treating user-provided data as untrusted
-future ring 3 transition becomes less dramatic
-```
-
-This does not require actual ring 3 yet.
-
-## 4. Add Explicit Task Block/Wake Helpers
-
-Current reality:
-
-```text
-TASK_STATE_BLOCKED exists.
-The scheduler currently mostly uses Ready, Running, and Exited.
-TaskSetReady, TaskBlock, and TaskWake exist as small state helpers.
-```
-
-Done:
-
-```text
-TaskBlock
-TaskWake
-TaskSetReady
-```
-
-Next step:
-
-```text
-use the helpers from a real blocking service
-keep the scheduler cooperative for now
-avoid timer-interrupt wakeups until interrupts move up the list
-```
-
-Possible later cooperative test:
-
-```text
-KcTmSleep records a wake deadline
-scheduler checks deadlines when tasks yield
-```
-
-Goal:
-
-```text
-make blocked task state real before adding interrupt-driven wakeups
-```
-
-This keeps scheduling cooperative while preparing for real wait states.
-
-## 5. Prepare Paging Permission Names
-
-Current reality:
+Paging:
 
 ```text
 Paging is enabled.
-User programs are mapped at a shared virtual base.
-Pages are not yet using user/supervisor permission separation.
-Paging flag names now express intent for kernel, user program, and KcBlock
-mappings.
+User programs share a fixed virtual base.
+Paging flag names express intent:
+  PG_KERNEL_FLAGS
+  PG_USER_FLAGS
+  PG_KCBLOCK_FLAGS
+The actual bits still remain present+writable for now.
+Ring 3 and user/supervisor enforcement are future work.
 ```
 
-Done:
+## Near-Term Candidates
+
+1. Keep `Prog4` as the main userland smoke test.
 
 ```text
-PG_KERNEL_FLAGS
-PG_USER_FLAGS
-PG_KCBLOCK_FLAGS
+normal mode proves file I/O and print calls
+bad mode proves user pointer validation
+sleep mode proves cooperative blocking and waking
 ```
 
-Current mappings can still remain effectively supervisor-only until ring 3 work
-begins.
-
-Next step:
+2. Tighten service-specific kernel-call validation as new calls appear.
 
 ```text
-leave the actual flag bits unchanged until ring 3 work begins
+validate only what current callers need
+keep kernel-originated KcDispatch paths working
+avoid large validation frameworks for now
+```
+
+3. Add another real blocking service when useful.
+
+```text
+possible candidates:
+  keyboard wait
+  file/device wait
+  cooperative timer sleep variants
+```
+
+4. Improve `Run` only when a caller needs it.
+
+```text
+possible future improvements:
+  multiple user tasks launched from console
+  clearer process/session identity
+  richer startup arguments
+  optional current-working-device or file context
+```
+
+5. Keep paging ready for later privilege separation.
+
+```text
+leave flag bits unchanged until ring 3 work begins
 later add the x86 user/supervisor bit to user-facing mappings
 keep kernel mappings supervisor-only
 ```
 
-Goal:
+## Preferred Next Move
 
-```text
-kernel pages are conceptually kernel-only
-user program pages are conceptually user-accessible
-KcBlock page is conceptually user-accessible
-```
-
-This is groundwork for privilege separation, not the enforcement step itself.
-
-## 6. Run Command For User Programs
-
-Current reality:
-
-```text
-UserTest loads and runs PROG1.BIN, PROG2.BIN, and PROG3.BIN through a hard-coded
-test path.
-Run exists as a console command shaped like: run <program>
-Run loads the named program from the filesystem, creates task slot 1, runs it
-through the existing cooperative scheduler, and returns to the console after
-the task exits.
-Run copies optional text after the filename into the task startup argument area.
-Prog4.asm opens DATA.TXT, reads it, prints it through KcVdWriteStr, closes it,
-and exits through the kernel-call path.
-```
-
-Done:
+Run the three `Prog4` modes as a regular smoke test before the next code step:
 
 ```text
 run prog4.bin
 run prog4.bin bad
-single-program task launch
-optional user-program startup argument
-open/read/print/close through real kernel service calls
-clean return to the console after task exit
+run prog4.bin sleep
 ```
 
-Still useful to improve:
+After that, choose the next feature based on what feels most useful:
 
 ```text
-missing file handling
-bad filename handling
-clearer load/run status reporting
-repeatable Prog4 smoke-test expectations
+another blocking service
+more filesystem behavior
+multiple console-launched user tasks
+more precise kernel-call validation
 ```
-
-Future privilege-boundary test:
-
-```text
-Prog4 can intentionally try an illegal userland action once the kernel has
-enough validation or hardware enforcement to catch it.
-```
-
-Goal:
-
-```text
-move from hard-coded user program demos toward an actual console-launched
-userland session model
-```
-
-## Preferred First Move
-
-With the first deliberate userland bad-call test in place, keep the normal
-Prog4 path stable while validation grows:
-
-```text
-keep normal run prog4.bin behavior working
-add service-specific checks as new Kc calls appear
-use startup arguments only where they prove a useful OS behavior
-```
-
-This keeps userland filesystem tests useful while preparing for stricter
-privilege separation later.
