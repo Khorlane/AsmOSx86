@@ -20,7 +20,6 @@ Write-Host ""
 Write-Host "--------------------------------"
 Write-Host "- Boot up AsmOSx86 using Bochs -"
 Write-Host "--------------------------------"
-Wait-ForKey
 
 $BochsExe = "C:\Program Files\Bochs-3.0\bochs.exe"
 $BochsCfg = Join-Path $RepoRoot "AsmOSx86.bxrc"

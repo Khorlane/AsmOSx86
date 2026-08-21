@@ -27,10 +27,7 @@
 ;   - TaskProgramInit
 ;   - TaskProgramGetExitCode
 ;   - TaskProgramSetArg
-;   - TaskProgramStartOne
-;   - TaskProgramStart
 ;   - TaskProgramStartN
-;   - TaskProgramPrintExitCodes
 ;   - TaskProgramPrintExitCodesN
 ;   - TaskExit
 ;   - TaskYield
@@ -163,9 +160,6 @@ TaskProgramDone       dd 0              ; work: 1 when test tasks have exited
 TaskExitCodeSum       dd 0              ; work: low 16-bit exit-code sum
 TaskExitCodeYield     dd 0              ; work: high 16-bit exit-code yield count
 TaskExitCode         dd 0               ; input: current task exit code
-String  TaskProgramExitStr1,"Task 1 exit 0000 0000"
-String  TaskProgramExitStr2,"Task 2 exit 0000 0000"
-String  TaskProgramExitStr3,"Task 3 exit 0000 0000"
 String  TaskProgramExitStr,"Task 0 exit 0000 0000"
 TaskTable:
   times MAX_TASKS * TASK_RECORD_SIZE db 0
@@ -592,42 +586,6 @@ TaskProgramSetArgDone:
   ret
 
 ;--------------------------------------------------------------------------------------------------
-; TaskProgramStartOne
-;   Input:
-;     TaskProgramTaskIndex = task table index to wait for.
-;   Output:
-;     Starts cooperative dispatch and returns when the selected task exits.
-;--------------------------------------------------------------------------------------------------
-TaskProgramStartOne:
-  call  TaskYield
-  mov   eax,[TaskProgramTaskIndex]
-  mov   [TaskIndex],eax
-  call  TaskGetRecord
-  mov   edi,[pTaskRecord]
-  test  edi,edi
-  jz    TaskProgramStartOneDone
-  cmp   dword[edi+TASK_STATE],TASK_STATE_EXITED
-  jne   TaskProgramStartOne
-TaskProgramStartOneDone:
-  ret
-
-;--------------------------------------------------------------------------------------------------
-; TaskProgramStart
-;   Output:
-;     Starts cooperative dispatch of ready tasks and returns when task slots
-;     1, 2, and 3 have exited.
-;--------------------------------------------------------------------------------------------------
-TaskProgramStart:
-  mov   dword[TaskProgramDone],0
-TaskProgramStart1:
-  call  TaskYield
-  call  TaskProgramCheckDone
-  mov   eax,[TaskProgramDone]
-  test  eax,eax
-  jz    TaskProgramStart1
-  ret
-
-;--------------------------------------------------------------------------------------------------
 ; TaskProgramStartN
 ;   Input:
 ;     TaskProgramRunCount = count of task slots 1..N to wait for.
@@ -642,73 +600,6 @@ TaskProgramStartN1:
   mov   eax,[TaskProgramDone]
   test  eax,eax
   jz    TaskProgramStartN1
-  ret
-
-;--------------------------------------------------------------------------------------------------
-; TaskProgramPrintExitCodes
-;   Output:
-;     Prints recorded exit codes for tasks 1, 2, and 3.
-;   Notes:
-;     Debug helper for the console-driven Run3 path.
-;--------------------------------------------------------------------------------------------------
-TaskProgramPrintExitCodes:
-  mov   dword[TaskIndex],1
-  call  TaskGetRecord
-  mov   edi,[pTaskRecord]
-  mov   eax,[edi+TASK_EXIT_CODE]
-  call  TaskProgramSplitExitCode
-  mov   eax,[TaskExitCodeSum]
-  mov   [TaskPut4DecVal],eax
-  lea   eax,[TaskProgramExitStr1+14]
-  mov   [pTaskPut4DecDst],eax
-  call  TaskPut4Dec
-  mov   eax,[TaskExitCodeYield]
-  mov   [TaskPut4DecVal],eax
-  lea   eax,[TaskProgramExitStr1+19]
-  mov   [pTaskPut4DecDst],eax
-  call  TaskPut4Dec
-  lea   eax,[TaskProgramExitStr1]
-  mov   [pVdStr],eax
-  call  VdPutStr
-  call  CnCrLf
-  mov   dword[TaskIndex],2
-  call  TaskGetRecord
-  mov   edi,[pTaskRecord]
-  mov   eax,[edi+TASK_EXIT_CODE]
-  call  TaskProgramSplitExitCode
-  mov   eax,[TaskExitCodeSum]
-  mov   [TaskPut4DecVal],eax
-  lea   eax,[TaskProgramExitStr2+14]
-  mov   [pTaskPut4DecDst],eax
-  call  TaskPut4Dec
-  mov   eax,[TaskExitCodeYield]
-  mov   [TaskPut4DecVal],eax
-  lea   eax,[TaskProgramExitStr2+19]
-  mov   [pTaskPut4DecDst],eax
-  call  TaskPut4Dec
-  lea   eax,[TaskProgramExitStr2]
-  mov   [pVdStr],eax
-  call  VdPutStr
-  call  CnCrLf
-  mov   dword[TaskIndex],3
-  call  TaskGetRecord
-  mov   edi,[pTaskRecord]
-  mov   eax,[edi+TASK_EXIT_CODE]
-  call  TaskProgramSplitExitCode
-  mov   eax,[TaskExitCodeSum]
-  mov   [TaskPut4DecVal],eax
-  lea   eax,[TaskProgramExitStr3+14]
-  mov   [pTaskPut4DecDst],eax
-  call  TaskPut4Dec
-  mov   eax,[TaskExitCodeYield]
-  mov   [TaskPut4DecVal],eax
-  lea   eax,[TaskProgramExitStr3+19]
-  mov   [pTaskPut4DecDst],eax
-  call  TaskPut4Dec
-  lea   eax,[TaskProgramExitStr3]
-  mov   [pVdStr],eax
-  call  VdPutStr
-  call  CnCrLf
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -1083,32 +974,6 @@ TaskProgramClearSlot1:
   mov   [TaskProgramClearLeft],eax
   jmp   TaskProgramClearSlot1
 TaskProgramClearSlotDone:
-  ret
-
-;--------------------------------------------------------------------------------------------------
-; TaskProgramCheckDone
-;   Output:
-;     TaskProgramDone = 1 when tasks 1, 2, and 3 are EXITED, else 0.
-;--------------------------------------------------------------------------------------------------
-TaskProgramCheckDone:
-  mov   dword[TaskProgramDone],0
-  mov   dword[TaskIndex],1
-  call  TaskGetRecord
-  mov   edi,[pTaskRecord]
-  cmp   dword[edi+TASK_STATE],TASK_STATE_EXITED
-  jne   TaskProgramCheckDoneDone
-  mov   dword[TaskIndex],2
-  call  TaskGetRecord
-  mov   edi,[pTaskRecord]
-  cmp   dword[edi+TASK_STATE],TASK_STATE_EXITED
-  jne   TaskProgramCheckDoneDone
-  mov   dword[TaskIndex],3
-  call  TaskGetRecord
-  mov   edi,[pTaskRecord]
-  cmp   dword[edi+TASK_STATE],TASK_STATE_EXITED
-  jne   TaskProgramCheckDoneDone
-  mov   dword[TaskProgramDone],1
-TaskProgramCheckDoneDone:
   ret
 
 ;--------------------------------------------------------------------------------------------------

@@ -46,8 +46,6 @@ Run loads 1..3 named programs, creates task slots 1..N, copies each optional
 argument into that task's startup argument area, starts cooperative dispatch only
 after all requested programs are loaded, prints task exit information, and
 returns to the console.
-Run3 exists as: run3 <prog1> <prog2> <prog3>
-Run3 is still present as the older three-program smoke-test command.
 ```
 
 Current userland smoke tests:

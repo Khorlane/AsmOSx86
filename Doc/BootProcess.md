@@ -108,8 +108,8 @@ PROG4.BIN
 DATA.TXT
 ```
 
-`Run3` can launch `PROG1.BIN`, `PROG2.BIN`, and `PROG3.BIN` together from the
-console.
+The console `Run` command can launch `PROG1.BIN`, `PROG2.BIN`, and `PROG3.BIN`
+together with `run prog1.bin | prog2.bin | prog3.bin`.
 
 ## Real Hardware Note
 
