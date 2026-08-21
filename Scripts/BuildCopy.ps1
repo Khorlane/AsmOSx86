@@ -3,7 +3,7 @@ BuildCopy.ps1
 Writes the AsmOSx86 raw floppy manifest and packed boot/runtime files.
 - Sector 0 is Boot1.bin and is written by BuildWriteBoot1.ps1.
 - Sector 1 is the AsmOSx86 file manifest.
-- Sector 2 and onward contain BOOT2.BIN, KERNEL.BIN, and optional PROG*.BIN files.
+- Sector 2 and onward contain KERNEL.BIN and optional runtime files.
 #>
 
 Set-StrictMode -Version Latest
@@ -55,11 +55,12 @@ function Write-ImageBytes([System.IO.FileStream]$Stream, [int]$Sector, [byte[]]$
 
 try {
   $Image  = Join-Path $RepoRoot "floppy.img"
-  $Boot2  = Join-Path $RepoRoot "Boot2.bin"
   $Kernel = Join-Path $RepoRoot "Kernel.bin"
   $Prog1  = Join-Path $RepoRoot "Prog1.bin"
   $Prog2  = Join-Path $RepoRoot "Prog2.bin"
   $Prog3  = Join-Path $RepoRoot "Prog3.bin"
+  $Prog4  = Join-Path $RepoRoot "Prog4.bin"
+  $Data   = Join-Path $RepoRoot "Data.txt"
   $BytesPerSector = 512
   $ManifestSector = 1
   $FirstFileSector = 2
@@ -69,21 +70,23 @@ try {
 
   Write-Host "Running: $PSCommandPath"
   Write-Host "[1/4] Verifying files..."
-  foreach ($f in @($Image, $Boot2, $Kernel)) {
+  foreach ($f in @($Image, $Kernel)) {
     if (-not (Test-Path -LiteralPath $f -PathType Leaf)) {
       Fail "Missing required file: $f"
     }
   }
 
   $files = @(
-    @{ Name = "BOOT2.BIN"; Path = $Boot2  },
     @{ Name = "KERNEL.BIN"; Path = $Kernel }
   )
 
-  foreach ($prog in @($Prog1, $Prog2, $Prog3)) {
+  foreach ($prog in @($Prog1, $Prog2, $Prog3, $Prog4)) {
     if (Test-Path -LiteralPath $prog -PathType Leaf) {
       $files += @{ Name = [IO.Path]::GetFileName($prog).ToUpperInvariant(); Path = $prog }
     }
+  }
+  if (Test-Path -LiteralPath $Data -PathType Leaf) {
+    $files += @{ Name = "DATA.TXT"; Path = $Data }
   }
 
   if ($files.Count -gt 15) {

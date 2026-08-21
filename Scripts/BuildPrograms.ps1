@@ -1,5 +1,5 @@
 <# BuildPrograms.ps1
-Assembles Prog1.asm, Prog2.asm, and Prog3.asm into flat binaries.
+Assembles Prog*.asm user programs into flat binaries.
 #>
 
 Set-StrictMode -Version Latest
@@ -19,7 +19,10 @@ function Wait-ForKey {
 
 try {
   Set-Location $RepoRoot
-  foreach ($prog in @("Prog1", "Prog2", "Prog3")) {
+  foreach ($prog in @("Prog1", "Prog2", "Prog3", "Prog4")) {
+    if (-not (Test-Path -LiteralPath "$prog.asm" -PathType Leaf)) {
+      continue
+    }
     Write-Host "nasm -f bin $prog.asm -o $prog.bin -l $prog.lst"
     & nasm -f bin "$prog.asm" -o "$prog.bin" -l "$prog.lst"
     if ($LASTEXITCODE -ne 0) {

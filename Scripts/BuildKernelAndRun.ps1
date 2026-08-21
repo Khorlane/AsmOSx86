@@ -35,9 +35,9 @@ try {
   }
 
   Write-Host ""
-  Write-Host "--------------------------------------"
-  Write-Host "- Copy Boot2 and Kernel to Boot Disk -"
-  Write-Host "--------------------------------------"
+  Write-Host "----------------------------------"
+  Write-Host "- Copy Kernel to Boot Disk Image -"
+  Write-Host "----------------------------------"
 
   # Replaces DOSBox copy step
   & (Join-Path $PSScriptRoot "BuildCopy.ps1")

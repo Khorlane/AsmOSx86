@@ -10,7 +10,12 @@ $DidPushLocation = $false
 function Wait-ForKey {
   Write-Host ""
   Write-Host "Press any key to continue..."
-  [void][System.Console]::ReadKey($true)
+  try {
+    [void][System.Console]::ReadKey($true)
+  }
+  catch {
+    Write-Host "(No interactive console available; continuing.)"
+  }
 }
 
 try {
@@ -34,8 +39,10 @@ try {
     throw "nasm failed with exit code $LASTEXITCODE."
   }
 
-  Write-Host ""
-  Wait-ForKey
+  if ($args.Count -lt 1 -or $args[0] -ne 'noexit') {
+    Write-Host ""
+    Wait-ForKey
+  }
 
   # Equivalent of: if x%1 == xexit exit
   if ($args.Count -ge 1 -and $args[0] -eq 'exit') {
