@@ -121,6 +121,20 @@ run prog4.bin -- sleep | prog1.bin | prog4.bin -- bad
   runs them together through the cooperative scheduler
 ```
 
+Prog4 mode summary:
+
+```text
+mode              proof                                      exit
+normal            file open/read/print/close                 0000
+bad               bad KcVdWriteStr pointer                  0042
+bad-print         bad KcVdWriteStr pointer                  0042
+bad-open          bad KcFsOpen filename pointer             0043
+bad-read          bad KcFsRead destination pointer          0044
+bad-zero-call     KcValidate rejects call number 0          0045
+bad-call-number   KcLookup rejects unknown call number      0046
+sleep             KcTmSleep blocks and wakes cooperatively  0007
+```
+
 Kernel-call boundary:
 
 ```text
