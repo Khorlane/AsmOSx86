@@ -19,6 +19,9 @@
 ;   - TaskGetCurrentRecord
 ;   - TaskPut4Dec
 ;   - TaskValidateUserRange
+;   - TaskSetReady
+;   - TaskBlock
+;   - TaskWake
 ;   - TaskProgramLoad
 ;   - TaskProgramInit
 ;   - TaskProgramGetExitCode
@@ -47,6 +50,8 @@ TASK_STATE_READY     equ 1
 TASK_STATE_RUNNING   equ 2
 TASK_STATE_BLOCKED   equ 3
 TASK_STATE_EXITED    equ 4
+TASK_STATUS_OK       equ 0
+TASK_STATUS_BAD_TASK equ 1
 
 ;--------------------------------------------------------------------------------------------------
 ; Task Record Layout
@@ -98,6 +103,8 @@ align 4
 TaskCurrentIndex     dd 0               ; current task index
 TaskNextIndex        dd 0               ; next task index
 TaskIndex            dd 0               ; input: task index for lookup helpers
+TaskStateIndex       dd 0               ; input: task index for state helpers
+TaskStateStatus      dd 0               ; output: TASK_STATUS_*
 TaskScanIndex        dd 0               ; work: scheduler table scan index
 TaskScanLeft         dd 0               ; work: scheduler entries left to scan
 TaskStackSlot        dd 0               ; input: stack slot index
@@ -218,6 +225,59 @@ TaskValidateUserRangeKcBlock:
 TaskValidateUserRangeOk:
   mov   dword[TaskUserOk],1
 TaskValidateUserRangeDone:
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; TaskSetReady
+;   Input:
+;     TaskStateIndex = task table index to mark ready.
+;   Output:
+;     TaskStateStatus = TASK_STATUS_OK or TASK_STATUS_BAD_TASK.
+;--------------------------------------------------------------------------------------------------
+TaskSetReady:
+  call  TaskGetStateRecord
+  mov   eax,[TaskStateStatus]
+  cmp   eax,TASK_STATUS_OK
+  jne   TaskSetReadyDone
+  mov   edi,[pTaskRecord]
+  mov   dword[edi+TASK_STATE],TASK_STATE_READY
+TaskSetReadyDone:
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; TaskBlock
+;   Input:
+;     TaskStateIndex = task table index to mark blocked.
+;   Output:
+;     TaskStateStatus = TASK_STATUS_OK or TASK_STATUS_BAD_TASK.
+;--------------------------------------------------------------------------------------------------
+TaskBlock:
+  call  TaskGetStateRecord
+  mov   eax,[TaskStateStatus]
+  cmp   eax,TASK_STATUS_OK
+  jne   TaskBlockDone
+  mov   edi,[pTaskRecord]
+  mov   dword[edi+TASK_STATE],TASK_STATE_BLOCKED
+TaskBlockDone:
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; TaskWake
+;   Input:
+;     TaskStateIndex = task table index to wake if blocked.
+;   Output:
+;     TaskStateStatus = TASK_STATUS_OK or TASK_STATUS_BAD_TASK.
+;--------------------------------------------------------------------------------------------------
+TaskWake:
+  call  TaskGetStateRecord
+  mov   eax,[TaskStateStatus]
+  cmp   eax,TASK_STATUS_OK
+  jne   TaskWakeDone
+  mov   edi,[pTaskRecord]
+  cmp   dword[edi+TASK_STATE],TASK_STATE_BLOCKED
+  jne   TaskWakeDone
+  mov   dword[edi+TASK_STATE],TASK_STATE_READY
+TaskWakeDone:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -602,6 +662,27 @@ TaskYield7:
 ;--------------------------------------------------------------------------------------------------
 ; Internal Routines
 ;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; TaskGetStateRecord
+;   Input:
+;     TaskStateIndex = task table index for a state helper.
+;   Output:
+;     TaskStateStatus = TASK_STATUS_OK or TASK_STATUS_BAD_TASK.
+;     pTaskRecord     = selected task record, or 0.
+;--------------------------------------------------------------------------------------------------
+TaskGetStateRecord:
+  mov   eax,[TaskStateIndex]
+  mov   [TaskIndex],eax
+  call  TaskGetRecord
+  mov   edi,[pTaskRecord]
+  test  edi,edi
+  jz    TaskGetStateRecordBad
+  mov   dword[TaskStateStatus],TASK_STATUS_OK
+  ret
+TaskGetStateRecordBad:
+  mov   dword[TaskStateStatus],TASK_STATUS_BAD_TASK
+  ret
 
 ;--------------------------------------------------------------------------------------------------
 ; TaskMapSelectedProgram

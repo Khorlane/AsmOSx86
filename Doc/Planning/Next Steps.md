@@ -122,14 +122,23 @@ Current reality:
 ```text
 TASK_STATE_BLOCKED exists.
 The scheduler currently mostly uses Ready, Running, and Exited.
+TaskSetReady, TaskBlock, and TaskWake exist as small state helpers.
 ```
 
-Next step:
+Done:
 
 ```text
 TaskBlock
 TaskWake
 TaskSetReady
+```
+
+Next step:
+
+```text
+use the helpers from a real blocking service
+keep the scheduler cooperative for now
+avoid timer-interrupt wakeups until interrupts move up the list
 ```
 
 Possible later cooperative test:
