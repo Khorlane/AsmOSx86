@@ -41,6 +41,7 @@ KcUserDispatch is the user-originated path and requires service validation
 Page-fault IDT vector 14 is installed
 Page faults currently halt forever
 Prog4 has denial probes for invalid KcVdWriteStr, KcFsOpen, and KcFsRead pointers
+Prog4 has denial probes for zero and unknown Kc call numbers
 ```
 
 Current important limitations:

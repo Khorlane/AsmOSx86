@@ -23,6 +23,7 @@ KC_BLOCK_ARG2       equ 16
 KC_BLOCK_RESULT0    equ 24
 KC_BLOCK_RESULT1    equ 28
 STATUS_OK           equ 0
+STATUS_INVALID      equ 1
 STATUS_BAD_ARG      equ 2
 DATA_BUFFER_SIZE    equ 80
 
@@ -41,6 +42,8 @@ Start:
   call  MaybeBadPrintTest               ; Optional bad-print proof
   call  MaybeBadOpenTest                ; Optional bad-open proof
   call  MaybeBadReadTest                ; Optional bad-read proof
+  call  MaybeBadZeroCallTest            ; Optional zero-call proof
+  call  MaybeBadCallNumberTest          ; Optional unknown-call proof
 Prog4CloseAndExit:
   call  CloseFile                       ; Close file
 Prog4Exit:
@@ -200,6 +203,76 @@ MaybeSleepTest:
 MaybeSleepTestDone:
   ret
 
+MaybeBadZeroCallTest:
+  cmp   word[USER_ARG],13
+  jne   MaybeBadZeroCallTestDone
+  cmp   byte[USER_ARG+2],'b'
+  jne   MaybeBadZeroCallTestDone
+  cmp   byte[USER_ARG+3],'a'
+  jne   MaybeBadZeroCallTestDone
+  cmp   byte[USER_ARG+4],'d'
+  jne   MaybeBadZeroCallTestDone
+  cmp   byte[USER_ARG+5],'-'
+  jne   MaybeBadZeroCallTestDone
+  cmp   byte[USER_ARG+6],'z'
+  jne   MaybeBadZeroCallTestDone
+  cmp   byte[USER_ARG+7],'e'
+  jne   MaybeBadZeroCallTestDone
+  cmp   byte[USER_ARG+8],'r'
+  jne   MaybeBadZeroCallTestDone
+  cmp   byte[USER_ARG+9],'o'
+  jne   MaybeBadZeroCallTestDone
+  cmp   byte[USER_ARG+10],'-'
+  jne   MaybeBadZeroCallTestDone
+  cmp   byte[USER_ARG+11],'c'
+  jne   MaybeBadZeroCallTestDone
+  cmp   byte[USER_ARG+12],'a'
+  jne   MaybeBadZeroCallTestDone
+  cmp   byte[USER_ARG+13],'l'
+  jne   MaybeBadZeroCallTestDone
+  cmp   byte[USER_ARG+14],'l'
+  jne   MaybeBadZeroCallTestDone
+  call  BadZeroCallTest
+MaybeBadZeroCallTestDone:
+  ret
+
+MaybeBadCallNumberTest:
+  cmp   word[USER_ARG],15
+  jne   MaybeBadCallNumberTestDone
+  cmp   byte[USER_ARG+2],'b'
+  jne   MaybeBadCallNumberTestDone
+  cmp   byte[USER_ARG+3],'a'
+  jne   MaybeBadCallNumberTestDone
+  cmp   byte[USER_ARG+4],'d'
+  jne   MaybeBadCallNumberTestDone
+  cmp   byte[USER_ARG+5],'-'
+  jne   MaybeBadCallNumberTestDone
+  cmp   byte[USER_ARG+6],'c'
+  jne   MaybeBadCallNumberTestDone
+  cmp   byte[USER_ARG+7],'a'
+  jne   MaybeBadCallNumberTestDone
+  cmp   byte[USER_ARG+8],'l'
+  jne   MaybeBadCallNumberTestDone
+  cmp   byte[USER_ARG+9],'l'
+  jne   MaybeBadCallNumberTestDone
+  cmp   byte[USER_ARG+10],'-'
+  jne   MaybeBadCallNumberTestDone
+  cmp   byte[USER_ARG+11],'n'
+  jne   MaybeBadCallNumberTestDone
+  cmp   byte[USER_ARG+12],'u'
+  jne   MaybeBadCallNumberTestDone
+  cmp   byte[USER_ARG+13],'m'
+  jne   MaybeBadCallNumberTestDone
+  cmp   byte[USER_ARG+14],'b'
+  jne   MaybeBadCallNumberTestDone
+  cmp   byte[USER_ARG+15],'e'
+  jne   MaybeBadCallNumberTestDone
+  cmp   byte[USER_ARG+16],'r'
+  jne   MaybeBadCallNumberTestDone
+  call  BadCallNumberTest
+MaybeBadCallNumberTestDone:
+  ret
+
 BadPrintTest:
   mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],KC_VD_WRITE_STR
   mov   dword[KC_BLOCK+KC_BLOCK_ARG0],00100000h
@@ -257,6 +330,40 @@ BadReadTestFailed:
   mov   dword[Prog4ExitCode],97
   ret
 
+BadZeroCallTest:
+  mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],0
+  mov   ebx,KERNEL_CALL_GATEWAY
+  call  ebx
+  mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
+  cmp   eax,STATUS_INVALID
+  jne   BadZeroCallTestFailed
+  mov   dword[pProg4Msg],MsgBadZeroCallOk
+  call  PrintProg4Msg
+  mov   dword[Prog4ExitCode],45
+  ret
+BadZeroCallTestFailed:
+  mov   dword[pProg4Msg],MsgBadZeroCallFail
+  call  PrintProg4Msg
+  mov   dword[Prog4ExitCode],96
+  ret
+
+BadCallNumberTest:
+  mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],9999
+  mov   ebx,KERNEL_CALL_GATEWAY
+  call  ebx
+  mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
+  cmp   eax,STATUS_INVALID
+  jne   BadCallNumberTestFailed
+  mov   dword[pProg4Msg],MsgBadCallNumberOk
+  call  PrintProg4Msg
+  mov   dword[Prog4ExitCode],46
+  ret
+BadCallNumberTestFailed:
+  mov   dword[pProg4Msg],MsgBadCallNumberFail
+  call  PrintProg4Msg
+  mov   dword[Prog4ExitCode],95
+  ret
+
 PrintProg4Msg:
   mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],KC_VD_WRITE_STR
   mov   eax,[pProg4Msg]
@@ -303,6 +410,14 @@ MsgBadReadOk         dw 20
                      db "Prog4: bad-read OK",13,10
 MsgBadReadFail       dw 22
                      db "Prog4: bad-read FAIL",13,10
+MsgBadZeroCallOk     dw 25
+                     db "Prog4: bad-zero-call OK",13,10
+MsgBadZeroCallFail   dw 27
+                     db "Prog4: bad-zero-call FAIL",13,10
+MsgBadCallNumberOk   dw 27
+                     db "Prog4: bad-call-number OK",13,10
+MsgBadCallNumberFail dw 29
+                     db "Prog4: bad-call-number FAIL",13,10
 DataBuffer           dw 0
 DataBufferText:
   times DATA_BUFFER_SIZE db 0

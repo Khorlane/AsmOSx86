@@ -93,6 +93,18 @@ run prog4.bin -- bad-read
   expects KC_STATUS_BAD_ARG
   exits 0044 when validation works
 
+run prog4.bin -- bad-zero-call
+  runs the normal DATA.TXT path
+  deliberately requests Kc call number 0
+  expects KC_STATUS_INVALID
+  exits 0045 when validation works
+
+run prog4.bin -- bad-call-number
+  runs the normal DATA.TXT path
+  deliberately requests an unknown Kc call number
+  expects KC_STATUS_INVALID
+  exits 0046 when validation works
+
 run prog4.bin -- sleep
   runs the normal DATA.TXT path
   calls KcTmSleep
@@ -121,6 +133,7 @@ program area and the KcBlock page.
 KcVdWriteStr and KcFsOpen validate full Str ranges for user-originated calls.
 KcFsRead validates destination buffer ranges for user-originated calls.
 Prog4 has denial modes for bad print, bad open, and bad read user pointers.
+Prog4 has dispatch denial modes for zero and unknown Kc call numbers.
 ```
 
 Tasking and scheduling:
@@ -211,6 +224,8 @@ run prog4.bin
 run prog4.bin -- bad
 run prog4.bin -- bad-open
 run prog4.bin -- bad-read
+run prog4.bin -- bad-zero-call
+run prog4.bin -- bad-call-number
 run prog4.bin -- sleep
 run prog1.bin | prog2.bin | prog3.bin
 run prog4.bin -- sleep | prog1.bin | prog4.bin -- bad
