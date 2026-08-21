@@ -127,6 +127,7 @@ VdInit:
 ;     VdPutChar may use registers as scratch.
 ;------------------------------------------------------------------------------
 VdPutStr:
+  call  FsLogWriteStr
   mov   esi,[pVdStr]
   mov   ax,[esi]
   mov   [VdWorkLen],ax

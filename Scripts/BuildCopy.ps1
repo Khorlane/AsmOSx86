@@ -4,6 +4,7 @@ Writes the AsmOSx86 raw floppy manifest and packed boot/runtime files.
 - Sector 0 is Boot.bin and is written by BuildWriteBoot.ps1.
 - Sector 1 is the AsmOSx86 file manifest.
 - Sector 2 and onward contain KERNEL.BIN and optional runtime files.
+- LOG.TXT is a reserved, preallocated kernel-owned console log file.
 #>
 
 Set-StrictMode -Version Latest
@@ -53,6 +54,13 @@ function Write-ImageBytes([System.IO.FileStream]$Stream, [int]$Sector, [byte[]]$
   return $sectorCount
 }
 
+function Write-ImageZeroes([System.IO.FileStream]$Stream, [int]$Sector, [int]$SectorCount) {
+  $BytesPerSector = 512
+  $zeroes = New-Object byte[] ($SectorCount * $BytesPerSector)
+  $null = $Stream.Seek($Sector * $BytesPerSector, [System.IO.SeekOrigin]::Begin)
+  $Stream.Write($zeroes, 0, $zeroes.Length)
+}
+
 try {
   $Image  = Join-Path $RepoRoot "floppy.img"
   $Kernel = Join-Path $RepoRoot "Kernel.bin"
@@ -67,6 +75,7 @@ try {
   $ImageSectors = 2880
   $ManifestEntryOffset = 16
   $ManifestEntrySize = 32
+  $LogSectors = 128
 
   Write-Host "Running: $PSCommandPath"
   Write-Host "[1/4] Verifying files..."
@@ -88,6 +97,12 @@ try {
   if (Test-Path -LiteralPath $Data -PathType Leaf) {
     $files += @{ Name = "DATA.TXT"; Path = $Data }
   }
+  $files += @{
+    Name = "LOG.TXT"
+    Path = $null
+    Reserved = $true
+    ReservedSectors = [UInt32]$LogSectors
+  }
 
   if ($files.Count -gt 15) {
     Fail "Manifest supports at most 15 files in this first version."
@@ -96,12 +111,19 @@ try {
   Write-Host "[2/4] Planning packed file layout..."
   $nextSector = $FirstFileSector
   foreach ($file in $files) {
-    $info = Get-Item -LiteralPath $file.Path
-    $sectorCount = [int][Math]::Ceiling($info.Length / $BytesPerSector)
-    if ($sectorCount -lt 1) {
-      Fail "$($file.Name) is empty."
+    if ($file.ContainsKey("Reserved") -and $file.Reserved) {
+      $sectorCount = [int]$file.ReservedSectors
+      $size = [UInt32]($sectorCount * $BytesPerSector)
     }
-    $file["Size"] = [UInt32]$info.Length
+    else {
+      $info = Get-Item -LiteralPath $file.Path
+      $sectorCount = [int][Math]::Ceiling($info.Length / $BytesPerSector)
+      if ($sectorCount -lt 1) {
+        Fail "$($file.Name) is empty."
+      }
+      $size = [UInt32]$info.Length
+    }
+    $file["Size"] = $size
     $file["StartSector"] = [UInt32]$nextSector
     $file["SectorCount"] = [UInt32]$sectorCount
     $nextSector += $sectorCount
@@ -141,10 +163,15 @@ try {
     $fs.Write($manifest, 0, $manifest.Length)
 
     foreach ($file in $files) {
-      $bytes = [System.IO.File]::ReadAllBytes($file.Path)
-      $writtenSectors = Write-ImageBytes $fs $file.StartSector $bytes
-      if ($writtenSectors -ne $file.SectorCount) {
-        Fail "Internal write mismatch for $($file.Name)."
+      if ($file.ContainsKey("Reserved") -and $file.Reserved) {
+        Write-ImageZeroes $fs $file.StartSector $file.SectorCount
+      }
+      else {
+        $bytes = [System.IO.File]::ReadAllBytes($file.Path)
+        $writtenSectors = Write-ImageBytes $fs $file.StartSector $bytes
+        if ($writtenSectors -ne $file.SectorCount) {
+          Fail "Internal write mismatch for $($file.Name)."
+        }
       }
     }
 

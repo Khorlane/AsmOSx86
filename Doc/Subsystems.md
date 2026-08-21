@@ -411,8 +411,13 @@ Row,Col ordering is used everywhere.
 ### Current Kernel Text Output Path
 
 ```text
+pVdStr -> VdPutStr -> FsLogWriteStr when enabled
 pVdStr -> VdPutStr -> VdPutChar -> VGA memory
 ```
+
+`LOG.TXT` is a preallocated kernel-owned console mirror file in the `ASMF`
+manifest. It is cleared on startup and receives the same Str payloads sent
+through `VdPutStr` after logging is initialized.
 
 ### Core Routines
 

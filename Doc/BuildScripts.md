@@ -205,11 +205,17 @@ Optional inputs:
 - `Prog4.bin`
 - `Data.txt`
 
+Reserved generated files:
+
+- `LOG.TXT`: 128-sector kernel-owned console mirror file, cleared by the kernel
+  on startup
+
 Writes:
 
 - sector `1`: the `ASMF` manifest
 - sector `2+`: `KERNEL.BIN`
 - next sectors: optional `PROG*.BIN` and `DATA.TXT` files when present
+- final reserved file entry: `LOG.TXT`
 
 Manifest format:
 
@@ -227,6 +233,19 @@ Notes:
 - Does not use ImDisk.
 - Does not copy files through FAT12.
 - Packs file bodies contiguously and pads each file to a whole sector.
+
+### ExtractFile.ps1
+
+Extracts a file from the AsmOSx86 raw `ASMF` floppy image.
+
+Typical use after a Bochs test session:
+
+```powershell
+.\ExtractFile.ps1 LOG.TXT
+```
+
+The default output location is `Extracted\<NAME>`. `LOG.TXT` extraction trims
+trailing zero bytes from the preallocated log area.
 
 ### BuildKernelAndRun.ps1
 

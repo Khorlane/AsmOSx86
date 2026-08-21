@@ -106,7 +106,11 @@ PROG2.BIN
 PROG3.BIN
 PROG4.BIN
 DATA.TXT
+LOG.TXT
 ```
+
+`LOG.TXT` is a reserved kernel-owned console mirror file. The build script
+preallocates it, and the kernel clears it during startup before logging begins.
 
 The console `Run` command can launch `PROG1.BIN`, `PROG2.BIN`, and `PROG3.BIN`
 together with `run prog1.bin | prog2.bin | prog3.bin`.

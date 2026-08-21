@@ -599,9 +599,11 @@ KcFsClose       - Close an open file handle
 
 For AsmOSx86, `file` means a disk-backed filesystem object. It does not mean keyboard, video, console, pipe, socket, device, or memory buffer.
 
-The current implementation is read-only and manifest-backed. `Fs.asm` opens
-files from the raw `ASMF` floppy manifest, reads file sectors through a tiny
-kernel block-device layer, and the only current block device is floppy A:.
+The current user-facing implementation is read-only and manifest-backed.
+`Fs.asm` opens files from the raw `ASMF` floppy manifest, reads file sectors
+through a tiny kernel block-device layer, and the only current block device is
+floppy A:. The kernel also has a special internal writer for the preallocated
+`LOG.TXT` console mirror; this is not a general file-write service.
 Shared device type IDs, device IDs, and the static device registry are defined
 in `Config.asm`.
 

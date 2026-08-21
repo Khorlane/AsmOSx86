@@ -87,7 +87,7 @@ DevRegistryFloppyA:
   dd DEV_SECTOR_SIZE_512
   dd DEV_FLOPPY_A_SECTORS
   dd FloppyReadSectorTo
-  dd 0
+  dd FloppyWriteSectorFrom
   dd 0
 DevRegistryHardDisk0:
   dd DEV_ID_HARDDISK_0

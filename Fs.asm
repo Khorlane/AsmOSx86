@@ -10,13 +10,16 @@
 ;   - File service open/read/close
 ;   - Read-only AsmOSx86 manifest lookup
 ;   - Tiny block-device routing
-;   - Bare-bones floppy sector reads
+;   - Bare-bones floppy sector reads/writes
+;   - Kernel-owned console log mirror
 ;
 ; Public API
 ;   - FsInit
 ;   - FsOpen
 ;   - FsRead
 ;   - FsClose
+;   - FsLogInit
+;   - FsLogWriteStr
 ;
 ; Notes
 ;   - This is intentionally simple and optimistic.
@@ -62,6 +65,29 @@ FsReadBytes              dd 0          ; output: bytes read
 FsCloseHandle            dd 0          ; input: handle to close
 
 ;**************************************************************************************************
+; Kernel console log
+;**************************************************************************************************
+FS_LOG_ENABLED_OFF       equ 0
+FS_LOG_ENABLED_ON        equ 1
+
+pFsLogWriteStr           dd 0          ; input: pointer to kernel Str to mirror
+FsLogEnabled             dd 0          ; 1 once LOG.TXT is ready
+FsLogStartSector         dd 0          ; LOG.TXT first sector
+FsLogSectorCount         dd 0          ; LOG.TXT reserved sectors
+FsLogCapacityBytes       dd 0          ; LOG.TXT capacity in bytes
+FsLogOffset              dd 0          ; next byte offset in LOG.TXT
+FsLogWritePtr            dd 0          ; work: payload pointer
+FsLogWriteLeft           dd 0          ; work: payload bytes left
+FsLogSectorOffset        dd 0          ; work: offset inside current log sector
+FsLogDirty               dd 0          ; work: current log sector needs flush
+FsLogClearLeft           dd 0          ; work: sectors left to clear
+FsLogClearIndex          dd 0          ; work: clear sector index
+String  FsLogName,"LOG.TXT"
+String  FsLogFailStr,"LOG FAIL"
+FsLogSectorBuffer:
+  times KERNEL_SECTOR_SIZE db 0
+
+;**************************************************************************************************
 ; Kernel calls
 ;**************************************************************************************************
 ; Kernel-call handlers live in Kc.asm. They use the Filesystem Global memory
@@ -103,6 +129,7 @@ ASMFS_ENTRY_OFFSET       equ 16
 ASMFS_ENTRY_SIZE         equ 32
 ASMFS_ENTRY_START_SECTOR equ 12
 ASMFS_ENTRY_BYTE_SIZE    equ 16
+ASMFS_ENTRY_SECTOR_COUNT equ 20
 ASMFS_MANIFEST_BYTES     equ KERNEL_SECTOR_SIZE
 ASMFS_NAME_SIZE          equ 11
 
@@ -130,6 +157,7 @@ DevBlockDevice           dd 0          ; input/current block device
 pDevBlockDeviceRecord    dd 0          ; current block device registry record
 DevRegistryLeft          dd 0          ; work: registry records left to scan
 DevReadHandler           dd 0          ; work: selected block-device read routine
+DevWriteHandler          dd 0          ; work: selected block-device write routine
 DevSector                dd 0          ; input: block-device sector
 DevBuffer                dd 0          ; input: destination buffer
 
@@ -146,6 +174,7 @@ FDC_CMD_RECALIBRATE      equ 07h
 FDC_CMD_SENSE_INT        equ 08h
 FDC_CMD_SEEK             equ 0Fh
 FDC_CMD_READ_DATA        equ 046h
+FDC_CMD_WRITE_DATA       equ 045h
 FDC_DOR_RESET            equ 00000100b
 FDC_DOR_DMAIRQ           equ 00001000b
 FDC_DOR_MOTOR_A          equ 00010000b
@@ -174,6 +203,189 @@ FlpResult3               db 0
 FlpResult4               db 0
 FlpResult5               db 0
 FlpResult6               db 0
+
+;**************************************************************************************************
+; Kernel console log
+;**************************************************************************************************
+
+;--------------------------------------------------------------------------------------------------
+; FsLogInit
+;   Output:
+;     Clears LOG.TXT and enables console mirroring.
+;   Notes:
+;     LOG.TXT is a kernel-owned preallocated manifest file.
+;--------------------------------------------------------------------------------------------------
+FsLogInit:
+  mov   dword[FsLogEnabled],FS_LOG_ENABLED_OFF
+  mov   eax,[FsMounted]
+  test  eax,eax
+  jnz   FsLogInit1
+  call  AsmFsMount
+  mov   eax,[FsStatus]
+  cmp   eax,FS_STATUS_OK
+  jne   FsLogHardFail
+FsLogInit1:
+  lea   eax,[FsLogName]
+  mov   [pFsOpenName],eax
+  call  AsmFsMakeName83
+  mov   eax,[FsStatus]
+  cmp   eax,FS_STATUS_OK
+  jne   FsLogHardFail
+  call  AsmFsFindEntry
+  mov   eax,[FsStatus]
+  cmp   eax,FS_STATUS_OK
+  jne   FsLogHardFail
+  mov   esi,[pFsEntry]
+  mov   eax,[esi+ASMFS_ENTRY_START_SECTOR]
+  mov   [FsLogStartSector],eax
+  mov   eax,[esi+ASMFS_ENTRY_SECTOR_COUNT]
+  mov   [FsLogSectorCount],eax
+  shl   eax,KERNEL_SECTOR_SHIFT
+  mov   [FsLogCapacityBytes],eax
+  mov   dword[FsLogOffset],0
+  call  FsLogClearBuffer
+  mov   dword[FsLogClearIndex],0
+  mov   eax,[FsLogSectorCount]
+  mov   [FsLogClearLeft],eax
+FsLogInitClear:
+  mov   eax,[FsLogClearLeft]
+  test  eax,eax
+  jz    FsLogInitDone
+  mov   eax,[FsLogStartSector]
+  add   eax,[FsLogClearIndex]
+  mov   [DevSector],eax
+  mov   dword[DevBuffer],FsLogSectorBuffer
+  call  DevWriteSector
+  mov   eax,[FsStatus]
+  cmp   eax,FS_STATUS_OK
+  jne   FsLogHardFail
+  inc   dword[FsLogClearIndex]
+  dec   dword[FsLogClearLeft]
+  jmp   FsLogInitClear
+FsLogInitDone:
+  call  FsLogClearBuffer
+  mov   dword[FsLogEnabled],FS_LOG_ENABLED_ON
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; FsLogWriteStr
+;   Input:
+;     pVdStr = kernel Str currently being written to the console.
+;   Output:
+;     Mirrors the Str payload into LOG.TXT when logging is enabled.
+;--------------------------------------------------------------------------------------------------
+FsLogWriteStr:
+  mov   eax,[FsLogEnabled]
+  cmp   eax,FS_LOG_ENABLED_ON
+  jne   FsLogWriteStrDone
+  mov   esi,[pVdStr]
+  test  esi,esi
+  jz    FsLogWriteStrDone
+  movzx eax,word[esi]
+  mov   [FsLogWriteLeft],eax
+  add   esi,2
+  mov   [FsLogWritePtr],esi
+  mov   dword[FsLogDirty],0
+FsLogWriteStr1:
+  mov   eax,[FsLogWriteLeft]
+  test  eax,eax
+  jz    FsLogWriteStrFlush
+  mov   eax,[FsLogOffset]
+  cmp   eax,[FsLogCapacityBytes]
+  jae   FsLogHardFail
+  mov   ebx,eax
+  and   ebx,KERNEL_SECTOR_SIZE-1
+  mov   [FsLogSectorOffset],ebx
+  mov   esi,[FsLogWritePtr]
+  mov   al,[esi]
+  inc   esi
+  mov   [FsLogWritePtr],esi
+  mov   edi,FsLogSectorBuffer
+  add   edi,[FsLogSectorOffset]
+  mov   [edi],al
+  inc   dword[FsLogOffset]
+  dec   dword[FsLogWriteLeft]
+  mov   dword[FsLogDirty],1
+  mov   eax,[FsLogOffset]
+  and   eax,KERNEL_SECTOR_SIZE-1
+  jnz   FsLogWriteStr1
+  call  FsLogFlushPrevSector
+  call  FsLogClearBuffer
+  mov   dword[FsLogDirty],0
+  jmp   FsLogWriteStr1
+FsLogWriteStrFlush:
+  mov   eax,[FsLogDirty]
+  test  eax,eax
+  jz    FsLogWriteStrDone
+  call  FsLogFlushCurrentSector
+FsLogWriteStrDone:
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; FsLogClearBuffer
+;   Output:
+;     Clears the in-memory log sector buffer.
+;--------------------------------------------------------------------------------------------------
+FsLogClearBuffer:
+  mov   edi,FsLogSectorBuffer
+  mov   ecx,KERNEL_SECTOR_SIZE
+  xor   al,al
+FsLogClearBuffer1:
+  mov   [edi],al
+  inc   edi
+  dec   ecx
+  jnz   FsLogClearBuffer1
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; FsLogFlushCurrentSector
+;   Output:
+;     Writes the current partial log sector.
+;--------------------------------------------------------------------------------------------------
+FsLogFlushCurrentSector:
+  mov   eax,[FsLogOffset]
+  shr   eax,KERNEL_SECTOR_SHIFT
+  add   eax,[FsLogStartSector]
+  mov   [DevSector],eax
+  mov   dword[DevBuffer],FsLogSectorBuffer
+  call  DevWriteSector
+  mov   eax,[FsStatus]
+  cmp   eax,FS_STATUS_OK
+  jne   FsLogHardFail
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; FsLogFlushPrevSector
+;   Output:
+;     Writes the full log sector that just completed.
+;--------------------------------------------------------------------------------------------------
+FsLogFlushPrevSector:
+  mov   eax,[FsLogOffset]
+  dec   eax
+  shr   eax,KERNEL_SECTOR_SHIFT
+  add   eax,[FsLogStartSector]
+  mov   [DevSector],eax
+  mov   dword[DevBuffer],FsLogSectorBuffer
+  call  DevWriteSector
+  mov   eax,[FsStatus]
+  cmp   eax,FS_STATUS_OK
+  jne   FsLogHardFail
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; FsLogHardFail
+;   Output:
+;     Reports LOG FAIL on screen and halts.
+;--------------------------------------------------------------------------------------------------
+FsLogHardFail:
+  mov   dword[FsLogEnabled],FS_LOG_ENABLED_OFF
+  lea   eax,[FsLogFailStr]
+  mov   [pVdStr],eax
+  call  VdPutStr
+FsLogHardFail1:
+  cli
+  hlt
+  jmp   FsLogHardFail1
 
 ;**************************************************************************************************
 ; File service
@@ -616,6 +828,58 @@ DevReadSectorIoError:
   ret
 
 ;--------------------------------------------------------------------------------------------------
+; DevWriteSector
+;   Input:
+;     DevBlockDevice = block device id.
+;     DevSector      = sector to write.
+;     DevBuffer      = source buffer.
+;   Output:
+;     DevStatus = DEV_STATUS_*
+;     FsStatus  = FS_STATUS_*
+;--------------------------------------------------------------------------------------------------
+DevWriteSector:
+  call  DevFindById
+  mov   eax,[DevStatus]
+  cmp   eax,DEV_STATUS_OK
+  jne   DevWriteSectorBadDevice
+  mov   esi,[pDevBlockDeviceRecord]
+  test  esi,esi
+  jz    DevWriteSectorBadDevice
+  mov   eax,[esi+DEV_RECORD_TYPE]
+  cmp   eax,DEV_TYPE_BLOCK
+  jne   DevWriteSectorBadDevice
+  mov   eax,[esi+DEV_RECORD_STATUS]
+  cmp   eax,DEV_STATUS_OK
+  jne   DevWriteSectorBadDevice
+  mov   eax,[DevSector]
+  cmp   eax,[esi+DEV_RECORD_SECTOR_COUNT]
+  jae   DevWriteSectorIoError
+  mov   eax,[esi+DEV_RECORD_WRITE]
+  test  eax,eax
+  jz    DevWriteSectorBadDevice
+  mov   [DevWriteHandler],eax
+  mov   eax,[DevSector]
+  mov   [FsCurrentLba],eax
+  mov   eax,[DevBuffer]
+  mov   [FsWorkPtr],eax
+  mov   eax,[DevWriteHandler]
+  call  eax
+  mov   eax,[FsStatus]
+  cmp   eax,FS_STATUS_OK
+  jne   DevWriteSectorIoError
+  mov   dword[DevStatus],DEV_STATUS_OK
+  mov   dword[FsStatus],FS_STATUS_OK
+  ret
+DevWriteSectorBadDevice:
+  mov   dword[DevStatus],DEV_STATUS_BAD_DEVICE
+  mov   dword[FsStatus],FS_STATUS_NOT_READY
+  ret
+DevWriteSectorIoError:
+  mov   dword[DevStatus],DEV_STATUS_IO_ERROR
+  mov   dword[FsStatus],FS_STATUS_IO_ERROR
+  ret
+
+;--------------------------------------------------------------------------------------------------
 ; DevFindById
 ;   Input:
 ;     DevBlockDevice = requested device id.
@@ -674,6 +938,18 @@ FloppyReadSectorTo:
   rep   movsb
   mov   dword[FsStatus],FS_STATUS_OK
 FloppyReadSectorToDone:
+  ret
+
+FloppyWriteSectorFrom:
+  call  FloppyLbaToChs
+  call  FloppyMotorOn
+  mov   esi,[FsWorkPtr]
+  mov   edi,FDC_DMA_BUFFER
+  mov   ecx,KERNEL_SECTOR_SIZE
+  rep   movsb
+  call  FloppyDmaSetupWrite
+  call  FloppySeek
+  call  FloppyCommandWrite
   ret
 
 FloppyLbaToChs:
@@ -767,6 +1043,35 @@ FloppyCommandRead:
 FloppyCommandReadDone:
   ret
 
+FloppyCommandWrite:
+  mov   dword[FsStatus],FS_STATUS_IO_ERROR
+  mov   al,FDC_CMD_WRITE_DATA
+  call  FloppyWriteByte
+  mov   al,[FlpHead]
+  shl   al,2
+  call  FloppyWriteByte
+  mov   al,[FlpCylinder]
+  call  FloppyWriteByte
+  mov   al,[FlpHead]
+  call  FloppyWriteByte
+  mov   al,[FlpSector]
+  call  FloppyWriteByte
+  mov   al,2
+  call  FloppyWriteByte
+  mov   al,FLOPPY_SECTORS_PER_TRACK
+  call  FloppyWriteByte
+  mov   al,01Bh
+  call  FloppyWriteByte
+  mov   al,0FFh
+  call  FloppyWriteByte
+  call  FloppyReadResult
+  mov   al,[FlpResult0]
+  test  al,0C0h
+  jnz   FloppyCommandWriteDone
+  mov   dword[FsStatus],FS_STATUS_OK
+FloppyCommandWriteDone:
+  ret
+
 FloppyReadResult:
   call  FloppyReadByte
   mov   [FlpResult0],al
@@ -827,6 +1132,27 @@ FloppyDmaSetupRead:
   mov   al,0FFh
   out   DMA_CLEAR,al
   mov   al,046h
+  out   DMA_MODE,al
+  mov   al,00h
+  out   DMA_CH2_ADDR,al
+  mov   al,080h
+  out   DMA_CH2_ADDR,al
+  mov   al,00h
+  out   DMA_CH2_PAGE,al
+  mov   al,0FFh
+  out   DMA_CH2_COUNT,al
+  mov   al,001h
+  out   DMA_CH2_COUNT,al
+  mov   al,002h
+  out   DMA_MASK,al
+  ret
+
+FloppyDmaSetupWrite:
+  mov   al,006h
+  out   DMA_MASK,al
+  mov   al,0FFh
+  out   DMA_CLEAR,al
+  mov   al,04Ah
   out   DMA_MODE,al
   mov   al,00h
   out   DMA_CH2_ADDR,al

@@ -103,6 +103,7 @@ FlushCS:
   call  UptimeInit                      ; Initialize uptime
   call  FsInit                          ; Initialize file service
   call  VdInit                          ; Initialize video
+  call  FsLogInit                       ; Initialize console log mirror
   call  KbInit                          ; Initialize keyboard
   call  CnInit                          ; Initialize console
   ; Start main command loop
