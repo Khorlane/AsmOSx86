@@ -77,7 +77,7 @@ String  CnRunMsg2,"Run: running program"
 String  CnRunMsg3,"Run: complete"
 String  CnRunExit,"Run: task exit 0000"
 String  CnRunUsage,"Run usage: run <program>"
-String  CnRunFail,"Run: load failed"
+String  CnRunFail,"Run: load failed 0000"
 
 ; ----- Console commands -----
 String  CnCmdDate,     "Date"
@@ -692,6 +692,11 @@ CnDoCmdRunUsage:
   call  CnCrLf
   ret
 CnDoCmdRunFail:
+  mov   eax,[KcResult0]
+  mov   [TaskPut4DecVal],eax
+  lea   eax,[CnRunFail+19]
+  mov   [pTaskPut4DecDst],eax
+  call  TaskPut4Dec
   lea   eax,[CnRunFail]
   mov   [pVdStr],eax
   call  VdPutStr
