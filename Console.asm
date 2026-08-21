@@ -73,13 +73,6 @@ String  CnFsTestReadBytes,"FsTest: read bytes 0000"
 String  CnFsTestCloseStatus,"FsTest: close status 0000"
 String  CnKcTestMsg1,"KcTest: KcVdWriteStr dispatch OK"
 String  CnKcTestMsg2,"KcTest: KcTmGetUptime dispatch result:"
-String  CnUserProg1File,"PROG1.BIN"
-String  CnUserProg2File,"PROG2.BIN"
-String  CnUserProg3File,"PROG3.BIN"
-String  CnUserTestMsg1,"UserTest: loading PROG1.BIN, PROG2.BIN, PROG3.BIN"
-String  CnUserTestMsg2,"UserTest: running loaded programs"
-String  CnUserTestMsg3,"UserTest: complete"
-String  CnUserTestFail,"UserTest: load failed"
 String  CnRunMsg1,"Run: loading program"
 String  CnRunMsg2,"Run: running program"
 String  CnRunMsg3,"Run: complete"
@@ -103,7 +96,6 @@ String  CnCmdRun3,     "Run3"
 String  CnCmdShutdown, "Shutdown"
 String  CnCmdTime,     "Time"
 String  CnCmdUptime,   "Uptime"
-String  CnCmdUserTest, "UserTest"
 
 ; Console Command Table and Handlers
 align 4
@@ -118,7 +110,6 @@ CnCmdTable:
   dd CnCmdShutdown, CnDoCmdShutdown
   dd CnCmdTime,     CnDoCmdTime
   dd CnCmdUptime,   CnDoCmdUptime
-  dd CnCmdUserTest, CnDoCmdUserTest
 CnCmdTableEnd:
 CnCmdTableCount equ (CnCmdTableEnd-CnCmdTable)/8
 
@@ -897,62 +888,4 @@ CnRun3NextFile:
 CnRun3LoadTask:
   mov   dword[KcNumber],KcTsLoadProgram
   call  KcDispatch
-  ret
-
-;------------------------------------------------------------------------------
-; CnDoCmdUserTest
-;   Output:
-;     Loads three user programs through KcTsLoadProgram and runs them.
-;   Notes:
-;     Exercises the kernel-call path before entering cooperative dispatch.
-;------------------------------------------------------------------------------
-CnDoCmdUserTest:
-  lea   eax,[CnUserTestMsg1]
-  mov   [pVdStr],eax
-  call  VdPutStr
-  call  CnCrLf
-  call  TaskProgramInit
-  mov   dword[KcNumber],KcTsLoadProgram
-  lea   eax,[CnUserProg1File]
-  mov   [KcArg0],eax
-  mov   dword[KcArg1],1
-  mov   dword[KcArg2],1
-  call  KcDispatch
-  mov   eax,[KcStatus]
-  cmp   eax,KC_STATUS_OK
-  jne   CnDoCmdUserTest1
-  mov   dword[KcNumber],KcTsLoadProgram
-  lea   eax,[CnUserProg2File]
-  mov   [KcArg0],eax
-  mov   dword[KcArg1],2
-  mov   dword[KcArg2],2
-  call  KcDispatch
-  mov   eax,[KcStatus]
-  cmp   eax,KC_STATUS_OK
-  jne   CnDoCmdUserTest1
-  mov   dword[KcNumber],KcTsLoadProgram
-  lea   eax,[CnUserProg3File]
-  mov   [KcArg0],eax
-  mov   dword[KcArg1],3
-  mov   dword[KcArg2],3
-  call  KcDispatch
-  mov   eax,[KcStatus]
-  cmp   eax,KC_STATUS_OK
-  jne   CnDoCmdUserTest1
-  lea   eax,[CnUserTestMsg2]
-  mov   [pVdStr],eax
-  call  VdPutStr
-  call  CnCrLf
-  call  TaskProgramStart
-  call  TaskProgramPrintExitCodes
-  lea   eax,[CnUserTestMsg3]
-  mov   [pVdStr],eax
-  call  VdPutStr
-  call  CnCrLf
-  ret
-CnDoCmdUserTest1:
-  lea   eax,[CnUserTestFail]
-  mov   [pVdStr],eax
-  call  VdPutStr
-  call  CnCrLf
   ret

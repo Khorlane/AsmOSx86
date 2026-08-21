@@ -59,10 +59,11 @@ The current kernel provides:
   - `FsTest`
   - `Help`
   - `KcTest`
+  - `Run`
+  - `Run3`
   - `Shutdown`
   - `Time`
   - `Uptime`
-  - `UserTest`
 
 At this stage, AsmOSx86 is still a single resident kernel with an integrated console. Early userland exists as raw flat binaries loaded from the raw `ASMF` floppy manifest and run as cooperative tasks through the kernel's task service path.
 
@@ -462,7 +463,8 @@ Current implementation status:
 Kc.asm exists and is included in the kernel.
 The current dispatcher is table-driven and uses global memory-backed Kc fields.
 KcTest exercises KcTmGetUptime and KcVdWriteStr through KcDispatch.
-UserTest exercises KcTsLoadProgram and KcTsExit through KcDispatch.
+Run and Run3 exercise program loading, task execution, filesystem calls, and
+task exit through the kernel-call path.
 ```
 
 The exact mechanism can evolve.
@@ -722,12 +724,14 @@ Current commands:
 ```text
 Date
 Delay
+FsTest
 Help
 KcTest
+Run
+Run3
 Shutdown
 Time
 Uptime
-UserTest
 ```
 
 The console currently lives inside the kernel and should remain reserved for operator control and diagnostics. Userland should not call `Console.asm` routines directly and should not treat the kernel console as its default terminal.

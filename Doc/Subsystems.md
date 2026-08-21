@@ -251,10 +251,11 @@ Delay
 FsTest
 Help
 KcTest
+Run
+Run3
 Shutdown
 Time
 Uptime
-UserTest
 ```
 
 ### Command Matching

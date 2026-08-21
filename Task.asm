@@ -608,8 +608,8 @@ TaskProgramStartOneDone:
 ;--------------------------------------------------------------------------------------------------
 ; TaskProgramStart
 ;   Output:
-;     Starts cooperative dispatch of ready tasks and returns when user-test
-;     tasks 1, 2, and 3 have exited.
+;     Starts cooperative dispatch of ready tasks and returns when task slots
+;     1, 2, and 3 have exited.
 ;--------------------------------------------------------------------------------------------------
 TaskProgramStart:
   mov   dword[TaskProgramDone],0
@@ -624,9 +624,9 @@ TaskProgramStart1:
 ;--------------------------------------------------------------------------------------------------
 ; TaskProgramPrintExitCodes
 ;   Output:
-;     Prints recorded exit codes for user-test tasks 1, 2, and 3.
+;     Prints recorded exit codes for tasks 1, 2, and 3.
 ;   Notes:
-;     Debug helper for the console-driven UserTest path.
+;     Debug helper for the console-driven Run3 path.
 ;--------------------------------------------------------------------------------------------------
 TaskProgramPrintExitCodes:
   mov   dword[TaskIndex],1

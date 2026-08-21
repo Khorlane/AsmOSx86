@@ -108,7 +108,8 @@ PROG4.BIN
 DATA.TXT
 ```
 
-`UserTest` expects `PROG1.BIN`, `PROG2.BIN`, and `PROG3.BIN` to be present.
+`Run3` can launch `PROG1.BIN`, `PROG2.BIN`, and `PROG3.BIN` together from the
+console.
 
 ## Real Hardware Note
 
