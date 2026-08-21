@@ -24,15 +24,15 @@ Current reality:
 ```text
 Config.asm has DevRegistry records.
 Fs.asm has a tiny block-device layer.
-DevReadSector still effectively knows it is reading from floppy A:.
+DevReadSector now resolves DevBlockDevice through DevRegistry.
+Floppy A: is still the only working block device.
 ```
 
-Next step:
+Done:
 
 ```text
-add a small device lookup/routing path
-resolve selected block device through DevRegistry
-keep floppy A: as the only working block device
+DevFindById scans DevRegistry by device id.
+DevReadSector uses the selected registry record.
 ```
 
 Useful shape:
@@ -64,7 +64,7 @@ Write entry point
 Control entry point
 ```
 
-Next step:
+Done:
 
 ```text
 DevRegistryFloppyA.Read = FloppyReadSectorTo
@@ -87,16 +87,17 @@ Current reality:
 ```text
 User programs use KcUserDispatch and KcBlock by convention.
 There is not yet ring 3 enforcement.
+KcDispatch rejects call number zero and KcLookup rejects unknown service numbers.
+KcUserDispatch requires a current task and KcBlock before dispatching.
+File and video kernel-call handlers reject basic null/zero arguments.
 ```
 
 Next step:
 
 ```text
-validate KcNumber
-validate current task exists
-validate current task has a KcBlock
 validate user pointers are inside expected user virtual ranges
 validate read/write buffer ranges before services use them
+define useful bad-call behavior for Prog4-style privilege-boundary tests
 ```
 
 Goal:
@@ -220,13 +221,15 @@ userland session model
 
 ## Preferred First Move
 
-With the first Run milestone complete, return to the device registry read path:
+With the first device registry routing milestone complete, continue kernel-call
+validation:
 
 ```text
-make DevRegistryFloppyA's read slot point to FloppyReadSectorTo
-make DevReadSector call through that slot
-keep the rest of the system behavior unchanged
+define user pointer range helpers
+validate KcVdWriteStr string pointers
+validate KcFsOpen filename pointers
+validate KcFsRead destination buffer ranges
 ```
 
-This is small, concrete, and directly supports the current filesystem/device
-layering direction.
+This keeps userland filesystem tests useful while preparing for stricter
+privilege separation later.

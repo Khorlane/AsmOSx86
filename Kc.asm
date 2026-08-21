@@ -110,6 +110,8 @@ KcTableCount equ (KcTableEnd-KcTable)/8
 ;     Dispatches through KcTable after validation and lookup.
 ;--------------------------------------------------------------------------------------------------
 KcDispatch:
+  mov   dword[KcResult0],0
+  mov   dword[KcResult1],0
   call  KcValidate
   mov   eax,[KcStatus]
   cmp   eax,KC_STATUS_OK
@@ -193,7 +195,8 @@ KcUserDispatchExit:
 ;   Output:
 ;     KcStatus = KC_STATUS_OK if basic validation succeeds, else error
 ;   Notes:
-;     Current validation only rejects call number zero.
+;     Basic validation rejects call number zero.
+;     KcLookup rejects unknown nonzero call numbers.
 ;     Future validation should check caller/task state and argument ranges.
 ;--------------------------------------------------------------------------------------------------
 KcValidate:
@@ -309,6 +312,8 @@ KcTsYieldHandler:
 ;--------------------------------------------------------------------------------------------------
 KcTsLoadProgramHandler:
   mov   eax,[KcArg0]
+  test  eax,eax
+  jz    KcTsLoadProgramHandler1
   mov   [pTaskProgramName],eax
   mov   eax,[KcArg1]
   mov   [TaskProgramTaskIndex],eax
@@ -353,6 +358,8 @@ KcTsExitHandler:
 ;--------------------------------------------------------------------------------------------------
 KcFsOpenHandler:
   mov   eax,[KcArg0]
+  test  eax,eax
+  jz    KcFsOpenHandler1
   mov   [pFsOpenName],eax
   call  FsOpen
   mov   eax,[FsStatus]
@@ -365,6 +372,8 @@ KcFsOpenHandler:
   mov   dword[KcStatus],KC_STATUS_OK
   ret
 KcFsOpenHandler1:
+  mov   dword[KcResult0],FS_STATUS_BAD_ARG
+  mov   dword[KcResult1],0
   mov   dword[KcStatus],KC_STATUS_BAD_ARG
   ret
 
@@ -381,10 +390,16 @@ KcFsOpenHandler1:
 ;--------------------------------------------------------------------------------------------------
 KcFsReadHandler:
   mov   eax,[KcArg0]
+  test  eax,eax
+  jz    KcFsReadHandler1
   mov   [FsReadHandle],eax
   mov   eax,[KcArg1]
+  test  eax,eax
+  jz    KcFsReadHandler1
   mov   [pFsReadBuffer],eax
   mov   eax,[KcArg2]
+  test  eax,eax
+  jz    KcFsReadHandler1
   mov   [FsReadCount],eax
   call  FsRead
   mov   eax,[FsStatus]
@@ -397,6 +412,8 @@ KcFsReadHandler:
   mov   dword[KcStatus],KC_STATUS_OK
   ret
 KcFsReadHandler1:
+  mov   dword[KcResult0],FS_STATUS_BAD_ARG
+  mov   dword[KcResult1],0
   mov   dword[KcStatus],KC_STATUS_BAD_ARG
   ret
 
@@ -411,10 +428,17 @@ KcFsReadHandler1:
 ;--------------------------------------------------------------------------------------------------
 KcFsCloseHandler:
   mov   eax,[KcArg0]
+  test  eax,eax
+  jz    KcFsCloseHandler1
   mov   [FsCloseHandle],eax
   call  FsClose
   mov   eax,[FsStatus]
   mov   [KcResult0],eax
   mov   dword[KcResult1],0
   mov   dword[KcStatus],KC_STATUS_OK
+  ret
+KcFsCloseHandler1:
+  mov   dword[KcResult0],FS_STATUS_BAD_HANDLE
+  mov   dword[KcResult1],0
+  mov   dword[KcStatus],KC_STATUS_BAD_ARG
   ret
