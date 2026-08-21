@@ -2,7 +2,7 @@
 
 AsmOSx86 uses a memory-contract ABI, not a normal register-parameter ABI.
 
-These rules do not apply to `Boot.asm` or `Boot2.asm`.
+These rules do not apply to `Boot.asm`.
 
 All other routines must follow this pattern:
 

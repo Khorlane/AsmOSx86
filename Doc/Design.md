@@ -119,11 +119,12 @@ It also fits the future kernel-call model: user programs will request services b
 
 ## 4. Current Boot and Kernel Placement Model
 
-The boot flow is currently staged:
+The current boot process is documented in `Doc/BootProcess.md`.
+
+At a high level:
 
 ```text
-Boot.asm  -> stage 1 boot sector
-Boot2.asm  -> stage 2 loader
+Boot.asm  -> boot sector
 Kernel.asm -> protected-mode kernel at 00100000h
 ```
 
@@ -273,8 +274,8 @@ Bochs     runs the bootable floppy image
 
 Detailed script usage lives in `BuildScripts.md`.
 
-The floppy preparation and boot flow from BIOS handoff through `Boot.asm`,
-`Boot2.asm`, and the protected-mode kernel live in `BootProcess.md`.
+The floppy preparation and boot flow from BIOS handoff through `Boot.asm` and
+the protected-mode kernel live in `BootProcess.md`.
 
 ---
 
