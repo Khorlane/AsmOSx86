@@ -30,12 +30,14 @@ CnHelpCnt        dd 0                  ; Number of help entries
 CnTmpCount       dd 0                  ; temp: table entry count
 CnFsTestHandle   dd 0                  ; temp: FsTest file handle
 pCnCmdLine       dd 0                  ; Pointer to command line buffer
+pCnCmdArg        dd 0                  ; Pointer to command argument payload
 pCnCmdTable      dd 0                  ; Pointer to command table
 pCnLogMsg        dd 0                  ; Pointer to log message
 pCnTmpInput      dd 0                  ; Pointer to temp: input payload
 pCnTmpTable      dd 0                  ; Pointer to temp: command table
 CnCmdLineLen     dw 0                  ; Command line length
 CnCmdMaxLen      dw 0                  ; Command line max length
+CnCmdArgLen      dw 0                  ; Command argument length
 CnTmpLen         dw 0                  ; temp: input length (u16)
 CnRlActive       db 0                  ; 1=in-progress line edit,0=idle
 CnOutHasLine     db 0                  ; 1=completed line ready in CnCmdLine
@@ -43,6 +45,7 @@ CnPad2           db 0,0                ; pad to keep alignment friendly
 
 ; Command line buffer as String:
 CnCmdLine: times (2 + CN_CMD_MAX_LEN) db 0
+CnRunFile: times (2 + CN_CMD_MAX_LEN) db 0
 CnFsTestBuffer:
   times 32 db 0
 
@@ -69,6 +72,11 @@ String  CnUserTestMsg1,"UserTest: loading PROG1.BIN, PROG2.BIN, PROG3.BIN"
 String  CnUserTestMsg2,"UserTest: running loaded programs"
 String  CnUserTestMsg3,"UserTest: complete"
 String  CnUserTestFail,"UserTest: load failed"
+String  CnRunMsg1,"Run: loading program"
+String  CnRunMsg2,"Run: running program"
+String  CnRunMsg3,"Run: complete"
+String  CnRunUsage,"Run usage: run <program>"
+String  CnRunFail,"Run: load failed"
 
 ; ----- Console commands -----
 String  CnCmdDate,     "Date"
@@ -76,6 +84,7 @@ String  CnCmdDelay,    "Delay"
 String  CnCmdFsTest,   "FsTest"
 String  CnCmdHelp,     "Help"
 String  CnCmdKcTest,   "KcTest"
+String  CnCmdRun,      "Run"
 String  CnCmdShutdown, "Shutdown"
 String  CnCmdTime,     "Time"
 String  CnCmdUptime,   "Uptime"
@@ -89,6 +98,7 @@ CnCmdTable:
   dd CnCmdFsTest,   CnDoCmdFsTest
   dd CnCmdHelp,     CnDoCmdHelp
   dd CnCmdKcTest,   CnDoCmdKcTest
+  dd CnCmdRun,      CnDoCmdRun
   dd CnCmdShutdown, CnDoCmdShutdown
   dd CnCmdTime,     CnDoCmdTime
   dd CnCmdUptime,   CnDoCmdUptime
@@ -290,10 +300,11 @@ CnLogIt:
 ;     CnCmdTable/CnCmdTableCount = command table and entry count
 ;   Output:
 ;     Calls matching command handler if found; otherwise returns.
+;     pCnCmdArg/CnCmdArgLen describe text after the first command token.
 ;   Notes:
 ;     Uses CnTmpLen, pCnTmpInput, pCnTmpTable, and CnTmpCount as
 ;     memory-backed dispatch state.
-;     Comparison is exact, case-insensitive, and length must match.
+;     Comparison is case-insensitive and matches only the first command token.
 ;------------------------------------------------------------------------------
 CnCmdDispatch:
   lea   eax,[CnCmdLine]                 ; EAX = input Str
@@ -301,6 +312,9 @@ CnCmdDispatch:
   mov   [CnTmpLen],bx                   ; save len (u16)
   lea   eax,[eax+2]                     ; EAX = input payload
   mov   [pCnTmpInput],eax               ; save input payload ptr
+  mov   dword[pCnCmdArg],0
+  mov   word[CnCmdArgLen],0
+  call  CnCmdSplitArg
   mov   eax,CnCmdTable                  ; EAX = table base
   mov   [pCnTmpTable],eax               ; save table ptr
   mov   eax,CnCmdTableCount             ; EAX = entry count
@@ -354,6 +368,50 @@ CnCmdDispatchSkip:
   mov   [CnTmpCount],eax
   jmp   CnCmdDispatchNext
 CnCmdDispatchDone:
+  ret
+
+;------------------------------------------------------------------------------
+; CnCmdSplitArg
+;   Input:
+;     pCnTmpInput = command line payload.
+;     CnTmpLen    = command line payload length.
+;   Output:
+;     CnTmpLen    = first token length.
+;     pCnCmdArg   = argument payload after spaces, or 0.
+;     CnCmdArgLen = argument payload length, or 0.
+;------------------------------------------------------------------------------
+CnCmdSplitArg:
+  mov   esi,[pCnTmpInput]
+  movzx ecx,word[CnTmpLen]
+  xor   edx,edx
+CnCmdSplitArgScan:
+  test  ecx,ecx
+  jz    CnCmdSplitArgDone
+  cmp   byte[esi+edx],' '
+  je    CnCmdSplitArgFound
+  inc   edx
+  dec   ecx
+  jmp   CnCmdSplitArgScan
+CnCmdSplitArgFound:
+  mov   [CnTmpLen],dx
+  mov   edi,esi
+  add   edi,edx
+CnCmdSplitArgSkip:
+  test  ecx,ecx
+  jz    CnCmdSplitArgNoArg
+  cmp   byte[edi],' '
+  jne   CnCmdSplitArgSave
+  inc   edi
+  dec   ecx
+  jmp   CnCmdSplitArgSkip
+CnCmdSplitArgSave:
+  mov   [pCnCmdArg],edi
+  mov   [CnCmdArgLen],cx
+  ret
+CnCmdSplitArgNoArg:
+  mov   dword[pCnCmdArg],0
+  mov   word[CnCmdArgLen],0
+CnCmdSplitArgDone:
   ret
 
 ;------------------------------------------------------------------------------
@@ -570,6 +628,60 @@ CnDoCmdKcTest:
   mov   eax,UptimeStr
   mov   [KcArg0],eax
   call  KcDispatch
+  call  CnCrLf
+  ret
+
+;------------------------------------------------------------------------------
+; CnDoCmdRun
+;   Input:
+;     pCnCmdArg/CnCmdArgLen = program filename from command line.
+;   Output:
+;     Loads one named user program into task slot 1 and runs until it exits.
+;------------------------------------------------------------------------------
+CnDoCmdRun:
+  mov   ax,[CnCmdArgLen]
+  test  ax,ax
+  jz    CnDoCmdRunUsage
+  mov   [CnRunFile],ax
+  mov   esi,[pCnCmdArg]
+  lea   edi,[CnRunFile+2]
+  movzx ecx,ax
+  rep   movsb
+  lea   eax,[CnRunMsg1]
+  mov   [pVdStr],eax
+  call  VdPutStr
+  call  CnCrLf
+  call  TaskProgramInit
+  mov   dword[KcNumber],KcTsLoadProgram
+  lea   eax,[CnRunFile]
+  mov   [KcArg0],eax
+  mov   dword[KcArg1],1
+  mov   dword[KcArg2],1
+  call  KcDispatch
+  mov   eax,[KcStatus]
+  cmp   eax,KC_STATUS_OK
+  jne   CnDoCmdRunFail
+  lea   eax,[CnRunMsg2]
+  mov   [pVdStr],eax
+  call  VdPutStr
+  call  CnCrLf
+  mov   dword[TaskProgramTaskIndex],1
+  call  TaskProgramStartOne
+  lea   eax,[CnRunMsg3]
+  mov   [pVdStr],eax
+  call  VdPutStr
+  call  CnCrLf
+  ret
+CnDoCmdRunUsage:
+  lea   eax,[CnRunUsage]
+  mov   [pVdStr],eax
+  call  VdPutStr
+  call  CnCrLf
+  ret
+CnDoCmdRunFail:
+  lea   eax,[CnRunFail]
+  mov   [pVdStr],eax
+  call  VdPutStr
   call  CnCrLf
   ret
 

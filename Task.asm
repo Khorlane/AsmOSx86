@@ -20,6 +20,7 @@
 ;   - TaskPut4Dec
 ;   - TaskProgramLoad
 ;   - TaskProgramInit
+;   - TaskProgramStartOne
 ;   - TaskProgramStart
 ;   - TaskProgramPrintExitCodes
 ;   - TaskExit
@@ -340,6 +341,26 @@ TaskProgramInit2:
   mov   dword[edi+TASK_PROGRAM_PHYS],0
   mov   dword[edi+TASK_PROGRAM_PAGES],0
   mov   dword[edi+TASK_KCBLOCK_PHYS],0
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; TaskProgramStartOne
+;   Input:
+;     TaskProgramTaskIndex = task table index to wait for.
+;   Output:
+;     Starts cooperative dispatch and returns when the selected task exits.
+;--------------------------------------------------------------------------------------------------
+TaskProgramStartOne:
+  call  TaskYield
+  mov   eax,[TaskProgramTaskIndex]
+  mov   [TaskIndex],eax
+  call  TaskGetRecord
+  mov   edi,[pTaskRecord]
+  test  edi,edi
+  jz    TaskProgramStartOneDone
+  cmp   dword[edi+TASK_STATE],TASK_STATE_EXITED
+  jne   TaskProgramStartOne
+TaskProgramStartOneDone:
   ret
 
 ;--------------------------------------------------------------------------------------------------
