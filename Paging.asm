@@ -35,8 +35,8 @@ PG_FUTURE_KERNEL_FLAGS equ PG_PRESENT|PG_WRITABLE
 PG_FUTURE_USER_FLAGS equ PG_PRESENT|PG_WRITABLE|PG_USER_ACCESS
 PG_FUTURE_KCBLOCK_FLAGS equ PG_PRESENT|PG_WRITABLE|PG_USER_ACCESS
 PG_KERNEL_FLAGS equ PG_CURRENT_PRESENT_WRITABLE
-PG_USER_FLAGS   equ PG_CURRENT_PRESENT_WRITABLE
-PG_KCBLOCK_FLAGS equ PG_CURRENT_PRESENT_WRITABLE
+PG_USER_FLAGS   equ PG_FUTURE_USER_FLAGS
+PG_KCBLOCK_FLAGS equ PG_FUTURE_KCBLOCK_FLAGS
 PG_PAGE_SIZE    equ 00001000h
 PG_ENTRY_COUNT  equ 1024
 PG_CR0_ENABLE   equ 80000000h
@@ -54,12 +54,11 @@ PG_USER_KC_PTE  equ PG_USER_PTE+PG_USER_MAX_PAGES
 ; Paging Permission Intent
 ;--------------------------------------------------------------------------------------------------
 ; Current:
-;   PG_KERNEL_FLAGS, PG_USER_FLAGS, and PG_KCBLOCK_FLAGS are all
-;   present+writable because AsmOSx86 still executes kernel and user tasks in
-;   ring 0.
+;   PG_KERNEL_FLAGS is supervisor-only. PG_USER_FLAGS and PG_KCBLOCK_FLAGS are
+;   user-accessible so the future ring 3 entry path can reach loaded programs
+;   and their KcBlock pages.
 ; Future ring 3:
 ;   Kernel identity mappings stay supervisor-only.
-;   User program and KcBlock mappings gain PG_USER_ACCESS.
 ;   Fault handlers decide whether a fault is kernel panic or user task death.
 
 ;--------------------------------------------------------------------------------------------------
@@ -89,6 +88,8 @@ PgUserPteAddr   dd 0                    ; work: current user PTE address
 PgUserMapPhys   dd 0                    ; work: current user physical page
 PgFaultVector   dd 0                    ; work: IDT vector to install
 PgFaultHandler  dd 0                    ; work: fault handler address
+PgLastFaultVector dd 0                  ; debug: last fault vector entered
+PgLastFaultIsUser dd 0                  ; debug: 1 if current task is user mode
 
 align 4096
 PgDirectory:
@@ -299,9 +300,11 @@ PgFillTable1:
 ;--------------------------------------------------------------------------------------------------
 ; PgGeneralProtectionFault
 ;   Output:
-;     Halts forever after a general protection fault.
+;     Records fault classification, then halts forever.
 ;--------------------------------------------------------------------------------------------------
 PgGeneralProtectionFault:
+  mov   dword[PgLastFaultVector],PG_GP_FAULT_VECTOR
+  call  PgClassifyFault
   cli
 PgGeneralProtectionFault1:
   hlt
@@ -310,10 +313,28 @@ PgGeneralProtectionFault1:
 ;--------------------------------------------------------------------------------------------------
 ; PgPageFault
 ;   Output:
-;     Halts forever after a page fault.
+;     Records fault classification, then halts forever.
 ;--------------------------------------------------------------------------------------------------
 PgPageFault:
+  mov   dword[PgLastFaultVector],PG_PAGE_FAULT_VECTOR
+  call  PgClassifyFault
   cli
 PgPageFault1:
   hlt
   jmp   PgPageFault1
+
+;--------------------------------------------------------------------------------------------------
+; PgClassifyFault
+;   Output:
+;     PgLastFaultIsUser = 1 if current task is tagged user mode, else 0.
+;   Notes:
+;     Current policy still halts forever. This is future fault-routing
+;     groundwork for user-task termination vs kernel panic.
+;--------------------------------------------------------------------------------------------------
+PgClassifyFault:
+  mov   dword[PgLastFaultIsUser],0
+  call  TaskGetCurrentRecord
+  call  TaskIsUserMode
+  mov   eax,[TaskModeIsUser]
+  mov   [PgLastFaultIsUser],eax
+  ret

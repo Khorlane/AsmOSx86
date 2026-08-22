@@ -167,7 +167,7 @@ Task states include Free, Ready, Running, Blocked, and Exited.
 TaskSetReady, TaskBlock, and TaskWake exist.
 Task records contain future user-mode EIP, ESP, CS, DS, SS, and EFLAGS fields.
 Loaded user tasks have prepared future iretd frames.
-TaskEnterUserMode exists but returns disabled.
+TaskEnterUserMode validates its frame and has a guarded iretd path.
 Task records carry a kernel/user execution-mode tag.
 TaskIsUserMode exposes that tag for future fault/transition code.
 KcTmSleep is the first real cooperative blocking service.
@@ -193,6 +193,7 @@ Fault IDT gates are installed for:
   general protection fault vector 13
   page fault vector 14
 Both fault handlers currently halt forever.
+Fault handlers record the fault vector and current task execution-mode tag.
 Paging flag names express intent:
   PG_KERNEL_FLAGS
   PG_USER_FLAGS
@@ -201,7 +202,8 @@ Future ring 3 page flags are named separately:
   PG_FUTURE_KERNEL_FLAGS
   PG_FUTURE_USER_FLAGS
   PG_FUTURE_KCBLOCK_FLAGS
-The actual bits still remain present+writable for now.
+Loaded user program and KcBlock mappings are user-accessible.
+Kernel identity mappings remain supervisor-only.
 Ring 3 and user/supervisor enforcement are future work.
 ```
 
@@ -249,13 +251,12 @@ future TSS selector/storage are named and TR is loaded
 future ring-transition stack pointer tracks the selected task
 future user-mode task frame fields are populated but unused
 future iretd frames are prepared but unused
-future TaskEnterUserMode routine is present but disabled
+future TaskEnterUserMode routine is guarded and disabled by default
 future task execution-mode tags are present but informational only
-future TaskIsUserMode helper is present but unused by fault handling
+future TaskIsUserMode helper classifies halt-only faults
 future Kc interrupt gate is installed but not used by user programs
 future flag names document the intended user/supervisor policy
 fault handlers are named but still halt-only
-later add the x86 user/supervisor bit to user-facing mappings
 keep kernel mappings supervisor-only
 ```
 

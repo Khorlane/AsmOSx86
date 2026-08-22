@@ -45,9 +45,10 @@ Future DPL 3 Kc interrupt gate exists at vector 80h
 General-protection fault IDT vector 13 is installed
 Page-fault IDT vector 14 is installed
 General-protection faults and page faults currently halt forever
+Fault handlers record the fault vector and current task execution-mode tag
 Task records have future user-mode EIP, ESP, CS, DS, SS, and EFLAGS fields
 Loaded user tasks have a prepared future iretd frame
-TaskEnterUserMode exists but returns disabled
+TaskEnterUserMode validates its frame and has a guarded iretd path
 Task records carry a kernel/user execution-mode tag
 TaskIsUserMode exposes the execution-mode tag through a helper
 Prog4 has denial probes for invalid KcVdWriteStr, KcFsOpen, and KcFsRead pointers
@@ -62,27 +63,27 @@ Ring 3 descriptors are scaffolding only and are not used yet
 TSS is loaded but only scaffolding until ring transitions exist
 No ring transition stack switching
 Kc interrupt gate points to a return-only stub
-Paging entries are present/writable but not user-accessible
+Loaded user program and KcBlock pages are user-accessible
 Kernel and user tasks still run with ring 0 segment selectors
 Future user-mode task fields are populated but not consumed by the scheduler
 Future iretd frames are prepared but not consumed by the scheduler
-TaskEnterUserMode does not consume the iretd frame yet
+TaskEnterUserMode is disabled by default and does not consume the frame yet
 Task execution-mode tags are informational only
-TaskIsUserMode is available but not used by fault handling yet
+TaskIsUserMode is used only to classify halt-only faults
 User programs are constrained by convention, not by CPU privilege checks
 ```
 
 ## Paging Permission Intent
 
-Current paging flags deliberately preserve existing ring-0 behavior:
+Current paging flags:
 
 ```text
 PG_KERNEL_FLAGS  = present + writable
-PG_USER_FLAGS    = present + writable
-PG_KCBLOCK_FLAGS = present + writable
+PG_USER_FLAGS    = present + writable + user-accessible
+PG_KCBLOCK_FLAGS = present + writable + user-accessible
 ```
 
-The future ring 3 intent is named separately:
+The future ring 3 names remain as policy markers:
 
 ```text
 PG_FUTURE_KERNEL_FLAGS  = present + writable
@@ -99,8 +100,8 @@ user KcBlock mapping     -> user-accessible
 kernel stacks/tables      -> supervisor-only
 ```
 
-This has not been turned on yet. It is scaffolding so the actual ring 3 change
-can be audited by comparing each mapping site against its intended access class.
+The user-access bit has been turned on for loaded program pages and KcBlock
+pages. Kernel identity mappings still use supervisor-only flags.
 
 ## Fault Policy Intent
 

@@ -56,6 +56,7 @@ TASK_STATE_BLOCKED   equ 3
 TASK_STATE_EXITED    equ 4
 TASK_STATUS_OK       equ 0
 TASK_STATUS_BAD_TASK equ 1
+TASK_ENTER_STATUS_OK equ 0
 TASK_ENTER_STATUS_DISABLED equ 1
 TASK_ENTER_STATUS_NO_TASK  equ 2
 TASK_ENTER_STATUS_NO_FRAME equ 3
@@ -186,6 +187,7 @@ TaskProgramArgCopyLeft dd 0             ; work: task argument bytes left
 TaskProgramRunCount dd 0                ; input: count of task slots 1..N to run
 TaskProgramCheckIndex dd 0              ; work: task completion scan index
 TaskProgramPrintIndex dd 0              ; work: task exit-code print index
+TaskEnterEnabled    dd 0                ; input: 1 allows TaskEnterUserMode iretd path
 TaskEnterStatus     dd 0                ; output: TASK_ENTER_STATUS_*
 TaskModeIsUser      dd 0                ; output: 1 if pTaskRecord is user mode
 TaskProgramEntryPtr  dd 0               ; output: loaded program entry address
@@ -768,13 +770,27 @@ TaskProgramPrintExitCodesNDone:
 ;   Input:
 ;     pTaskRecord = selected task record with a prepared TASK_USER_IRET_ESP.
 ;   Output:
-;     TaskEnterStatus = TASK_ENTER_STATUS_DISABLED.
+;     TaskEnterStatus = TASK_ENTER_STATUS_*.
 ;   Notes:
-;     Future ring 3 transition point. This routine intentionally does not
-;     consume the iretd frame yet, and no hardware interrupts are required.
+;     Future ring 3 transition point. TaskEnterEnabled keeps the iretd path
+;     disabled until the rest of the user/kernel boundary is ready.
 ;--------------------------------------------------------------------------------------------------
 TaskEnterUserMode:
+  mov   dword[TaskEnterStatus],TASK_ENTER_STATUS_NO_TASK
+  mov   edi,[pTaskRecord]
+  test  edi,edi
+  jz    TaskEnterUserModeDone
+  mov   dword[TaskEnterStatus],TASK_ENTER_STATUS_NO_FRAME
+  mov   eax,[edi+TASK_USER_IRET_ESP]
+  test  eax,eax
+  jz    TaskEnterUserModeDone
   mov   dword[TaskEnterStatus],TASK_ENTER_STATUS_DISABLED
+  cmp   dword[TaskEnterEnabled],1
+  jne   TaskEnterUserModeDone
+  mov   dword[TaskEnterStatus],TASK_ENTER_STATUS_OK
+  mov   esp,eax
+  iretd
+TaskEnterUserModeDone:
   ret
 
 ;--------------------------------------------------------------------------------------------------
