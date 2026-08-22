@@ -169,6 +169,7 @@ Task records contain future user-mode EIP, ESP, CS, DS, SS, and EFLAGS fields.
 Loaded user tasks have prepared future iretd frames.
 TaskEnterUserMode exists but returns disabled.
 Task records carry a kernel/user execution-mode tag.
+TaskIsUserMode exposes that tag for future fault/transition code.
 KcTmSleep is the first real cooperative blocking service.
 TaskYield wakes blocked sleep tasks whose deadlines have expired.
 Timer wake checks happen only when the cooperative scheduler runs.
@@ -250,6 +251,7 @@ future user-mode task frame fields are populated but unused
 future iretd frames are prepared but unused
 future TaskEnterUserMode routine is present but disabled
 future task execution-mode tags are present but informational only
+future TaskIsUserMode helper is present but unused by fault handling
 future Kc interrupt gate is installed but not used by user programs
 future flag names document the intended user/supervisor policy
 fault handlers are named but still halt-only

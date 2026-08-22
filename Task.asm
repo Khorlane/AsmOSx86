@@ -31,6 +31,7 @@
 ;   - TaskProgramStartN
 ;   - TaskProgramPrintExitCodesN
 ;   - TaskEnterUserMode
+;   - TaskIsUserMode
 ;   - TaskExit
 ;   - TaskYield
 ;
@@ -186,6 +187,7 @@ TaskProgramRunCount dd 0                ; input: count of task slots 1..N to run
 TaskProgramCheckIndex dd 0              ; work: task completion scan index
 TaskProgramPrintIndex dd 0              ; work: task exit-code print index
 TaskEnterStatus     dd 0                ; output: TASK_ENTER_STATUS_*
+TaskModeIsUser      dd 0                ; output: 1 if pTaskRecord is user mode
 TaskProgramEntryPtr  dd 0               ; output: loaded program entry address
 TaskProgramKcBlockPtr dd 0              ; output: loaded program KcBlock address
 TaskProgramNextLoadBase dd 0            ; work: next dynamic user-program load base
@@ -773,6 +775,24 @@ TaskProgramPrintExitCodesNDone:
 ;--------------------------------------------------------------------------------------------------
 TaskEnterUserMode:
   mov   dword[TaskEnterStatus],TASK_ENTER_STATUS_DISABLED
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; TaskIsUserMode
+;   Input:
+;     pTaskRecord = selected task record.
+;   Output:
+;     TaskModeIsUser = 1 if the selected task is tagged user mode, else 0.
+;--------------------------------------------------------------------------------------------------
+TaskIsUserMode:
+  mov   dword[TaskModeIsUser],0
+  mov   edi,[pTaskRecord]
+  test  edi,edi
+  jz    TaskIsUserModeDone
+  cmp   dword[edi+TASK_MODE],TASK_MODE_USER
+  jne   TaskIsUserModeDone
+  mov   dword[TaskModeIsUser],1
+TaskIsUserModeDone:
   ret
 
 ;--------------------------------------------------------------------------------------------------
