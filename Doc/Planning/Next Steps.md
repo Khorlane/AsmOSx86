@@ -132,6 +132,11 @@ run prog4.bin -- priv
   deliberately executes privileged CLI from user code
   expects the kernel to terminate the task with 0F0D
 
+run prog4.bin -- mem
+  runs the normal DATA.TXT path
+  deliberately reads supervisor-only kernel memory from user code
+  expects the kernel to terminate the task with 0F0E
+
 run prog1.bin | prog2.bin | prog3.bin
   loads three named programs from one console command line
   proves file-loaded multi-task cooperative scheduling without hard-coded names
@@ -158,6 +163,7 @@ key               KcKbRead blocks until keyboard input      0047
 int80             KcVdWriteStr through int 80h              0080
 cpl               user CS selector proof                    001B
 priv              privileged instruction fault              0F0D
+mem               supervisor-only kernel memory fault       0F0E
 ```
 
 Kernel-call boundary:
@@ -307,6 +313,7 @@ run prog4.bin -- sleep
 run prog4.bin -- key
 run prog4.bin -- cpl
 run prog4.bin -- priv
+run prog4.bin -- mem
 run prog1.bin | prog2.bin | prog3.bin
 run prog4.bin -- sleep | prog1.bin | prog4.bin -- bad
 ```

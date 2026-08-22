@@ -60,6 +60,7 @@ Prog4 has denial probes for invalid KcVdWriteStr, KcFsOpen, and KcFsRead pointer
 Prog4 has denial probes for zero and unknown Kc call numbers
 Prog4 can report its CS selector with the cpl argument
 Prog4 can trigger a user #GP with the priv argument
+Prog4 can trigger a user #PF with the mem argument
 Paging permission intent is named separately from current ring-0-safe flags
 ```
 

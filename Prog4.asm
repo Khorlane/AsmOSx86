@@ -43,6 +43,7 @@ Start:
   call  MaybeKeyTest                    ; Optional keyboard read proof
   call  MaybeSleepTest                  ; Optional cooperative sleep proof
   call  MaybePrivTest                   ; Optional privilege-fault proof
+  call  MaybeMemTest                    ; Optional kernel-memory fault proof
   call  MaybeBadPrintTest               ; Optional bad-print proof
   call  MaybeBadOpenTest                ; Optional bad-open proof
   call  MaybeBadReadTest                ; Optional bad-read proof
@@ -287,6 +288,20 @@ MaybePrivTest:
   cli
   mov   dword[Prog4ExitCode],91
 MaybePrivTestDone:
+  ret
+
+MaybeMemTest:
+  cmp   word[USER_ARG],3
+  jne   MaybeMemTestDone
+  cmp   byte[USER_ARG+2],'m'
+  jne   MaybeMemTestDone
+  cmp   byte[USER_ARG+3],'e'
+  jne   MaybeMemTestDone
+  cmp   byte[USER_ARG+4],'m'
+  jne   MaybeMemTestDone
+  mov   eax,[00100000h]
+  mov   dword[Prog4ExitCode],92
+MaybeMemTestDone:
   ret
 
 MaybeBadZeroCallTest:
