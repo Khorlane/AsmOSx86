@@ -174,10 +174,22 @@ Paging:
 ```text
 Paging is enabled.
 User programs share a fixed virtual base.
+Future ring 3 GDT code/data selectors are defined:
+  USER_CODE_SEL
+  USER_DATA_SEL
+They are scaffolding only and are not used yet.
+Fault IDT gates are installed for:
+  general protection fault vector 13
+  page fault vector 14
+Both fault handlers currently halt forever.
 Paging flag names express intent:
   PG_KERNEL_FLAGS
   PG_USER_FLAGS
   PG_KCBLOCK_FLAGS
+Future ring 3 page flags are named separately:
+  PG_FUTURE_KERNEL_FLAGS
+  PG_FUTURE_USER_FLAGS
+  PG_FUTURE_KCBLOCK_FLAGS
 The actual bits still remain present+writable for now.
 Ring 3 and user/supervisor enforcement are future work.
 ```
@@ -220,7 +232,10 @@ possible future improvements:
 5. Keep paging ready for later privilege separation.
 
 ```text
-leave flag bits unchanged until ring 3 work begins
+current flag bits remain unchanged until ring 3 work begins
+future ring 3 GDT selectors are named but unused
+future flag names document the intended user/supervisor policy
+fault handlers are named but still halt-only
 later add the x86 user/supervisor bit to user-facing mappings
 keep kernel mappings supervisor-only
 ```

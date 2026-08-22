@@ -7,17 +7,19 @@
 ;   flat physical memory behavior through identity mapping.
 ;
 ; Contains
-;   - Page-fault IDT gate installation
+;   - Fault IDT gate installation
 ;   - Identity-mapped page directory and page tables
 ;   - Shared user virtual page-range remapping
 ;   - CR3/CR0 paging enable path
-;   - Minimal page-fault halt handler
+;   - Minimal halt handlers for page fault and general protection fault
 ;
 ; Notes
-;   - Maps the first 16 MiB as present, writable, supervisor pages.
+;   - Maps the first 16 MiB as present, writable pages.
 ;   - The shared user virtual range can be remapped to task image pages.
+;   - User/supervisor enforcement is not enabled yet because all code still
+;     runs in ring 0.
 ;   - Paging does not enable hardware IRQs.
-;   - Page faults currently halt forever.
+;   - Page faults and general protection faults currently halt forever.
 ;**************************************************************************************************
 
 [bits 32]
@@ -27,17 +29,48 @@
 ;--------------------------------------------------------------------------------------------------
 PG_PRESENT      equ 00000001h
 PG_WRITABLE     equ 00000002h
-PG_KERNEL_FLAGS equ PG_PRESENT|PG_WRITABLE
-PG_USER_FLAGS   equ PG_PRESENT|PG_WRITABLE
-PG_KCBLOCK_FLAGS equ PG_PRESENT|PG_WRITABLE
+PG_USER_ACCESS  equ 00000004h
+PG_CURRENT_PRESENT_WRITABLE equ PG_PRESENT|PG_WRITABLE
+PG_FUTURE_KERNEL_FLAGS equ PG_PRESENT|PG_WRITABLE
+PG_FUTURE_USER_FLAGS equ PG_PRESENT|PG_WRITABLE|PG_USER_ACCESS
+PG_FUTURE_KCBLOCK_FLAGS equ PG_PRESENT|PG_WRITABLE|PG_USER_ACCESS
+PG_KERNEL_FLAGS equ PG_CURRENT_PRESENT_WRITABLE
+PG_USER_FLAGS   equ PG_CURRENT_PRESENT_WRITABLE
+PG_KCBLOCK_FLAGS equ PG_CURRENT_PRESENT_WRITABLE
 PG_PAGE_SIZE    equ 00001000h
 PG_ENTRY_COUNT  equ 1024
 PG_CR0_ENABLE   equ 80000000h
-PG_FAULT_VECTOR equ 14
 PG_IDT_ATTR     equ 08E00h
+PG_GP_FAULT_VECTOR equ 13
+PG_PAGE_FAULT_VECTOR equ 14
+PG_FAULT_POLICY_HALT equ 1
+PG_FAULT_POLICY_FUTURE_USER_KILL equ 2
+PG_FAULT_POLICY_FUTURE_KERNEL_PANIC equ 3
 PG_USER_PTE     equ 512
 PG_USER_MAX_PAGES equ 16
 PG_USER_KC_PTE  equ PG_USER_PTE+PG_USER_MAX_PAGES
+
+;--------------------------------------------------------------------------------------------------
+; Paging Permission Intent
+;--------------------------------------------------------------------------------------------------
+; Current:
+;   PG_KERNEL_FLAGS, PG_USER_FLAGS, and PG_KCBLOCK_FLAGS are all
+;   present+writable because AsmOSx86 still executes kernel and user tasks in
+;   ring 0.
+; Future ring 3:
+;   Kernel identity mappings stay supervisor-only.
+;   User program and KcBlock mappings gain PG_USER_ACCESS.
+;   Fault handlers decide whether a fault is kernel panic or user task death.
+
+;--------------------------------------------------------------------------------------------------
+; Fault Policy Intent
+;--------------------------------------------------------------------------------------------------
+; Current:
+;   Page faults and general protection faults both halt forever.
+; Future ring 3:
+;   Faults from ring 0 are kernel panics.
+;   Faults from ring 3 terminate the current user task and return to scheduler.
+;   General protection faults catch privileged instructions and bad selectors.
 
 ;--------------------------------------------------------------------------------------------------
 ; Paging Globals
@@ -54,6 +87,8 @@ PgUserMappedCount dd 0                  ; work: user pages mapped
 PgUserClearLeft dd 0                    ; work: user PTEs left to clear
 PgUserPteAddr   dd 0                    ; work: current user PTE address
 PgUserMapPhys   dd 0                    ; work: current user physical page
+PgFaultVector   dd 0                    ; work: IDT vector to install
+PgFaultHandler  dd 0                    ; work: fault handler address
 
 align 4096
 PgDirectory:
@@ -81,7 +116,7 @@ PgTable3:
 ;     through 00FFFFFFh.
 ;--------------------------------------------------------------------------------------------------
 PgInit:
-  call  PgInstallPageFaultGate
+  call  PgInstallFaultGates
   call  PgBuildIdentityMap
   mov   eax,PgDirectory
   mov   cr3,eax
@@ -162,19 +197,40 @@ PgMapUserProgram5:
 ;--------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
-; PgInstallPageFaultGate
+; PgInstallFaultGates
 ;   Output:
+;     IDT vector 13 points to PgGeneralProtectionFault.
 ;     IDT vector 14 points to PgPageFault.
 ;--------------------------------------------------------------------------------------------------
-PgInstallPageFaultGate:
-  mov   edi,IDT1+(PG_FAULT_VECTOR*8)
-  mov   eax,PgPageFault
+PgInstallFaultGates:
+  mov   dword[PgFaultVector],PG_GP_FAULT_VECTOR
+  mov   dword[PgFaultHandler],PgGeneralProtectionFault
+  call  PgInstallFaultGate
+  mov   dword[PgFaultVector],PG_PAGE_FAULT_VECTOR
+  mov   dword[PgFaultHandler],PgPageFault
+  call  PgInstallFaultGate
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; PgInstallFaultGate
+;   Input:
+;     PgFaultVector  = IDT vector number.
+;     PgFaultHandler = handler address.
+;   Output:
+;     IDT vector points to the selected handler.
+;--------------------------------------------------------------------------------------------------
+PgInstallFaultGate:
+  mov   eax,[PgFaultVector]
+  mov   ebx,8
+  mul   ebx
+  lea   edi,[IDT1+eax]
+  mov   eax,[PgFaultHandler]
   mov   [edi],ax
   mov   ax,CODE_DESC
   mov   [edi+2],ax
   mov   ax,PG_IDT_ATTR
   mov   [edi+4],ax
-  mov   eax,PgPageFault
+  mov   eax,[PgFaultHandler]
   shr   eax,16
   mov   [edi+6],ax
   ret
@@ -239,6 +295,17 @@ PgFillTable1:
   mov   [PgEntryIndex],eax
   jnz   PgFillTable1
   ret
+
+;--------------------------------------------------------------------------------------------------
+; PgGeneralProtectionFault
+;   Output:
+;     Halts forever after a general protection fault.
+;--------------------------------------------------------------------------------------------------
+PgGeneralProtectionFault:
+  cli
+PgGeneralProtectionFault1:
+  hlt
+  jmp   PgGeneralProtectionFault1
 
 ;--------------------------------------------------------------------------------------------------
 ; PgPageFault

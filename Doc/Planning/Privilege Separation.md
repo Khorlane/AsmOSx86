@@ -28,6 +28,7 @@ Current implemented groundwork:
 ```text
 Kernel runs in protected mode at 00100000h
 Kernel owns GDT and IDT setup
+Future ring 3 GDT code/data descriptors and selector names exist
 Paging is enabled
 First 16 MiB are identity-mapped
 Shared user virtual range begins at 00200000h
@@ -38,24 +39,76 @@ Kernel-call gateway exists at 00100005h
 KcUserDispatch copies arguments/results through the current task's KcBlock
 KcDispatch is the kernel-originated path and may receive kernel pointers
 KcUserDispatch is the user-originated path and requires service validation
+General-protection fault IDT vector 13 is installed
 Page-fault IDT vector 14 is installed
-Page faults currently halt forever
+General-protection faults and page faults currently halt forever
 Prog4 has denial probes for invalid KcVdWriteStr, KcFsOpen, and KcFsRead pointers
 Prog4 has denial probes for zero and unknown Kc call numbers
+Paging permission intent is named separately from current ring-0-safe flags
 ```
 
 Current important limitations:
 
 ```text
-No ring 3 code/data descriptors
+Ring 3 descriptors are scaffolding only and are not used yet
 No TSS
 No ring transition stack switching
 No trap/interrupt gate for user kernel calls
-No general-protection fault handler
 Paging entries are present/writable but not user-accessible
 Kernel and user tasks still run with ring 0 segment selectors
 User programs are constrained by convention, not by CPU privilege checks
 ```
+
+## Paging Permission Intent
+
+Current paging flags deliberately preserve existing ring-0 behavior:
+
+```text
+PG_KERNEL_FLAGS  = present + writable
+PG_USER_FLAGS    = present + writable
+PG_KCBLOCK_FLAGS = present + writable
+```
+
+The future ring 3 intent is named separately:
+
+```text
+PG_FUTURE_KERNEL_FLAGS  = present + writable
+PG_FUTURE_USER_FLAGS    = present + writable + user-accessible
+PG_FUTURE_KCBLOCK_FLAGS = present + writable + user-accessible
+```
+
+That means the intended future policy is:
+
+```text
+kernel identity mappings -> supervisor-only
+user program mappings    -> user-accessible
+user KcBlock mapping     -> user-accessible
+kernel stacks/tables      -> supervisor-only
+```
+
+This has not been turned on yet. It is scaffolding so the actual ring 3 change
+can be audited by comparing each mapping site against its intended access class.
+
+## Fault Policy Intent
+
+Current fault behavior is intentionally simple:
+
+```text
+general protection fault -> halt forever
+page fault               -> halt forever
+```
+
+The future ring 3 policy is:
+
+```text
+fault from ring 0 -> kernel panic/halt
+fault from ring 3 -> terminate current user task and return to scheduler
+```
+
+General protection faults matter because they are how the CPU reports many
+privilege violations, such as user code attempting privileged instructions or
+loading invalid selectors. Page faults matter because they are how the CPU
+reports invalid or disallowed memory access.
 
 So the current system has a useful userland execution model and paging-backed
 address layout, but not actual user/kernel privilege enforcement yet.
@@ -132,7 +185,7 @@ user pages marked user-accessible
 a controlled kernel entry path
 IDT trap/interrupt gate for Kc calls
 TSS setup for ring transition stack switching
-fault handlers for page faults and general-protection faults
+fault handlers that distinguish kernel faults from user task faults
 task state that records user-mode CS/DS/SS/ESP/EIP
 validation of user pointers passed through Kc*
 denial tests that prove invalid user pointers are rejected before use
