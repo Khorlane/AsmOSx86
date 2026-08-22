@@ -1,0 +1,4 @@
+date
+time
+run prog4.bin
+shutdown

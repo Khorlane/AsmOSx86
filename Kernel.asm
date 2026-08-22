@@ -144,6 +144,7 @@ FlushCS:
   call  FsLogInit                       ; Initialize console log mirror
   call  KbInit                          ; Initialize keyboard
   call  CnInit                          ; Initialize console
+  call  CnStartupRun                    ; Run optional startup command stream
   ; Start main command loop
 MainLoop:
   call  Console                         ; Console session and command processor

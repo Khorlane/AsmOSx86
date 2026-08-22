@@ -5,6 +5,7 @@ Writes the AsmOSx86 raw floppy manifest and packed boot/runtime files.
 - Sector 1 is the AsmOSx86 file manifest.
 - Sector 2 and onward contain KERNEL.BIN and optional runtime files.
 - LOG.TXT is a reserved, preallocated kernel-owned console log file.
+- STARTUP.TXT is optional and is run by the console after initialization.
 #>
 
 Set-StrictMode -Version Latest
@@ -69,6 +70,7 @@ try {
   $Prog3  = Join-Path $RepoRoot "Prog3.bin"
   $Prog4  = Join-Path $RepoRoot "Prog4.bin"
   $Data   = Join-Path $RepoRoot "Data.txt"
+  $Startup = Join-Path $RepoRoot "Startup.txt"
   $BytesPerSector = 512
   $ManifestSector = 1
   $FirstFileSector = 2
@@ -96,6 +98,9 @@ try {
   }
   if (Test-Path -LiteralPath $Data -PathType Leaf) {
     $files += @{ Name = "DATA.TXT"; Path = $Data }
+  }
+  if ((Test-Path -LiteralPath $Startup -PathType Leaf) -and ((Get-Item -LiteralPath $Startup).Length -gt 0)) {
+    $files += @{ Name = "STARTUP.TXT"; Path = $Startup }
   }
   $files += @{
     Name = "LOG.TXT"

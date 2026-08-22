@@ -23,12 +23,19 @@
 [bits 32]
 
 ; ----- Console constants -----
-CN_CMD_MAX_LEN   equ 79                 ; maximum console input length
+CN_CMD_MAX_LEN       equ 79             ; maximum console input length
+CN_STARTUP_BUF_LEN   equ 1024           ; maximum startup file bytes read
 ; ----- Console variables -----
 align 4
 CnHelpCnt        dd 0                  ; Number of help entries 
 CnTmpCount       dd 0                  ; temp: table entry count
 CnFsTestHandle   dd 0                  ; temp: FsTest file handle
+CnStartupHandle  dd 0                  ; temp: STARTUP.TXT file handle
+CnStartupReadLen dd 0                  ; bytes read from STARTUP.TXT
+CnStartupStatus  dd 0                  ; saved STARTUP.TXT read status
+pCnStartupInput  dd 0                  ; startup parser input pointer
+CnStartupLeft    dd 0                  ; startup parser bytes left
+pCnStartupDst    dd 0                  ; startup parser command destination
 pCnCmdLine       dd 0                  ; Pointer to command line buffer
 pCnCmdArg        dd 0                  ; Pointer to command argument payload
 pCnCmdTable      dd 0                  ; Pointer to command table
@@ -47,6 +54,7 @@ CnCmdArgLen      dw 0                  ; Command argument length
 CnRunInputLeft   dw 0                  ; Run argument scanner bytes left
 CnRunFileLen     dw 0                  ; Run filename length
 CnRunArgLen      dw 0                  ; Run argument length
+CnStartupLineLen dw 0                  ; current startup command length
 CnTmpLen         dw 0                  ; temp: input length (u16)
 CnRlActive       db 0                  ; 1=in-progress line edit,0=idle
 CnOutHasLine     db 0                  ; 1=completed line ready in CnCmdLine
@@ -60,6 +68,8 @@ CnRunFile3: times (2 + CN_CMD_MAX_LEN) db 0
 CnRunArg1: times (2 + CN_CMD_MAX_LEN) db 0
 CnRunArg2: times (2 + CN_CMD_MAX_LEN) db 0
 CnRunArg3: times (2 + CN_CMD_MAX_LEN) db 0
+CnStartupBuffer:
+  times CN_STARTUP_BUF_LEN db 0
 CnFsTestBuffer:
   times 32 db 0
 
@@ -72,6 +82,7 @@ String  CnShutdown2,"System halted. It is now safe to power off."
 String  CnDelayMsg1,"Delay test start (2000ms 2 seconds)"
 String  CnDelayMsg2,"Delay test end"
 String  CnFsTestFile,"KERNEL.BIN"
+String  CnStartupFile,"STARTUP.TXT"
 String  CnFsTestOpenStatus,"FsTest: open status 0000"
 String  CnFsTestOpenHandle,"FsTest: open handle 0000"
 String  CnFsTestReadStatus,"FsTest: read status 0000"
@@ -194,8 +205,144 @@ CnCrLf:
   ret
 
 ;------------------------------------------------------------------------------
+; CnStartupRun
+;   Output:
+;     Runs commands from STARTUP.TXT if the file exists.
+;   Notes:
+;     This is the boot-time command stream. Each nonblank line is logged and
+;     dispatched through the same command table used by typed console input.
+;------------------------------------------------------------------------------
+CnStartupRun:
+  mov   dword[CnStartupHandle],0
+  lea   eax,[CnStartupFile]
+  mov   [pFsOpenName],eax
+  call  FsOpen
+  mov   eax,[FsStatus]
+  cmp   eax,FS_STATUS_OK
+  jne   CnStartupRunDone
+  mov   eax,[FsOpenHandle]
+  mov   [CnStartupHandle],eax
+  mov   eax,[FsOpenSize]
+  cmp   eax,CN_STARTUP_BUF_LEN
+  jbe   CnStartupRunRead
+  mov   eax,CN_STARTUP_BUF_LEN
+CnStartupRunRead:
+  mov   [CnStartupReadLen],eax
+  mov   eax,[CnStartupHandle]
+  mov   [FsReadHandle],eax
+  mov   dword[pFsReadBuffer],CnStartupBuffer
+  mov   eax,[CnStartupReadLen]
+  mov   [FsReadCount],eax
+  call  FsRead
+  mov   eax,[FsStatus]
+  mov   [CnStartupStatus],eax
+  mov   eax,[CnStartupHandle]
+  mov   [FsCloseHandle],eax
+  call  FsClose
+  mov   eax,[CnStartupStatus]
+  cmp   eax,FS_STATUS_OK
+  jne   CnStartupRunDone
+  mov   eax,[FsReadBytes]
+  mov   [CnStartupLeft],eax
+  mov   dword[pCnStartupInput],CnStartupBuffer
+  call  CnStartupDispatchLines
+CnStartupRunDone:
+  ret
+
+;------------------------------------------------------------------------------
 ; Internal Routines
 ;------------------------------------------------------------------------------
+
+;------------------------------------------------------------------------------
+; CnStartupDispatchLines
+;   Input:
+;     pCnStartupInput = STARTUP.TXT bytes.
+;     CnStartupLeft   = bytes left to parse.
+;   Output:
+;     Runs each nonblank command line through CnCmdDispatch.
+;------------------------------------------------------------------------------
+CnStartupDispatchLines:
+  call  CnStartupSkipBreaks
+  mov   eax,[CnStartupLeft]
+  test  eax,eax
+  jz    CnStartupDispatchLinesDone
+  call  CnStartupCopyLine
+  mov   ax,[CnStartupLineLen]
+  test  ax,ax
+  jz    CnStartupDispatchLines
+  lea   eax,[CnCmdLine]
+  mov   [pStr1],eax
+  call  StrTrim
+  mov   ax,[CnCmdLine]
+  test  ax,ax
+  jz    CnStartupDispatchLines
+  lea   eax,[CnCmdLine]
+  mov   [pCnLogMsg],eax
+  call  CnLogIt
+  call  CnCmdDispatch
+  jmp   CnStartupDispatchLines
+CnStartupDispatchLinesDone:
+  ret
+
+;------------------------------------------------------------------------------
+; CnStartupSkipBreaks
+;   Output:
+;     Advances the startup parser past CR/LF bytes.
+;------------------------------------------------------------------------------
+CnStartupSkipBreaks:
+  mov   eax,[CnStartupLeft]
+  test  eax,eax
+  jz    CnStartupSkipBreaksDone
+  mov   esi,[pCnStartupInput]
+  mov   al,[esi]
+  cmp   al,0Dh
+  je    CnStartupSkipBreaks1
+  cmp   al,0Ah
+  jne   CnStartupSkipBreaksDone
+CnStartupSkipBreaks1:
+  inc   esi
+  mov   [pCnStartupInput],esi
+  dec   dword[CnStartupLeft]
+  jmp   CnStartupSkipBreaks
+CnStartupSkipBreaksDone:
+  ret
+
+;------------------------------------------------------------------------------
+; CnStartupCopyLine
+;   Output:
+;     Copies the next startup line into CnCmdLine, truncated to CN_CMD_MAX_LEN.
+;------------------------------------------------------------------------------
+CnStartupCopyLine:
+  mov   word[CnCmdLine],0
+  mov   word[CnStartupLineLen],0
+  lea   eax,[CnCmdLine+2]
+  mov   [pCnStartupDst],eax
+CnStartupCopyLine1:
+  mov   eax,[CnStartupLeft]
+  test  eax,eax
+  jz    CnStartupCopyLineDone
+  mov   esi,[pCnStartupInput]
+  mov   al,[esi]
+  cmp   al,0Dh
+  je    CnStartupCopyLineDone
+  cmp   al,0Ah
+  je    CnStartupCopyLineDone
+  inc   esi
+  mov   [pCnStartupInput],esi
+  dec   dword[CnStartupLeft]
+  movzx ebx,word[CnStartupLineLen]
+  cmp   ebx,CN_CMD_MAX_LEN
+  jae   CnStartupCopyLine1
+  mov   edi,[pCnStartupDst]
+  mov   [edi],al
+  inc   edi
+  mov   [pCnStartupDst],edi
+  inc   word[CnStartupLineLen]
+  jmp   CnStartupCopyLine1
+CnStartupCopyLineDone:
+  mov   ax,[CnStartupLineLen]
+  mov   [CnCmdLine],ax
+  ret
 
 ;------------------------------------------------------------------------------
 ; CnSpace
