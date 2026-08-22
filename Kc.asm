@@ -59,7 +59,20 @@ KcKbRead           equ 10
 KcTsGetInfo        equ 11
 
 ;--------------------------------------------------------------------------------------------------
-; Future User Kernel-Call Interrupt Constants
+; Kernel Call User Policy
+;--------------------------------------------------------------------------------------------------
+; User-allowed:
+;   KcTmGetUptime, KcVdWriteStr, KcTsYield, KcTsExit, KcFsOpen,
+;   KcFsRead, KcFsClose, KcTmSleep, KcKbRead, KcTsGetInfo.
+; Kernel-only:
+;   KcTsLoadProgram.
+; User pointer validation:
+;   KcVdWriteStr, KcFsOpen, KcFsRead.
+; Interrupt-aware switching/blocking:
+;   KcTsYield, KcTsExit, KcTmSleep, KcKbRead.
+
+;--------------------------------------------------------------------------------------------------
+; User Kernel-Call Interrupt Constants
 ;--------------------------------------------------------------------------------------------------
 KC_USER_INT_VECTOR equ 080h
 KC_USER_INT_ATTR   equ 0EE00h           ; Present DPL 3 32-bit interrupt gate
