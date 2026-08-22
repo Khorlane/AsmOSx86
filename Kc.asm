@@ -16,7 +16,7 @@
 ;   - Kernel-call status constants
 ;   - Kernel-call service numbers
 ;   - Dispatch, validation, and lookup logic
-;   - Future ring 3 interrupt-gate entry scaffolding
+;   - Ring 3 interrupt-gate entry
 ;   - Small initial service handlers for testing the boundary
 ;
 ; Public API
@@ -120,10 +120,10 @@ KcTableCount equ (KcTableEnd-KcTable)/8
 ;--------------------------------------------------------------------------------------------------
 ; KcInit
 ;   Output:
-;     Installs the future ring 3 kernel-call interrupt gate.
+;     Installs the ring 3 kernel-call interrupt gate.
 ;   Notes:
-;     User programs still call the fixed 00100005h gateway. The interrupt gate
-;     accepts non-switching calls and rejects scheduler/blocking calls for now.
+;     User programs enter the kernel through int 80h. Switching and blocking
+;     calls use interrupt-aware task routines.
 ;--------------------------------------------------------------------------------------------------
 KcInit:
   mov   eax,KC_USER_INT_VECTOR
@@ -248,11 +248,12 @@ KcUserDispatchSleep:
 ;   Output:
 ;     Returns from the future ring 3 kernel-call interrupt gate.
 ;   Notes:
-;     Non-switching calls can dispatch through the existing KcBlock path.
-;     Scheduler/blocking calls remain on the fixed gateway until interrupt-return
-;     scheduling exists.
+;     Non-switching calls dispatch through the existing KcBlock path.
+;     Scheduler/blocking calls use interrupt-aware task switch routines because
+;     they may resume a different task instead of returning to the caller.
 ;--------------------------------------------------------------------------------------------------
 KcUserInterruptEntry:
+  mov   [TaskInterruptFrameEsp],esp
   mov   esi,0
   cmp   dword[KcInterruptEnabled],1
   jne   KcUserInterruptEntryDone
@@ -266,14 +267,40 @@ KcUserInterruptEntry:
   jz    KcUserInterruptReject
   mov   eax,[esi+KC_BLOCK_NUMBER]
   cmp   eax,KcTsYield
-  je    KcUserInterruptReject
+  je    KcUserInterruptYield
   cmp   eax,KcTsExit
-  je    KcUserInterruptReject
+  je    KcUserInterruptExit
   cmp   eax,KcTmSleep
-  je    KcUserInterruptReject
+  je    KcUserInterruptSleep
   cmp   eax,KcKbRead
-  je    KcUserInterruptReject
+  je    KcUserInterruptKeyRead
   call  KcUserDispatch
+  jmp   KcUserInterruptEntryDone
+KcUserInterruptYield:
+  mov   dword[esi+KC_BLOCK_STATUS],KC_STATUS_OK
+  call  TaskYieldFromInterrupt
+  jmp   KcUserInterruptEntryDone
+KcUserInterruptExit:
+  mov   eax,[esi+KC_BLOCK_ARG0]
+  mov   [TaskExitCode],eax
+  mov   dword[esi+KC_BLOCK_STATUS],KC_STATUS_OK
+  call  TaskExitFromInterrupt
+  jmp   KcUserInterruptEntryDone
+KcUserInterruptSleep:
+  mov   eax,[esi+KC_BLOCK_ARG0]
+  mov   [TaskSleepMs],eax
+  mov   dword[esi+KC_BLOCK_STATUS],KC_STATUS_OK
+  mov   dword[esi+KC_BLOCK_RESULT0],0
+  mov   dword[esi+KC_BLOCK_RESULT1],0
+  call  TaskSleepFromInterrupt
+  jmp   KcUserInterruptEntryDone
+KcUserInterruptKeyRead:
+  call  TaskKeyboardReadFromInterrupt
+  mov   eax,[TaskKeyType]
+  mov   [esi+KC_BLOCK_RESULT0],eax
+  mov   eax,[TaskKeyChar]
+  mov   [esi+KC_BLOCK_RESULT1],eax
+  mov   dword[esi+KC_BLOCK_STATUS],KC_STATUS_OK
   jmp   KcUserInterruptEntryDone
 KcUserInterruptReject:
   inc   dword[KcInterruptRejected]

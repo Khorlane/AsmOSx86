@@ -187,9 +187,10 @@ TaskProgramArgCopyLeft dd 0             ; work: task argument bytes left
 TaskProgramRunCount dd 0                ; input: count of task slots 1..N to run
 TaskProgramCheckIndex dd 0              ; work: task completion scan index
 TaskProgramPrintIndex dd 0              ; work: task exit-code print index
-TaskEnterEnabled    dd 0                ; input: 1 allows TaskEnterUserMode iretd path
+TaskEnterEnabled    dd 1                ; input: 1 allows TaskEnterUserMode iretd path
 TaskEnterStatus     dd 0                ; output: TASK_ENTER_STATUS_*
 TaskModeIsUser      dd 0                ; output: 1 if pTaskRecord is user mode
+TaskInterruptFrameEsp dd 0              ; input: ring 3 interrupt-frame ESP
 TaskProgramEntryPtr  dd 0               ; output: loaded program entry address
 TaskProgramKcBlockPtr dd 0              ; output: loaded program KcBlock address
 TaskProgramNextLoadBase dd 0            ; work: next dynamic user-program load base
@@ -435,6 +436,140 @@ TaskKeyboardReadBlock:
   mov   [TaskKeyChar],eax
   mov   dword[edi+TASK_KEY_WAIT_ACTIVE],0
 TaskKeyboardReadDone:
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; TaskYieldFromInterrupt
+;   Input:
+;     TaskInterruptFrameEsp = ESP at the ring 3 int 80h frame.
+;   Output:
+;     Saves the current user frame and dispatches the next ready task.
+;--------------------------------------------------------------------------------------------------
+TaskYieldFromInterrupt:
+  call  TaskGetCurrentRecord
+  mov   edi,[pTaskRecord]
+  test  edi,edi
+  jz    TaskYieldFromInterrupt1
+  mov   eax,[TaskInterruptFrameEsp]
+  mov   [edi+TASK_USER_IRET_ESP],eax
+  cmp   dword[edi+TASK_STATE],TASK_STATE_EXITED
+  je    TaskYieldFromInterrupt1
+  cmp   dword[edi+TASK_STATE],TASK_STATE_BLOCKED
+  je    TaskYieldFromInterrupt1
+  mov   dword[edi+TASK_STATE],TASK_STATE_READY
+TaskYieldFromInterrupt1:
+  call  TaskSelectNext
+  call  TaskResumeSelected
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; TaskExitFromInterrupt
+;   Input:
+;     TaskExitCode = current task exit code.
+;     TaskInterruptFrameEsp = ESP at the ring 3 int 80h frame.
+;   Output:
+;     Marks the current task exited and dispatches the next ready task.
+;--------------------------------------------------------------------------------------------------
+TaskExitFromInterrupt:
+  call  TaskGetCurrentRecord
+  mov   edi,[pTaskRecord]
+  test  edi,edi
+  jz    TaskExitFromInterruptDone
+  mov   eax,[TaskInterruptFrameEsp]
+  mov   [edi+TASK_USER_IRET_ESP],eax
+  mov   eax,[TaskExitCode]
+  mov   [edi+TASK_EXIT_CODE],eax
+  mov   eax,[edi+TASK_RUN_COUNT]
+  inc   eax
+  mov   [edi+TASK_RUN_COUNT],eax
+  mov   dword[edi+TASK_SLEEP_ACTIVE],0
+  mov   dword[edi+TASK_KEY_WAIT_ACTIVE],0
+  mov   dword[edi+TASK_STATE],TASK_STATE_EXITED
+TaskExitFromInterruptDone:
+  call  TaskSelectNext
+  call  TaskResumeSelected
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; TaskSleepFromInterrupt
+;   Input:
+;     TaskSleepMs = cooperative sleep duration in milliseconds.
+;     TaskInterruptFrameEsp = ESP at the ring 3 int 80h frame.
+;   Output:
+;     Blocks the current task until its wake deadline and dispatches next task.
+;--------------------------------------------------------------------------------------------------
+TaskSleepFromInterrupt:
+  mov   eax,[TaskSleepMs]
+  cmp   eax,3600000
+  jbe   TaskSleepFromInterrupt1
+  mov   eax,3600000
+TaskSleepFromInterrupt1:
+  mov   ebx,PIT_HZ
+  mul   ebx
+  add   eax,500
+  adc   edx,0
+  mov   ecx,1000
+  div   ecx
+  mov   [TaskSleepTicks],eax
+  call  TimerNowTicks
+  call  TaskGetCurrentRecord
+  mov   edi,[pTaskRecord]
+  test  edi,edi
+  jz    TaskSleepFromInterruptDone
+  mov   eax,[TaskInterruptFrameEsp]
+  mov   [edi+TASK_USER_IRET_ESP],eax
+  mov   eax,[TimerOutTicksLo]
+  mov   edx,[TimerOutTicksHi]
+  add   eax,[TaskSleepTicks]
+  adc   edx,0
+  mov   [edi+TASK_WAKE_LO],eax
+  mov   [edi+TASK_WAKE_HI],edx
+  mov   dword[edi+TASK_SLEEP_ACTIVE],1
+  mov   dword[edi+TASK_STATE],TASK_STATE_BLOCKED
+TaskSleepFromInterruptDone:
+  call  TaskSelectNext
+  call  TaskResumeSelected
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; TaskKeyboardReadFromInterrupt
+;   Output:
+;     TaskKeyType/TaskKeyChar if a key is available immediately.
+;     Otherwise blocks current task until TaskWakeKeyboardWaiters records one.
+;--------------------------------------------------------------------------------------------------
+TaskKeyboardReadFromInterrupt:
+  mov   dword[TaskKeyType],KEY_NONE
+  mov   dword[TaskKeyChar],0
+  call  KbGetKey
+  movzx eax,byte[KbOutHasKey]
+  test  eax,eax
+  jz    TaskKeyboardReadFromInterruptBlock
+  movzx eax,byte[KbOutType]
+  mov   [TaskKeyType],eax
+  movzx eax,byte[KbOutChar]
+  mov   [TaskKeyChar],eax
+  ret
+TaskKeyboardReadFromInterruptBlock:
+  call  TaskGetCurrentRecord
+  mov   edi,[pTaskRecord]
+  test  edi,edi
+  jz    TaskKeyboardReadFromInterruptDone
+  mov   eax,[TaskInterruptFrameEsp]
+  mov   [edi+TASK_USER_IRET_ESP],eax
+  mov   dword[edi+TASK_KEY_WAIT_ACTIVE],1
+  mov   dword[edi+TASK_KEY_TYPE],KEY_NONE
+  mov   dword[edi+TASK_KEY_CHAR],0
+  mov   dword[edi+TASK_STATE],TASK_STATE_BLOCKED
+  mov   ebx,[edi+TASK_KCBLOCK_PTR]
+  test  ebx,ebx
+  jz    TaskKeyboardReadFromInterruptSwitch
+  mov   dword[ebx+KC_BLOCK_STATUS],KC_STATUS_OK
+  mov   dword[ebx+KC_BLOCK_RESULT0],KEY_NONE
+  mov   dword[ebx+KC_BLOCK_RESULT1],0
+TaskKeyboardReadFromInterruptSwitch:
+  call  TaskSelectNext
+  call  TaskResumeSelected
+TaskKeyboardReadFromInterruptDone:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -788,7 +923,13 @@ TaskEnterUserMode:
   cmp   dword[TaskEnterEnabled],1
   jne   TaskEnterUserModeDone
   mov   dword[TaskEnterStatus],TASK_ENTER_STATUS_OK
-  mov   esp,eax
+  mov   ebx,eax
+  mov   ax,USER_DATA_SEL
+  mov   ds,ax
+  mov   es,ax
+  mov   fs,ax
+  mov   gs,ax
+  mov   esp,ebx
   iretd
 TaskEnterUserModeDone:
   ret
@@ -853,50 +994,58 @@ TaskYield:
   cmp   dword[edi+TASK_STATE],TASK_STATE_BLOCKED
   je    TaskYield1
   mov   dword[edi+TASK_STATE],TASK_STATE_READY
-  mov   eax,[TaskCurrentIndex]
-  inc   eax
-  cmp   eax,MAX_TASKS
-  jb    TaskYield2
-  xor   eax,eax
-  jmp   TaskYield2
 TaskYield1:
+  call  TaskSelectNext
+  call  TaskResumeSelected
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; Internal Routines
+;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; TaskSelectNext
+;   Output:
+;     Selects the next ready task, maps its user pages, and updates pTaskRecord.
+;--------------------------------------------------------------------------------------------------
+TaskSelectNext:
   mov   eax,[TaskCurrentIndex]
   inc   eax
   cmp   eax,MAX_TASKS
-  jb    TaskYield2
+  jb    TaskSelectNext1
   xor   eax,eax
-TaskYield2:
+TaskSelectNext1:
   mov   [TaskScanIndex],eax
   call  TaskWakeSleepers
   call  TaskWakeKeyboardWaiters
   mov   dword[TaskScanLeft],MAX_TASKS
-TaskYield3:
+TaskSelectNext2:
   mov   eax,[TaskScanLeft]
   test  eax,eax
-  jz    TaskYield6
+  jz    TaskSelectNext5
   mov   eax,[TaskScanIndex]
   mov   ebx,TASK_RECORD_SIZE
   mul   ebx
   lea   edi,[TaskTable+eax]
   cmp   dword[edi+TASK_STATE],TASK_STATE_READY
-  je    TaskYield5
+  je    TaskSelectNext4
   mov   eax,[TaskScanIndex]
   inc   eax
   cmp   eax,MAX_TASKS
-  jb    TaskYield4
+  jb    TaskSelectNext3
   xor   eax,eax
-TaskYield4:
+TaskSelectNext3:
   mov   [TaskScanIndex],eax
   mov   eax,[TaskScanLeft]
   dec   eax
   mov   [TaskScanLeft],eax
-  jmp   TaskYield3
-TaskYield5:
+  jmp   TaskSelectNext2
+TaskSelectNext4:
   mov   eax,[TaskScanIndex]
-  jmp   TaskYield7
-TaskYield6:
+  jmp   TaskSelectNext6
+TaskSelectNext5:
   xor   eax,eax
-TaskYield7:
+TaskSelectNext6:
   mov   [TaskNextIndex],eax
   mov   [TaskCurrentIndex],eax
   mov   ebx,TASK_RECORD_SIZE
@@ -906,13 +1055,34 @@ TaskYield7:
   mov   [pTaskRecord],edi
   call  TaskLoadRing0Stack
   call  TaskMapSelectedProgram
-  mov   edi,[pTaskRecord]
-  mov   esp,[edi+TASK_SAVED_ESP]
   ret
 
 ;--------------------------------------------------------------------------------------------------
-; Internal Routines
+; TaskResumeSelected
+;   Input:
+;     pTaskRecord = selected task record.
+;   Output:
+;     Resumes ring 0 tasks through TASK_SAVED_ESP and ring 3 tasks by iretd.
 ;--------------------------------------------------------------------------------------------------
+TaskResumeSelected:
+  mov   edi,[pTaskRecord]
+  test  edi,edi
+  jz    TaskResumeSelectedDone
+  cmp   dword[edi+TASK_MODE],TASK_MODE_USER
+  jne   TaskResumeSelectedRing0
+  cmp   dword[TaskEnterEnabled],1
+  jne   TaskResumeSelectedRing0
+  call  TaskEnterUserMode
+TaskResumeSelectedRing0:
+  mov   ax,DATA_DESC
+  mov   ds,ax
+  mov   es,ax
+  mov   fs,ax
+  mov   gs,ax
+  mov   edi,[pTaskRecord]
+  mov   esp,[edi+TASK_SAVED_ESP]
+TaskResumeSelectedDone:
+  ret
 
 ;--------------------------------------------------------------------------------------------------
 ; TaskLoadRing0Stack
@@ -920,8 +1090,6 @@ TaskYield7:
 ;     pTaskRecord = selected task record.
 ;   Output:
 ;     TSS ESP0 tracks the selected task's kernel stack top.
-;   Notes:
-;     This is future ring-transition groundwork. User tasks still run in ring 0.
 ;--------------------------------------------------------------------------------------------------
 TaskLoadRing0Stack:
   mov   edi,[pTaskRecord]
@@ -1056,6 +1224,15 @@ TaskWakeKeyboardWaitersPoll:
   movzx eax,byte[KbOutChar]
   mov   [edi+TASK_KEY_CHAR],eax
   mov   dword[edi+TASK_KEY_WAIT_ACTIVE],0
+  mov   ebx,[edi+TASK_KCBLOCK_PTR]
+  test  ebx,ebx
+  jz    TaskWakeKeyboardWaitersWake
+  mov   dword[ebx+KC_BLOCK_STATUS],KC_STATUS_OK
+  mov   eax,[edi+TASK_KEY_TYPE]
+  mov   [ebx+KC_BLOCK_RESULT0],eax
+  mov   eax,[edi+TASK_KEY_CHAR]
+  mov   [ebx+KC_BLOCK_RESULT1],eax
+TaskWakeKeyboardWaitersWake:
   mov   eax,[TaskKeyFoundIndex]
   mov   [TaskStateIndex],eax
   call  TaskWake

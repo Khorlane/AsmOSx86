@@ -6,7 +6,6 @@
 [bits 32]
   org   00200000h
 
-KERNEL_CALL_GATEWAY equ 00100005h
 KC_TS_YIELD         equ 3
 KC_TS_EXIT          equ 5
 KC_BLOCK            equ 00210000h
@@ -25,8 +24,7 @@ Prog2Loop:
   inc   eax
   mov   [Prog2YieldCount],eax
   mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],KC_TS_YIELD
-  mov   ebx,KERNEL_CALL_GATEWAY
-  call  ebx
+  int   080h
   mov   eax,[Prog2NextValue]
   inc   eax
   mov   [Prog2NextValue],eax
@@ -37,8 +35,7 @@ Prog2Loop:
   shl   eax,16
   or    eax,[Prog2SumValue]
   mov   [KC_BLOCK+KC_BLOCK_ARG0],eax
-  mov   ebx,KERNEL_CALL_GATEWAY
-  call  ebx
+  int   080h
 Prog2Done:
   jmp   Prog2Done
 

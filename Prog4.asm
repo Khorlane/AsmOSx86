@@ -6,7 +6,6 @@
 [bits 32]
   org   00200000h
 
-KERNEL_CALL_GATEWAY equ 00100005h
 KC_TM_SLEEP         equ 9
 KC_VD_WRITE_STR     equ 2
 KC_TS_EXIT          equ 5
@@ -56,8 +55,7 @@ OpenFile:
   mov   dword[DataHandle],0
   mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],KC_FS_OPEN
   mov   dword[KC_BLOCK+KC_BLOCK_ARG0],DataFileName
-  mov   ebx,KERNEL_CALL_GATEWAY
-  call  ebx
+  int   080h
   mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
   cmp   eax,STATUS_OK
   jne   OpenFileFailed
@@ -79,8 +77,7 @@ ReadData:
   mov   [KC_BLOCK+KC_BLOCK_ARG0],eax
   mov   dword[KC_BLOCK+KC_BLOCK_ARG1],DataBufferText
   mov   dword[KC_BLOCK+KC_BLOCK_ARG2],DATA_BUFFER_SIZE
-  mov   ebx,KERNEL_CALL_GATEWAY
-  call  ebx
+  int   080h
   mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
   cmp   eax,STATUS_OK
   jne   ReadDataFailed
@@ -99,8 +96,7 @@ ReadDataFailed:
 PrintLine:
   mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],KC_VD_WRITE_STR
   mov   dword[KC_BLOCK+KC_BLOCK_ARG0],DataBuffer
-  mov   ebx,KERNEL_CALL_GATEWAY
-  call  ebx
+  int   080h
   ret
 
 MaybeBadPrintTest:
@@ -200,8 +196,7 @@ MaybeSleepTest:
   jne   MaybeSleepTestDone
   mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],KC_TM_SLEEP
   mov   dword[KC_BLOCK+KC_BLOCK_ARG0],1000
-  mov   ebx,KERNEL_CALL_GATEWAY
-  call  ebx
+  int   080h
   mov   dword[Prog4ExitCode],7
 MaybeSleepTestDone:
   ret
@@ -218,8 +213,7 @@ MaybeKeyTest:
   mov   dword[pProg4Msg],MsgKeyPrompt
   call  PrintProg4Msg
   mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],KC_KB_READ
-  mov   ebx,KERNEL_CALL_GATEWAY
-  call  ebx
+  int   080h
   mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
   cmp   eax,STATUS_OK
   jne   MaybeKeyTestFailed
@@ -335,8 +329,7 @@ MaybeBadCallNumberTestDone:
 BadPrintTest:
   mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],KC_VD_WRITE_STR
   mov   dword[KC_BLOCK+KC_BLOCK_ARG0],00100000h
-  mov   ebx,KERNEL_CALL_GATEWAY
-  call  ebx
+  int   080h
   mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
   cmp   eax,STATUS_BAD_ARG
   jne   BadPrintTestFailed
@@ -353,8 +346,7 @@ BadPrintTestFailed:
 BadOpenTest:
   mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],KC_FS_OPEN
   mov   dword[KC_BLOCK+KC_BLOCK_ARG0],00100000h
-  mov   ebx,KERNEL_CALL_GATEWAY
-  call  ebx
+  int   080h
   mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
   cmp   eax,STATUS_BAD_ARG
   jne   BadOpenTestFailed
@@ -374,8 +366,7 @@ BadReadTest:
   mov   [KC_BLOCK+KC_BLOCK_ARG0],eax
   mov   dword[KC_BLOCK+KC_BLOCK_ARG1],00100000h
   mov   dword[KC_BLOCK+KC_BLOCK_ARG2],DATA_BUFFER_SIZE
-  mov   ebx,KERNEL_CALL_GATEWAY
-  call  ebx
+  int   080h
   mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
   cmp   eax,STATUS_BAD_ARG
   jne   BadReadTestFailed
@@ -391,8 +382,7 @@ BadReadTestFailed:
 
 BadZeroCallTest:
   mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],0
-  mov   ebx,KERNEL_CALL_GATEWAY
-  call  ebx
+  int   080h
   mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
   cmp   eax,STATUS_INVALID
   jne   BadZeroCallTestFailed
@@ -408,8 +398,7 @@ BadZeroCallTestFailed:
 
 BadCallNumberTest:
   mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],9999
-  mov   ebx,KERNEL_CALL_GATEWAY
-  call  ebx
+  int   080h
   mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
   cmp   eax,STATUS_INVALID
   jne   BadCallNumberTestFailed
@@ -427,8 +416,7 @@ PrintProg4Msg:
   mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],KC_VD_WRITE_STR
   mov   eax,[pProg4Msg]
   mov   [KC_BLOCK+KC_BLOCK_ARG0],eax
-  mov   ebx,KERNEL_CALL_GATEWAY
-  call  ebx
+  int   080h
   ret
 
 CloseFile:
@@ -437,8 +425,7 @@ CloseFile:
   jz    CloseFileDone
   mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],KC_FS_CLOSE
   mov   [KC_BLOCK+KC_BLOCK_ARG0],eax
-  mov   ebx,KERNEL_CALL_GATEWAY
-  call  ebx
+  int   080h
 CloseFileDone:
   ret
 
@@ -446,8 +433,7 @@ ExitProgram:
   mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],KC_TS_EXIT
   mov   eax,[Prog4ExitCode]
   mov   [KC_BLOCK+KC_BLOCK_ARG0],eax
-  mov   ebx,KERNEL_CALL_GATEWAY
-  call  ebx
+  int   080h
   ret
 
 align 4

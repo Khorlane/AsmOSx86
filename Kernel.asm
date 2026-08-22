@@ -23,9 +23,9 @@
   jmp   Stage3                          ; Jump to entry point
 
 ;--------------------------------------------------------------------------------------------------
-; Fixed User Kernel-Call Gateway
+; Legacy User Kernel-Call Gateway
 ;--------------------------------------------------------------------------------------------------
-  jmp   KcUserDispatch                  ; User programs call 00100005h
+  jmp   KcUserDispatch                  ; Legacy gateway at 00100005h
 
 ;--------------------------------------------------------------------------------------------------
 ; Global Descriptor Table (GDT)
@@ -82,12 +82,12 @@ IDT2:
 ;--------------------------------------------------------------------------------------------------
 ; Task State Segment (TSS)
 ;--------------------------------------------------------------------------------------------------
-; Scaffolding only: the descriptor exists for future ring 3 stack transitions,
-; and the kernel loads TR during startup. User tasks still run in ring 0.
+; The descriptor supports ring 3 user-to-kernel stack transitions, and the
+; kernel loads TR during startup.
 Tss32:
   dd 0                                  ; Previous task link
-  dd TSS_KERNEL_ESP0                    ; ESP0 for future user-to-kernel entry
-  dd DATA_DESC                          ; SS0 for future user-to-kernel entry
+  dd TSS_KERNEL_ESP0                    ; ESP0 for user-to-kernel entry
+  dd DATA_DESC                          ; SS0 for user-to-kernel entry
   times 92 db 0
 
 ;--------------------------------------------------------------------------------------------------
