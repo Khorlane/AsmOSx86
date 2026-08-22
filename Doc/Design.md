@@ -60,6 +60,7 @@ The current kernel provides:
   - `KcTsGetAuthority`
   - `KcMmGetMemory`
   - `KcMmFreeMemory`
+  - `KcMmInfo`
 - simple built-in commands:
   - `Clear`
   - `Date`
@@ -714,6 +715,7 @@ KcTsGetInfo     - Return current task index and user-mode tag
 KcTsGetAuthority - Return current task authority tag
 KcMmGetMemory   - Trusted-only page-rounded user-memory allocation
 KcMmFreeMemory  - Trusted-only stack-like user-memory release
+KcMmInfo        - Return current mapped user bytes and max user bytes
 ```
 
 The dispatch table records each service's minimum caller authority. User-originated
@@ -807,7 +809,8 @@ The current `KcMmGetMemory` / `KcMmFreeMemory` implementation is intentionally
 small. Trusted/system tasks can grow their own user mapping by whole pages from
 the task's reserved user-program slot. `FreeMemory` currently releases only the
 most recent allocation, keeping the first allocator stack-like instead of a full
-heap.
+heap. `KcMmInfo` is normal-user accessible and returns the calling task's
+current mapped user bytes plus the fixed maximum user-program byte count.
 
 The broader memory-service list should remain small until real user programs
 need more.

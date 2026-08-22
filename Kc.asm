@@ -62,6 +62,7 @@ KcTsGetInfo        equ 11
 KcMmGetMemory      equ 12
 KcMmFreeMemory     equ 13
 KcTsGetAuthority   equ 14
+KcMmInfo           equ 15
 
 ;--------------------------------------------------------------------------------------------------
 ; Kernel Call User Policy
@@ -81,6 +82,7 @@ KcTsGetAuthority   equ 14
 ; KcMmGetMemory      trusted                        trusted/system only
 ; KcMmFreeMemory     trusted                        trusted/system only
 ; KcTsGetAuthority   normal                         user allowed
+; KcMmInfo           normal                         user allowed
 ; User pointer validation:
 ;   KcVdWriteStr, KcFsOpen, KcFsRead.
 ; Interrupt-aware switching/blocking:
@@ -146,6 +148,7 @@ KcTable:
   dd KcMmGetMemory, KcMmGetMemoryHandler,TASK_AUTH_TRUSTED
   dd KcMmFreeMemory,KcMmFreeMemoryHandler,TASK_AUTH_TRUSTED
   dd KcTsGetAuthority,KcTsGetAuthorityHandler,TASK_AUTH_NORMAL
+  dd KcMmInfo,      KcMmInfoHandler,TASK_AUTH_NORMAL
 KcTableEnd:
 KcTableCount equ (KcTableEnd-KcTable)/12
 
@@ -733,6 +736,30 @@ KcMmFreeMemoryHandler:
   mov   dword[KcStatus],KC_STATUS_OK
   ret
 KcMmFreeMemoryFailed:
+  mov   dword[KcStatus],KC_STATUS_BAD_ARG
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; KcMmInfoHandler
+;   Output:
+;     KcStatus  = KC_STATUS_OK or KC_STATUS_BAD_ARG.
+;     KcResult0 = current mapped user-program bytes.
+;     KcResult1 = maximum user-program bytes.
+;--------------------------------------------------------------------------------------------------
+KcMmInfoHandler:
+  mov   dword[KcResult0],0
+  mov   dword[KcResult1],0
+  call  TaskMemoryInfo
+  mov   eax,[TaskMemoryStatus]
+  cmp   eax,TASK_MEMORY_STATUS_OK
+  jne   KcMmInfoHandlerFailed
+  mov   eax,[TaskMemoryMappedBytes]
+  mov   [KcResult0],eax
+  mov   eax,[TaskMemoryMaxBytes]
+  mov   [KcResult1],eax
+  mov   dword[KcStatus],KC_STATUS_OK
+  ret
+KcMmInfoHandlerFailed:
   mov   dword[KcStatus],KC_STATUS_BAD_ARG
   ret
 

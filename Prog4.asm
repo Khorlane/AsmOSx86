@@ -19,6 +19,7 @@ KC_TS_GET_INFO      equ 11
 KC_MM_GET_MEMORY    equ 12
 KC_MM_FREE_MEMORY   equ 13
 KC_TS_GET_AUTHORITY equ 14
+KC_MM_INFO          equ 15
 KC_BLOCK            equ 00210000h
 USER_ARG            equ 00210020h
 KC_BLOCK_NUMBER     equ 0
@@ -56,6 +57,7 @@ Start:
   call  MaybeLoadTest                   ; Optional user load-program denial proof
   call  MaybeGetMemoryTest              ; Optional trusted memory-service proof
   call  MaybeFreeMemoryTest             ; Optional trusted memory-free proof
+  call  MaybeMemoryInfoTest             ; Optional memory-info proof
   call  MaybeLegacyTest                 ; Optional legacy-gateway page-fault proof
   call  MaybeBadPrintTest               ; Optional bad-print proof
   call  MaybeBadOpenTest                ; Optional bad-open proof
@@ -651,6 +653,45 @@ MaybeFreeMemoryTestFailed:
 MaybeFreeMemoryTestDone:
   ret
 
+MaybeMemoryInfoTest:
+  cmp   word[USER_ARG],6
+  jne   MaybeMemoryInfoTestDone
+  cmp   byte[USER_ARG+2],'m'
+  jne   MaybeMemoryInfoTestDone
+  cmp   byte[USER_ARG+3],'m'
+  jne   MaybeMemoryInfoTestDone
+  cmp   byte[USER_ARG+4],'i'
+  jne   MaybeMemoryInfoTestDone
+  cmp   byte[USER_ARG+5],'n'
+  jne   MaybeMemoryInfoTestDone
+  cmp   byte[USER_ARG+6],'f'
+  jne   MaybeMemoryInfoTestDone
+  cmp   byte[USER_ARG+7],'o'
+  jne   MaybeMemoryInfoTestDone
+  mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],KC_MM_INFO
+  int   080h
+  mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
+  cmp   eax,STATUS_OK
+  jne   MaybeMemoryInfoTestFailed
+  mov   eax,[KC_BLOCK+KC_BLOCK_RESULT1]
+  cmp   eax,65536
+  jne   MaybeMemoryInfoTestFailed
+  mov   eax,[KC_BLOCK+KC_BLOCK_RESULT0]
+  test  eax,eax
+  jz    MaybeMemoryInfoTestFailed
+  cmp   eax,[KC_BLOCK+KC_BLOCK_RESULT1]
+  ja    MaybeMemoryInfoTestFailed
+  mov   dword[pProg4Msg],MsgMemoryInfoOk
+  call  PrintProg4Msg
+  mov   dword[Prog4ExitCode],00000054h
+  ret
+MaybeMemoryInfoTestFailed:
+  mov   dword[pProg4Msg],MsgMemoryInfoFail
+  call  PrintProg4Msg
+  mov   dword[Prog4ExitCode],00000092h
+MaybeMemoryInfoTestDone:
+  ret
+
 MaybeLegacyTest:
   cmp   word[USER_ARG],6
   jne   MaybeLegacyTestDone
@@ -911,6 +952,10 @@ MsgBadFreeMemoryOk   dw 19
                      db "Prog4: badfree OK",13,10
 MsgBadFreeMemoryFail dw 21
                      db "Prog4: badfree FAIL",13,10
+MsgMemoryInfoOk     dw 18
+                     db "Prog4: mminfo OK",13,10
+MsgMemoryInfoFail   dw 20
+                     db "Prog4: mminfo FAIL",13,10
 MsgAuthNormalOk      dw 23
                      db "Prog4: auth normal OK",13,10
 MsgAuthTrustedOk     dw 24

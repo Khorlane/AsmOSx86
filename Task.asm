@@ -33,6 +33,7 @@
 ;   - TaskProgramPrintExitCodesN
 ;   - TaskEnterUserMode
 ;   - TaskIsUserMode
+;   - TaskMemoryInfo
 ;   - TaskMemoryGet
 ;   - TaskMemoryFree
 ;   - TaskExit
@@ -226,6 +227,8 @@ TaskExitCode         dd 0               ; input: current task exit code
 TaskMemoryRequestBytes dd 0             ; input: bytes requested from task memory
 TaskMemoryPointer    dd 0               ; input/output: user memory pointer
 TaskMemoryBytes      dd 0               ; output: page-rounded byte count
+TaskMemoryMappedBytes dd 0              ; output: mapped user-program bytes
+TaskMemoryMaxBytes  dd 0                ; output: max user-program bytes
 TaskMemoryStatus     dd 0               ; output: TASK_MEMORY_STATUS_*
 TaskMemoryPageCount  dd 0               ; work: page count for memory request
 TaskMemoryPageIndex  dd 0               ; work: page index for memory pointer
@@ -1024,6 +1027,34 @@ TaskIsUserMode:
   jne   TaskIsUserModeDone
   mov   dword[TaskModeIsUser],1
 TaskIsUserModeDone:
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; TaskMemoryInfo
+;   Output:
+;     TaskMemoryStatus      = TASK_MEMORY_STATUS_*.
+;     TaskMemoryMappedBytes = bytes currently mapped for this task's user image.
+;     TaskMemoryMaxBytes    = maximum bytes available in the user image range.
+;--------------------------------------------------------------------------------------------------
+TaskMemoryInfo:
+  mov   dword[TaskMemoryStatus],TASK_MEMORY_STATUS_BAD_ARG
+  mov   dword[TaskMemoryMappedBytes],0
+  mov   dword[TaskMemoryMaxBytes],USER_PROGRAM_MAX_SIZE
+  mov   eax,[TaskCurrentIndex]
+  mov   ebx,TASK_RECORD_SIZE
+  mul   ebx
+  lea   edi,[TaskTable+eax]
+  cmp   dword[edi+TASK_MODE],TASK_MODE_USER
+  jne   TaskMemoryInfoDone
+  mov   eax,[edi+TASK_PROGRAM_PHYS]
+  test  eax,eax
+  jz    TaskMemoryInfoDone
+  mov   eax,[edi+TASK_PROGRAM_PAGES]
+  mov   ebx,USER_PROGRAM_SLOT_SIZE
+  mul   ebx
+  mov   [TaskMemoryMappedBytes],eax
+  mov   dword[TaskMemoryStatus],TASK_MEMORY_STATUS_OK
+TaskMemoryInfoDone:
   ret
 
 ;--------------------------------------------------------------------------------------------------
