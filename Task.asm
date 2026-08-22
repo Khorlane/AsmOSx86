@@ -125,6 +125,7 @@ USER_PROGRAM_ARG_BASE           equ USER_PROGRAM_VIRTUAL_BASE+USER_PROGRAM_ARG_O
 USER_PROGRAM_INITIAL_EFLAGS     equ 00000002h
 USER_PROGRAM_RET_SLOT_SIZE      equ 4
 USER_PROGRAM_IRET_FRAME_SIZE    equ 20
+USER_PROGRAM_KERNEL_STACK_GAP   equ 00000200h
 USER_IRET_EIP                  equ 0
 USER_IRET_CS                   equ 4
 USER_IRET_EFLAGS               equ 8
@@ -665,6 +666,7 @@ TaskProgramLoad:
   mov   [edi+TASK_KCBLOCK_PHYS],ebx
   mov   dword[edi+TASK_USER_EIP],USER_PROGRAM_VIRTUAL_BASE
   mov   eax,[TaskStackTop]
+  sub   eax,USER_PROGRAM_KERNEL_STACK_GAP
   mov   [edi+TASK_USER_ESP],eax
   mov   dword[edi+TASK_USER_CS],USER_CODE_SEL
   mov   dword[edi+TASK_USER_DS],USER_DATA_SEL
