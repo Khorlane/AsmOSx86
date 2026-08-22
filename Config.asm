@@ -29,6 +29,10 @@ String  Space1," "
 ;--------------------------------------------------------------------------------------------------
 ; Device Model Constants
 ;--------------------------------------------------------------------------------------------------
+TASK_AUTH_NORMAL       equ 0
+TASK_AUTH_TRUSTED      equ 1
+TASK_AUTH_SYSTEM       equ 2
+
 DEV_TYPE_BLOCK          equ 1
 DEV_TYPE_CHAR           equ 2
 DEV_TYPE_VIDEO          equ 3

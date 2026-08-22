@@ -14,7 +14,8 @@ KcFsOpen / KcFsRead / KcFsClose
 
 That is enough for the current floppy-based user-program loader and smoke tests.
 
-Longer term, `Fs.asm` should not permanently mean "FAT12 on floppy A:". A real
+Longer term, `Fs.asm` should not permanently mean "raw ASMF files on floppy A:".
+A real
 OS shape separates devices, block access, filesystems, and kernel calls into
 clear layers.
 
@@ -62,8 +63,10 @@ Write entry point slot
 Control entry point slot
 ```
 
-The entry point slots exist in the record layout, but they are not actively used
-yet. The current block-device path still routes directly through known code.
+The block-device path now uses the registry's read/write entry point slots for
+real routing. `DevReadSector` and `DevWriteSector` find the selected device
+record, validate it as a present block device, check sector bounds, then call
+the handler address stored in that record.
 
 `Fs.asm` is already organized into rough layers:
 
@@ -100,8 +103,9 @@ device of `DEV_ID_FLOPPY_A`, validates the selected registry record as a present
 block device, checks the sector number against the device's sector count, and
 then calls the floppy driver.
 
-The current floppy driver can initialize the controller and read 512-byte
-sectors through the floppy controller and DMA bounce buffer.
+The current floppy driver can initialize the controller and read/write 512-byte
+sectors through the floppy controller and DMA bounce buffer. The only current
+kernel-owned write user is the `LOG.TXT` console mirror.
 
 ## Done Enough For Now
 
@@ -114,6 +118,8 @@ count as foundation:
 - reserved read/write/control slots in device records
 - default floppy block-device selection
 - block-device read validation path
+- block-device write validation path for kernel-owned log writes
+- registry-routed block read/write handler calls
 - read-only file open/read/close kernel services
 - separation inside `Fs.asm` between file service, filesystem driver,
   block-device layer, and device driver
@@ -133,9 +139,8 @@ User/kernel calls
   later KcFsWrite
 
 Filesystem layer
-  FAT12
-  later FAT16
-  maybe native AsmOSx86 filesystem
+  current ASMF manifest lookup
+  later native AsmOSx86 filesystem
 
 Block device layer
   read sector
@@ -162,33 +167,31 @@ driver talks to hardware
 - floppy
 - hard disk
 - RAM disk
-- FAT12
-- FAT16
+- current ASMF manifest lookup
 - a future native AsmOSx86 filesystem
 
 The kernel call asks the filesystem layer. The filesystem layer asks the block
 device layer. The block device layer asks the actual hardware driver.
 
-## Example: Floppy FAT12
+## Example: Current Floppy ASMF
 
 ```text
-KcFsOpen("A:\PROG1.BIN")
-  -> filesystem manager sees drive A:
-  -> drive A is mounted as FAT12
-  -> FAT12 opens PROG1.BIN
-  -> FAT12 reads directory/FAT data through block device 0
-  -> block device 0 is backed by floppy driver
+KcFsOpen("PROG1.BIN")
+  -> ASMF manifest lookup finds PROG1.BIN
+  -> FsRead asks DevReadSector for the file's sectors
+  -> DevReadSector routes through DEV_ID_FLOPPY_A
+  -> the registry record calls FloppyReadSectorTo
 ```
 
-## Example: Future Hard Disk FAT16
+## Example: Future Hard Disk Native Filesystem
 
 ```text
 KcFsOpen("C:\SYSTEM\MENU.BIN")
   -> filesystem manager sees drive C:
-  -> drive C is mounted as FAT16
-  -> FAT16 opens MENU.BIN
-  -> FAT16 reads sectors through block device 1
-  -> block device 1 is backed by IDE driver
+  -> drive C is mounted as an AsmOSx86 native filesystem
+  -> native filesystem opens MENU.BIN
+  -> native filesystem reads sectors through block device 1
+  -> block device 1 is backed by a hard-disk driver
 ```
 
 ## Possible Device Record
@@ -218,8 +221,8 @@ DeviceType           done
 Status               done
 Capabilities         not yet
 Open entry point     not yet
-Read entry point     slot exists, not used yet
-Write entry point    slot exists, not used yet
+Read entry point     done for block devices
+Write entry point    done for block devices
 Control entry point  slot exists, not used yet
 Private driver state not yet
 ```
@@ -230,5 +233,5 @@ This belongs in deferred work, not "not planned".
 
 Unlike ELF loading or dynamic linking, device/filesystem layering sounds like a
 natural part of AsmOSx86 growing into a real OS. The goal is not complexity for
-its own sake. The goal is to avoid baking "FAT12 floppy only" into every future
+its own sake. The goal is to avoid baking "ASMF floppy only" into every future
 file service.

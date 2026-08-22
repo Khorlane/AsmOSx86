@@ -75,6 +75,8 @@ Notes:
 
 - Exit code `1` from Bochs is treated as an acceptable user power-off.
 - Does not rebuild or copy anything.
+- Tolerates non-interactive shells that cannot clear the host terminal or wait
+  for a keypress.
 
 ### BuildBoot.ps1
 
@@ -204,6 +206,7 @@ Optional inputs:
 - `Prog3.bin`
 - `Prog4.bin`
 - `Data.txt`
+- `Startup.txt`
 
 Reserved generated files:
 
@@ -214,7 +217,8 @@ Writes:
 
 - sector `1`: the `ASMF` manifest
 - sector `2+`: `KERNEL.BIN`
-- next sectors: optional `PROG*.BIN` and `DATA.TXT` files when present
+- next sectors: optional `PROG*.BIN`, `DATA.TXT`, and `STARTUP.TXT` files when
+  present
 - final reserved file entry: `LOG.TXT`
 
 Manifest format:
@@ -233,6 +237,10 @@ Notes:
 - Does not use ImDisk.
 - Does not copy files through FAT12.
 - Packs file bodies contiguously and pads each file to a whole sector.
+- Includes non-empty `Startup.txt` as `STARTUP.TXT`; the console runs this
+  command stream after initialization. It is expected to contain ordinary
+  console commands, commonly smoke-test commands and optionally `shutdown` for
+  automated runs.
 
 ### ExtractFile.ps1
 

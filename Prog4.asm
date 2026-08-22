@@ -16,6 +16,9 @@ KC_FS_READ          equ 7
 KC_FS_CLOSE         equ 8
 KC_KB_READ          equ 10
 KC_TS_GET_INFO      equ 11
+KC_MM_GET_MEMORY    equ 12
+KC_MM_FREE_MEMORY   equ 13
+KC_TS_GET_AUTHORITY equ 14
 KC_BLOCK            equ 00210000h
 USER_ARG            equ 00210020h
 KC_BLOCK_NUMBER     equ 0
@@ -28,6 +31,7 @@ KC_BLOCK_RESULT1    equ 28
 STATUS_OK           equ 0
 STATUS_INVALID      equ 1
 STATUS_BAD_ARG      equ 2
+STATUS_DENIED       equ 3
 DATA_BUFFER_SIZE    equ 80
 
 Start:
@@ -44,11 +48,14 @@ Start:
   call  MaybeCplTest                    ; Optional CS selector proof
   call  MaybeInt80Test                  ; Optional int 80h proof
   call  MaybeInfoTest                   ; Optional task-info syscall proof
+  call  MaybeAuthTest                   ; Optional task-authority proof
   call  MaybeKeyTest                    ; Optional keyboard read proof
   call  MaybeSleepTest                  ; Optional cooperative sleep proof
   call  MaybePrivTest                   ; Optional privilege-fault proof
   call  MaybeMemTest                    ; Optional kernel-memory fault proof
   call  MaybeLoadTest                   ; Optional user load-program denial proof
+  call  MaybeGetMemoryTest              ; Optional trusted memory-service proof
+  call  MaybeFreeMemoryTest             ; Optional trusted memory-free proof
   call  MaybeLegacyTest                 ; Optional legacy-gateway page-fault proof
   call  MaybeBadPrintTest               ; Optional bad-print proof
   call  MaybeBadOpenTest                ; Optional bad-open proof
@@ -309,6 +316,52 @@ MaybeInfoTestFailed:
 MaybeInfoTestDone:
   ret
 
+MaybeAuthTest:
+  cmp   word[USER_ARG],4
+  jne   MaybeAuthTestDone
+  cmp   byte[USER_ARG+2],'a'
+  jne   MaybeAuthTestDone
+  cmp   byte[USER_ARG+3],'u'
+  jne   MaybeAuthTestDone
+  cmp   byte[USER_ARG+4],'t'
+  jne   MaybeAuthTestDone
+  cmp   byte[USER_ARG+5],'h'
+  jne   MaybeAuthTestDone
+  mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],KC_TS_GET_AUTHORITY
+  int   080h
+  mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
+  cmp   eax,STATUS_OK
+  jne   MaybeAuthTestFailed
+  mov   eax,[KC_BLOCK+KC_BLOCK_RESULT0]
+  cmp   eax,0
+  je    MaybeAuthTestNormal
+  cmp   eax,1
+  je    MaybeAuthTestTrusted
+  cmp   eax,2
+  je    MaybeAuthTestSystem
+  jmp   MaybeAuthTestFailed
+MaybeAuthTestNormal:
+  mov   dword[pProg4Msg],MsgAuthNormalOk
+  call  PrintProg4Msg
+  mov   dword[Prog4ExitCode],00000050h
+  ret
+MaybeAuthTestTrusted:
+  mov   dword[pProg4Msg],MsgAuthTrustedOk
+  call  PrintProg4Msg
+  mov   dword[Prog4ExitCode],00000051h
+  ret
+MaybeAuthTestSystem:
+  mov   dword[pProg4Msg],MsgAuthSystemOk
+  call  PrintProg4Msg
+  mov   dword[Prog4ExitCode],00000052h
+  ret
+MaybeAuthTestFailed:
+  mov   dword[pProg4Msg],MsgAuthFail
+  call  PrintProg4Msg
+  mov   dword[Prog4ExitCode],00000090h
+MaybeAuthTestDone:
+  ret
+
 MaybePrivTest:
   cmp   word[USER_ARG],4
   jne   MaybePrivTestDone
@@ -363,6 +416,157 @@ MaybeLoadTest:
 MaybeLoadTestFailed:
   mov   dword[Prog4ExitCode],00000088h
 MaybeLoadTestDone:
+  ret
+
+MaybeGetMemoryTest:
+  cmp   word[USER_ARG],6
+  jne   MaybeGetMemoryTestDone
+  cmp   byte[USER_ARG+2],'g'
+  jne   MaybeGetMemoryTestSystem
+  cmp   byte[USER_ARG+3],'e'
+  jne   MaybeGetMemoryTestSystem
+  cmp   byte[USER_ARG+4],'t'
+  jne   MaybeGetMemoryTestSystem
+  cmp   byte[USER_ARG+5],'m'
+  jne   MaybeGetMemoryTestSystem
+  cmp   byte[USER_ARG+6],'e'
+  jne   MaybeGetMemoryTestSystem
+  cmp   byte[USER_ARG+7],'m'
+  jne   MaybeGetMemoryTestSystem
+  call  GetMemoryProbe
+  mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
+  cmp   eax,STATUS_DENIED
+  je    MaybeGetMemoryTestDenied
+  cmp   eax,STATUS_OK
+  jne   MaybeGetMemoryTestDone
+  mov   eax,[KC_BLOCK+KC_BLOCK_RESULT1]
+  cmp   eax,4096
+  jne   MaybeGetMemoryTestFailed
+  mov   dword[pProg4Msg],MsgGetMemoryTrustedOk
+  call  PrintProg4Msg
+  mov   dword[Prog4ExitCode],0000004Ah
+  ret
+MaybeGetMemoryTestSystem:
+  cmp   byte[USER_ARG+2],'s'
+  jne   MaybeGetMemoryTestDone
+  cmp   byte[USER_ARG+3],'y'
+  jne   MaybeGetMemoryTestDone
+  cmp   byte[USER_ARG+4],'s'
+  jne   MaybeGetMemoryTestDone
+  cmp   byte[USER_ARG+5],'t'
+  jne   MaybeGetMemoryTestDone
+  cmp   byte[USER_ARG+6],'e'
+  jne   MaybeGetMemoryTestDone
+  cmp   byte[USER_ARG+7],'m'
+  jne   MaybeGetMemoryTestDone
+  call  GetMemoryProbe
+  mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
+  cmp   eax,STATUS_OK
+  jne   MaybeGetMemoryTestFailed
+  mov   eax,[KC_BLOCK+KC_BLOCK_RESULT1]
+  cmp   eax,4096
+  jne   MaybeGetMemoryTestFailed
+  mov   dword[pProg4Msg],MsgGetMemorySystemOk
+  call  PrintProg4Msg
+  mov   dword[Prog4ExitCode],0000004Bh
+  ret
+GetMemoryProbe:
+  mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],KC_MM_GET_MEMORY
+  mov   dword[KC_BLOCK+KC_BLOCK_ARG0],4096
+  int   080h
+  ret
+MaybeGetMemoryTestDenied:
+  mov   dword[pProg4Msg],MsgGetMemoryDeniedOk
+  call  PrintProg4Msg
+  mov   dword[Prog4ExitCode],00000049h
+  ret
+MaybeGetMemoryTestFailed:
+  mov   dword[pProg4Msg],MsgGetMemoryFail
+  call  PrintProg4Msg
+  mov   dword[Prog4ExitCode],00000090h
+MaybeGetMemoryTestDone:
+  ret
+
+MaybeFreeMemoryTest:
+  cmp   word[USER_ARG],7
+  jne   MaybeFreeMemoryTestSystem
+  cmp   byte[USER_ARG+2],'f'
+  jne   MaybeFreeMemoryTestDone
+  cmp   byte[USER_ARG+3],'r'
+  jne   MaybeFreeMemoryTestDone
+  cmp   byte[USER_ARG+4],'e'
+  jne   MaybeFreeMemoryTestDone
+  cmp   byte[USER_ARG+5],'e'
+  jne   MaybeFreeMemoryTestDone
+  cmp   byte[USER_ARG+6],'m'
+  jne   MaybeFreeMemoryTestDone
+  cmp   byte[USER_ARG+7],'e'
+  jne   MaybeFreeMemoryTestDone
+  cmp   byte[USER_ARG+8],'m'
+  jne   MaybeFreeMemoryTestDone
+  call  FreeMemoryProbe
+  mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
+  cmp   eax,STATUS_DENIED
+  je    MaybeFreeMemoryTestDenied
+  cmp   eax,STATUS_OK
+  jne   MaybeFreeMemoryTestDone
+  mov   eax,[KC_BLOCK+KC_BLOCK_RESULT1]
+  cmp   eax,4096
+  jne   MaybeFreeMemoryTestFailed
+  mov   dword[pProg4Msg],MsgFreeMemoryTrustedOk
+  call  PrintProg4Msg
+  mov   dword[Prog4ExitCode],0000004Dh
+  ret
+MaybeFreeMemoryTestSystem:
+  cmp   word[USER_ARG],10
+  jne   MaybeFreeMemoryTestDone
+  cmp   byte[USER_ARG+2],'s'
+  jne   MaybeFreeMemoryTestDone
+  cmp   byte[USER_ARG+3],'y'
+  jne   MaybeFreeMemoryTestDone
+  cmp   byte[USER_ARG+4],'s'
+  jne   MaybeFreeMemoryTestDone
+  cmp   byte[USER_ARG+5],'t'
+  jne   MaybeFreeMemoryTestDone
+  cmp   byte[USER_ARG+6],'e'
+  jne   MaybeFreeMemoryTestDone
+  cmp   byte[USER_ARG+7],'m'
+  jne   MaybeFreeMemoryTestDone
+  cmp   byte[USER_ARG+8],'f'
+  jne   MaybeFreeMemoryTestDone
+  cmp   byte[USER_ARG+9],'r'
+  jne   MaybeFreeMemoryTestDone
+  cmp   byte[USER_ARG+10],'e'
+  jne   MaybeFreeMemoryTestDone
+  cmp   byte[USER_ARG+11],'e'
+  jne   MaybeFreeMemoryTestDone
+  call  FreeMemoryProbe
+  mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
+  cmp   eax,STATUS_OK
+  jne   MaybeFreeMemoryTestFailed
+  mov   eax,[KC_BLOCK+KC_BLOCK_RESULT1]
+  cmp   eax,4096
+  jne   MaybeFreeMemoryTestFailed
+  mov   dword[pProg4Msg],MsgFreeMemorySystemOk
+  call  PrintProg4Msg
+  mov   dword[Prog4ExitCode],0000004Eh
+  ret
+FreeMemoryProbe:
+  mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],KC_MM_FREE_MEMORY
+  mov   dword[KC_BLOCK+KC_BLOCK_ARG0],0
+  mov   dword[KC_BLOCK+KC_BLOCK_ARG1],4096
+  int   080h
+  ret
+MaybeFreeMemoryTestDenied:
+  mov   dword[pProg4Msg],MsgFreeMemoryDeniedOk
+  call  PrintProg4Msg
+  mov   dword[Prog4ExitCode],0000004Ch
+  ret
+MaybeFreeMemoryTestFailed:
+  mov   dword[pProg4Msg],MsgFreeMemoryFail
+  call  PrintProg4Msg
+  mov   dword[Prog4ExitCode],00000090h
+MaybeFreeMemoryTestDone:
   ret
 
 MaybeLegacyTest:
@@ -605,6 +809,30 @@ MsgInt80Ok           dw 17
                      db "Prog4: int80 OK",13,10
 MsgInt80Fail         dw 19
                      db "Prog4: int80 FAIL",13,10
+MsgGetMemoryDeniedOk dw 25
+                     db "Prog4: getmem denied OK",13,10
+MsgGetMemoryTrustedOk dw 26
+                     db "Prog4: getmem trusted OK",13,10
+MsgGetMemorySystemOk dw 25
+                     db "Prog4: getmem system OK",13,10
+MsgGetMemoryFail     dw 20
+                     db "Prog4: getmem FAIL",13,10
+MsgFreeMemoryDeniedOk dw 26
+                     db "Prog4: freemem denied OK",13,10
+MsgFreeMemoryTrustedOk dw 27
+                     db "Prog4: freemem trusted OK",13,10
+MsgFreeMemorySystemOk dw 26
+                     db "Prog4: freemem system OK",13,10
+MsgFreeMemoryFail    dw 21
+                     db "Prog4: freemem FAIL",13,10
+MsgAuthNormalOk      dw 23
+                     db "Prog4: auth normal OK",13,10
+MsgAuthTrustedOk     dw 24
+                     db "Prog4: auth trusted OK",13,10
+MsgAuthSystemOk      dw 23
+                     db "Prog4: auth system OK",13,10
+MsgAuthFail          dw 18
+                     db "Prog4: auth FAIL",13,10
 DataBuffer           dw 0
 DataBufferText:
   times DATA_BUFFER_SIZE db 0

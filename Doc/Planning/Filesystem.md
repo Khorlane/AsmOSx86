@@ -34,6 +34,13 @@ file byte size
 file sector count
 ```
 
+The current image also carries two operator/test support files:
+
+```text
+STARTUP.TXT   optional startup command stream, sourced from Startup.txt
+LOG.TXT       reserved kernel-owned console mirror, cleared on startup
+```
+
 The current kernel file path is:
 
 ```text
@@ -69,6 +76,10 @@ no per-file BlockSize
 no allocation policy in the kernel
 floppy A: is the only active block device
 ```
+
+There is one special internal write path today: the kernel writes the console
+mirror into preallocated `LOG.TXT`. This is not exposed as a general file-write
+service.
 
 So the current `ASMF` manifest is not the native filesystem described below. It
 is a useful early file table that gives the boot loader, kernel, and user-program

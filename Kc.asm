@@ -42,6 +42,7 @@
 KC_STATUS_OK       equ 0
 KC_STATUS_INVALID  equ 1
 KC_STATUS_BAD_ARG  equ 2
+KC_STATUS_DENIED   equ 3
 
 ;--------------------------------------------------------------------------------------------------
 ; Kernel Call Numbers
@@ -57,13 +58,19 @@ KcFsClose          equ 8
 KcTmSleep          equ 9
 KcKbRead           equ 10
 KcTsGetInfo        equ 11
+KcMmGetMemory      equ 12
+KcMmFreeMemory     equ 13
+KcTsGetAuthority   equ 14
 
 ;--------------------------------------------------------------------------------------------------
 ; Kernel Call User Policy
 ;--------------------------------------------------------------------------------------------------
 ; User-allowed:
 ;   KcTmGetUptime, KcVdWriteStr, KcTsYield, KcTsExit, KcFsOpen,
-;   KcFsRead, KcFsClose, KcTmSleep, KcKbRead, KcTsGetInfo.
+;   KcFsRead, KcFsClose, KcTmSleep, KcKbRead, KcTsGetInfo,
+;   KcTsGetAuthority.
+; Trusted-only:
+;   KcMmGetMemory, KcMmFreeMemory.
 ; Kernel-only:
 ;   KcTsLoadProgram.
 ; User pointer validation:
@@ -127,6 +134,9 @@ KcTable:
   dd KcTmSleep,     KcTmSleepHandler
   dd KcKbRead,      KcKbReadHandler
   dd KcTsGetInfo,   KcTsGetInfoHandler
+  dd KcMmGetMemory, KcMmGetMemoryHandler
+  dd KcMmFreeMemory,KcMmFreeMemoryHandler
+  dd KcTsGetAuthority,KcTsGetAuthorityHandler
 KcTableEnd:
 KcTableCount equ (KcTableEnd-KcTable)/8
 
@@ -473,6 +483,33 @@ KcValidateUserReadBufferDone:
   ret
 
 ;--------------------------------------------------------------------------------------------------
+; KcRequireTrusted
+;   Output:
+;     KcStatus = KC_STATUS_OK if the caller is kernel-originated or the current
+;                user task has trusted/system authority; otherwise DENIED.
+;   Notes:
+;     Shared policy gate for trusted-only kernel-call services.
+;--------------------------------------------------------------------------------------------------
+KcRequireTrusted:
+  mov   dword[KcStatus],KC_STATUS_DENIED
+  call  TaskGetCurrentRecord
+  mov   edi,[pTaskRecord]
+  test  edi,edi
+  jz    KcRequireTrustedDone
+  call  TaskIsUserMode
+  mov   eax,[TaskModeIsUser]
+  test  eax,eax
+  jz    KcRequireTrustedOk
+  mov   edi,[pTaskRecord]
+  mov   eax,[edi+TASK_AUTHORITY]
+  cmp   eax,TASK_AUTH_TRUSTED
+  jb    KcRequireTrustedDone
+KcRequireTrustedOk:
+  mov   dword[KcStatus],KC_STATUS_OK
+KcRequireTrustedDone:
+  ret
+
+;--------------------------------------------------------------------------------------------------
 ; KcTmGetUptimeHandler
 ;   Output:
 ;     KcStatus  = KC_STATUS_OK
@@ -580,6 +617,7 @@ KcTsYieldHandler:
 ;     KcArg0 = pointer to kernel Str filename.
 ;     KcArg1 = task table index to prepare.
 ;     KcArg2 = stack slot index to assign.
+;     KcArg3 = TASK_AUTH_* authority to assign.
 ;   Output:
 ;     KcStatus  = KC_STATUS_OK or KC_STATUS_BAD_ARG
 ;     KcResult0 = TaskProgramStatus
@@ -605,6 +643,8 @@ KcTsLoadProgramHandler:
   mov   [TaskProgramTaskIndex],eax
   mov   eax,[KcArg2]
   mov   [TaskProgramStackSlot],eax
+  mov   eax,[KcArg3]
+  mov   [TaskProgramAuthority],eax
   call  TaskProgramLoad
   mov   eax,[TaskProgramStatus]
   mov   [KcResult0],eax
@@ -615,6 +655,62 @@ KcTsLoadProgramHandler:
   ret
 KcTsLoadProgramHandler1:
   mov   dword[KcStatus],KC_STATUS_BAD_ARG
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; KcMmGetMemoryHandler
+;   Input:
+;     KcArg0 = requested byte count.
+;   Output:
+;     KcStatus  = KC_STATUS_OK or KC_STATUS_DENIED.
+;     KcResult0 = reserved for future memory pointer.
+;     KcResult1 = accepted byte count when allowed.
+;   Notes:
+;     First privilege-policy proof for a trusted-only service. This does not
+;     allocate pages yet; it proves that normal ring 3 tasks cannot use the
+;     future memory-growth service while trusted tasks can pass the gate.
+;--------------------------------------------------------------------------------------------------
+KcMmGetMemoryHandler:
+  mov   dword[KcResult0],0
+  mov   dword[KcResult1],0
+  call  KcRequireTrusted
+  mov   eax,[KcStatus]
+  cmp   eax,KC_STATUS_OK
+  jne   KcMmGetMemoryDenied
+  mov   eax,[KcArg0]
+  mov   [KcResult1],eax
+  mov   dword[KcStatus],KC_STATUS_OK
+  ret
+KcMmGetMemoryDenied:
+  mov   dword[KcStatus],KC_STATUS_DENIED
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; KcMmFreeMemoryHandler
+;   Input:
+;     KcArg0 = future memory pointer.
+;     KcArg1 = byte count to free.
+;   Output:
+;     KcStatus  = KC_STATUS_OK or KC_STATUS_DENIED.
+;     KcResult0 = reserved for future allocator status.
+;     KcResult1 = accepted byte count when allowed.
+;   Notes:
+;     Trusted-only policy proof for the future free side of the memory-growth
+;     service family. This does not release pages yet.
+;--------------------------------------------------------------------------------------------------
+KcMmFreeMemoryHandler:
+  mov   dword[KcResult0],0
+  mov   dword[KcResult1],0
+  call  KcRequireTrusted
+  mov   eax,[KcStatus]
+  cmp   eax,KC_STATUS_OK
+  jne   KcMmFreeMemoryDenied
+  mov   eax,[KcArg1]
+  mov   [KcResult1],eax
+  mov   dword[KcStatus],KC_STATUS_OK
+  ret
+KcMmFreeMemoryDenied:
+  mov   dword[KcStatus],KC_STATUS_DENIED
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -647,6 +743,26 @@ KcTsGetInfoHandler:
   call  TaskIsUserMode
   mov   eax,[TaskModeIsUser]
   mov   [KcResult1],eax
+  mov   dword[KcStatus],KC_STATUS_OK
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; KcTsGetAuthorityHandler
+;   Output:
+;     KcStatus  = KC_STATUS_OK.
+;     KcResult0 = current task TASK_AUTH_* authority.
+;     KcResult1 = 0.
+;--------------------------------------------------------------------------------------------------
+KcTsGetAuthorityHandler:
+  mov   dword[KcResult0],TASK_AUTH_NORMAL
+  mov   dword[KcResult1],0
+  call  TaskGetCurrentRecord
+  mov   edi,[pTaskRecord]
+  test  edi,edi
+  jz    KcTsGetAuthorityDone
+  mov   eax,[edi+TASK_AUTHORITY]
+  mov   [KcResult0],eax
+KcTsGetAuthorityDone:
   mov   dword[KcStatus],KC_STATUS_OK
   ret
 

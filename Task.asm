@@ -93,7 +93,8 @@ TASK_USER_SS         equ 88
 TASK_USER_EFLAGS     equ 92
 TASK_USER_IRET_ESP   equ 96
 TASK_MODE            equ 100
-TASK_RECORD_SIZE     equ 104
+TASK_AUTHORITY       equ 104
+TASK_RECORD_SIZE     equ 108
 
 ;--------------------------------------------------------------------------------------------------
 ; Task Table and Stack-Slot Constants
@@ -189,6 +190,7 @@ TaskProgramStackSlot dd 0               ; input: stack slot index to assign
 TaskProgramStatus    dd 0               ; output: TASK_PROGRAM_STATUS_*
 TaskProgramExitCode  dd 0               ; output: selected task exit code
 TaskProgramArgPtr    dd 0               ; input: kernel Str argument for loaded task
+TaskProgramAuthority dd 0               ; input: TASK_AUTH_* authority for loaded task
 TaskProgramArgCopySrc dd 0              ; work: task argument copy source
 TaskProgramArgCopyPtr dd 0              ; work: task argument copy pointer
 TaskProgramArgCopyLeft dd 0             ; work: task argument bytes left
@@ -712,6 +714,8 @@ TaskProgramLoad:
   mov   dword[edi+TASK_USER_EFLAGS],USER_PROGRAM_INITIAL_EFLAGS
   call  TaskPrepareUserIretFrame
   mov   dword[edi+TASK_MODE],TASK_MODE_USER
+  mov   eax,[TaskProgramAuthority]
+  mov   [edi+TASK_AUTHORITY],eax
   mov   dword[edi+TASK_WAKE_LO],0
   mov   dword[edi+TASK_WAKE_HI],0
   mov   dword[edi+TASK_SLEEP_ACTIVE],0
@@ -799,6 +803,7 @@ TaskProgramInit2:
   mov   dword[edi+TASK_USER_EFLAGS],0
   mov   dword[edi+TASK_USER_IRET_ESP],0
   mov   dword[edi+TASK_MODE],TASK_MODE_KERNEL
+  mov   dword[edi+TASK_AUTHORITY],TASK_AUTH_SYSTEM
   mov   dword[edi+TASK_WAKE_LO],0
   mov   dword[edi+TASK_WAKE_HI],0
   mov   dword[edi+TASK_SLEEP_ACTIVE],0
@@ -806,6 +811,7 @@ TaskProgramInit2:
   mov   dword[edi+TASK_KEY_TYPE],0
   mov   dword[edi+TASK_KEY_CHAR],0
   mov   dword[TaskProgramArgPtr],0
+  mov   dword[TaskProgramAuthority],TASK_AUTH_NORMAL
   call  TaskLoadRing0Stack
   ret
 

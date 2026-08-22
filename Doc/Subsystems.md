@@ -170,13 +170,16 @@ Current initialization order in `Kernel.asm`:
 1. Load GDT and reload code/data segment state
 2. Load an empty IDT
 3. `PgInit`
-4. `TimerInit`
-5. `UptimeInit`
-6. `FsInit`
-7. `VdInit`
-8. `KbInit`
-9. `CnInit`
-10. Enter the main console loop
+4. `KcInit`
+5. `TimerInit`
+6. `UptimeInit`
+7. `FsInit`
+8. `VdInit`
+9. `FsLogInit`
+10. `KbInit`
+11. `CnInit`
+12. `CnStartupRun`
+13. Enter the main console loop
 
 This is the active source-of-truth sequence.
 
@@ -186,8 +189,12 @@ This is the active source-of-truth sequence.
 - `UptimeInit` must occur after timer initialization.
 - `FsInit` must occur before filesystem services are used.
 - `VdInit` must occur before normal kernel screen output is relied on.
+- `FsLogInit` occurs after video initialization and before console startup
+  messages so `LOG.TXT` mirrors startup output.
 - `KbInit` must occur before keyboard polling is used.
 - `CnInit` occurs after timer, filesystem, video, and keyboard initialization.
+- `CnStartupRun` occurs after `CnInit` so `STARTUP.TXT` commands use the normal
+  console dispatcher.
 
 ### Wall-Time Initialization Behavior
 
@@ -235,11 +242,15 @@ It is used for:
 - built-in kernel commands
 - command logging
 - command dispatch
+- optional `STARTUP.TXT` startup command stream
 - controlled shutdown
 
 It should be treated as an operator console, not as the future userland shell or standard user session interface.
 
-Current boot flow brings the console up early in startup, after timer, uptime, video, and keyboard initialization.
+Current boot flow brings the console up early in startup, after timer, uptime,
+filesystem, video, console-log, and keyboard initialization. After the console
+prints startup messages, it runs optional commands from `STARTUP.TXT` before
+entering the interactive loop.
 
 ### Active Commands
 
@@ -268,6 +279,22 @@ Current command-dispatch rules:
 - command name and argument text are split before dispatch
 
 If no command matches, the console currently does nothing and simply returns to the input loop.
+
+### Startup Command Stream
+
+`CnStartupRun` opens optional `STARTUP.TXT` through the current file service
+after console initialization.
+
+Rules:
+
+- missing file is ignored
+- one command per line
+- blank and whitespace-only lines are ignored
+- each command is trimmed, timestamp-logged, and dispatched like typed input
+- `Startup.txt` is the source file normally packed into the image as
+  `STARTUP.TXT`
+- expected contents are ordinary console commands such as test runs,
+  diagnostics, setup commands, or `shutdown` for automated tests
 
 ### Command Semantics
 
@@ -1047,12 +1074,15 @@ Current explicit boot subsystem order:
 
 ```text
 PgInit
+KcInit
 TimerInit
 UptimeInit
 FsInit
 VdInit
+FsLogInit
 KbInit
 CnInit
+CnStartupRun
 ```
 
 Current core contracts:

@@ -43,6 +43,7 @@ The current kernel provides:
 - VGA text-mode output
 - keyboard polling
 - command-line console
+- optional `STARTUP.TXT` console startup command stream
 - initial memory-backed Kernel Call dispatcher
 - initial tested Kernel Calls:
   - `KcTmGetUptime`
@@ -56,6 +57,9 @@ The current kernel provides:
   - `KcTmSleep`
   - `KcKbRead`
   - `KcTsGetInfo`
+  - `KcTsGetAuthority`
+  - `KcMmGetMemory`
+  - `KcMmFreeMemory`
 - simple built-in commands:
   - `Clear`
   - `Date`
@@ -277,6 +281,10 @@ BuildCopy writes the raw ASMF manifest and packed file data
 Bochs     runs the bootable floppy image
 ```
 
+`BuildCopy.ps1` includes non-empty `Startup.txt` as `STARTUP.TXT`. After
+console initialization, the kernel runs that command stream before entering the
+interactive console loop.
+
 Detailed script usage lives in `BuildScripts.md`.
 
 The floppy preparation and boot flow from BIOS handoff through `Boot.asm` and
@@ -288,7 +296,8 @@ the protected-mode kernel live in `BootProcess.md`.
 
 The kernel is resident and permanent.
 
-A future user program may be loaded, stopped, replaced, or swapped, but the kernel remains in place.
+User programs may be loaded, stopped, or replaced, but the kernel remains in
+place. Future nonresident task support may add swapping or backing-store policy.
 
 Design principle:
 
@@ -389,47 +398,144 @@ Swapping is memory residency management.
 
 ---
 
-## 9. Future Task Model
+## 9. Current Task Model
 
-A future task table may describe each task known to the kernel.
+AsmOSx86 now has a small cooperative task table for kernel and loaded user
+programs.
 
-Example fields, not locked implementation:
+Current implemented concepts include:
 
 ```text
-TaskId
-TaskState
-TaskResident
-TaskMemBase
-TaskMemLimit
-TaskEntry
-TaskEip
-TaskEsp
-TaskFlags
-TaskBackingStore
+task table with fixed slots
+task state
+saved ESP
+execution-mode tag
+user program physical allocation
+fixed user virtual mapping at 00200000h
+per-task KcBlock page at 00210000h
+prepared ring 3 iretd frame
+per-task startup argument area
 ```
 
-Possible task states:
+Current task states:
 
 ```text
 Free
-Loaded
-Runnable
+Ready
 Running
 Blocked
-Waiting
-Nonresident
 Exited
 ```
 
-The early implementation can be much simpler. For example, it may begin with only one manually loaded user task, then grow into multiple resident tasks, then later add nonresident task support.
+The scheduler is cooperative. Tasks switch when user programs enter the kernel
+through `int 80h` for yield, exit, sleep, keyboard read, or another service that
+can block or schedule.
+
+Future refinements may add richer task identity, session ownership, nonresident
+task support, runtime budgets, or preemptive/watchdog behavior.
 
 The design should allow that progression.
 
 ---
 
-## 10. Kernel Call Interface
+## 10. Current Ring 3 Userland
 
-AsmOSx86 should expose userland-accessible kernel services through a defined Kernel Call Interface.
+AsmOSx86 has a working ring 3 userland path for loaded user programs.
+
+User programs are raw flat binaries loaded from the `ASMF` filesystem and mapped
+at the fixed user virtual base:
+
+```text
+00200000h
+```
+
+Loaded user tasks enter through an `iretd` frame with:
+
+```text
+CS = USER_CODE_SEL = 001Bh
+DS = USER_DATA_SEL = 0023h
+SS = USER_DATA_SEL = 0023h
+```
+
+User programs enter the kernel through:
+
+```asm
+int   80h
+```
+
+The old fixed gateway address `00100005h` is reserved and denied. Ring 3
+attempts to call that address page fault before reaching the ring 0 diagnostic
+guard.
+
+### Ring 3 Kernel Calls
+
+User programs exchange arguments and results through the current task's KcBlock.
+
+Current user-originated path:
+
+```text
+KcUserInterruptEntry
+  -> KcBlockDispatch
+  -> KcDispatch service handlers
+```
+
+`KcBlockDispatch` copies KcBlock values into the kernel-call globals, dispatches
+the service, and copies results back when the same task resumes.
+
+Switching and blocking calls use interrupt-aware paths:
+
+```text
+KcTsYield
+KcTsExit
+KcTmSleep
+KcKbRead
+```
+
+`KcTsLoadProgram` is kernel-originated only. Userland program loading goes
+through the console `Run` command for now.
+
+### Ring 3 Fault Policy
+
+Kernel faults halt the system.
+
+User faults terminate the current task and return to the scheduler:
+
+```text
+general protection fault -> 0F0D
+page fault               -> 0F0E
+```
+
+User fault diagnostics print:
+
+```text
+fault vector
+faulting CS
+faulting EIP
+CR2 linear address for page faults
+```
+
+### Ring 3 Smoke Tests
+
+Expected ring 3 proof results:
+
+```text
+run prog4.bin -- cpl     -> 001B
+run prog4.bin -- info    -> 0101
+run prog4.bin -- priv    -> fault line + 0F0D
+run prog4.bin -- mem     -> fault line + 0F0E
+run prog4.bin -- load    -> 0048
+run prog4.bin -- legacy  -> fault at 00100005 + 0F0E
+run prog4.bin            -> 0000
+run prog1.bin | prog2.bin | prog3.bin
+run prog4.bin -- sleep | prog1.bin | prog4.bin -- bad
+```
+
+---
+
+## 11. Kernel Call Interface
+
+AsmOSx86 exposes userland-accessible kernel services through a defined Kernel
+Call Interface.
 
 Project abbreviation:
 
@@ -452,10 +558,12 @@ KcResult0     dd 0
 KcResult1     dd 0
 ```
 
-Core dispatcher names:
+Core dispatcher and entry names:
 
 ```asm
 KcDispatch
+KcBlockDispatch
+KcUserInterruptEntry
 KcValidate
 KcTable
 KcTableCount
@@ -465,31 +573,31 @@ Current implementation status:
 
 ```text
 Kc.asm exists and is included in the kernel.
-The current dispatcher is table-driven and uses global memory-backed Kc fields.
+The dispatcher is table-driven.
+Kernel-originated calls use global memory-backed Kc fields through KcDispatch.
+User-originated calls enter through int 80h and use the current task's KcBlock
+through KcBlockDispatch.
 KcTest exercises KcTmGetUptime and KcVdWriteStr through KcDispatch.
 Run exercises program loading, task execution, filesystem calls, and task exit
 through the kernel-call path.
 ```
 
-The exact mechanism can evolve.
-
-Early mechanism:
+Kernel-originated mechanism:
 
 ```asm
 call  KcDispatch
 ```
 
-Later mechanism:
+User-originated mechanism:
 
 ```asm
-int   KC_VECTOR
+int   80h
 ```
 
-Possible later protected-mode mechanisms:
+Possible later protected-mode mechanisms remain design options:
 
 ```text
 trap gate
-interrupt gate
 call gate
 ```
 
@@ -528,7 +636,7 @@ This keeps names short while still making the service family obvious.
 
 ---
 
-## 11. Kernel Call Design Philosophy
+## 12. Kernel Call Design Philosophy
 
 The Kernel Call Interface should follow the same memory-contract ABI as the rest of the kernel.
 
@@ -561,11 +669,13 @@ Memory is the contract.
 Registers are scratch.
 ```
 
-The kernel-call boundary is also a protection boundary in design, even before hardware privilege enforcement exists. Userland requests services; the kernel decides whether the request is valid and how to perform it.
+The kernel-call boundary is also the current ring 3 protection boundary.
+Userland requests services through `int 80h`; the kernel validates the request
+and decides whether to perform it.
 
 ---
 
-## 12. Candidate Kernel Calls
+## 13. Candidate Kernel Calls
 
 The following list is conceptual. It captures the broad service families AsmOSx86 is likely to need, without locking in exact argument layouts or implementation details.
 
@@ -600,6 +710,9 @@ KcFsClose       - Close an open file handle
 KcTmSleep       - Block current task until a cooperative wake deadline
 KcKbRead        - Block current task until one keyboard event is available
 KcTsGetInfo     - Return current task index and user-mode tag
+KcTsGetAuthority - Return current task authority tag
+KcMmGetMemory   - Trusted-only memory-service policy proof
+KcMmFreeMemory  - Trusted-only memory-service policy proof
 ```
 
 ### Filesystem — `KcFs*`
@@ -679,8 +792,8 @@ KcTsGetState    - Get current task state/info
 ### Memory Management — `KcMm*`
 
 ```text
-KcMmAlloc       - Allocate user memory
-KcMmFree        - Free user memory
+KcMmGetMemory   - Request more user memory
+KcMmFreeMemory  - Release user memory
 KcMmInfo        - Get memory limits/available memory for task/session
 ```
 
@@ -688,7 +801,7 @@ The first practical implementation should be much smaller than this list. The go
 
 ---
 
-## 13. Current Time Model
+## 14. Current Time Model
 
 AsmOSx86 currently distinguishes two time concepts:
 
@@ -715,13 +828,14 @@ Future scheduler and timeout code should use monotonic time, not wall time.
 
 ---
 
-## 14. Current Console Model
+## 15. Current Console Model
 
 The current console is a kernel/operator console. It should be understood as the fixed operator terminal for the machine, not as userland standard input/output.
 
 It provides:
 
 - kernel startup messages
+- optional `STARTUP.TXT` startup command stream
 - operator command input
 - command logging
 - command dispatch
@@ -754,11 +868,24 @@ The console also acts as a convenient proof point for the memory-contract ABI:
 - uptime prints through `UptimePrint`
 - `KcTest` exercises `KcDispatch`, `KcVdWriteStr`, and `KcTmGetUptime`
 
+After startup messages, the console attempts to open optional `STARTUP.TXT`.
+Each nonblank line is trimmed, timestamp-logged, and dispatched through the same
+command table used for typed input. `Startup.txt` is the source file normally
+packed into the image as `STARTUP.TXT`. Its expected contents are ordinary
+console commands, commonly diagnostics, smoke-test runs, setup commands, or
+`shutdown` for a fully automated build/run/validate cycle.
+
+The trusted startup/console launch path can tag a task as trusted or system
+with a launch prefix such as `/trusted` or `/system` before the program name.
+For example, `run /system prog4.bin` requests system authority for that loaded
+task. This is policy assigned by the trusted command source while loading the
+task, not authority granted by the user program after it starts.
+
 Future userland input/output should use separate `KcKb*` and `KcVd*` services tied to logical task/session state.
 
 ---
 
-## 15. Current Shutdown Semantics
+## 16. Current Shutdown Semantics
 
 The current `Shutdown` command:
 
@@ -781,7 +908,7 @@ On real 386-class hardware, the soft power-off ports may do nothing. The final h
 
 ---
 
-## 16. Keyboard, Video, and Session Device Model
+## 17. Keyboard, Video, and Session Device Model
 
 AsmOSx86 should distinguish physical devices from logical task/session services.
 
@@ -841,7 +968,7 @@ That remains the kernel-side text output path. Future userland display output sh
 
 ---
 
-## 17. Memory Layout Direction
+## 18. Memory Layout Direction
 
 The current concrete base is:
 
@@ -874,108 +1001,50 @@ Early experimentation may use fixed user slots. Later versions can use a user me
 
 ---
 
-## 18. Evolution Path
+## 19. Evolution Path
 
-A reasonable development sequence:
+A reasonable development sequence is now partly complete.
 
-### Phase 1 — Current kernel baseline
+### Completed foundation
 
-Current status:
+Current status includes:
 
 ```text
-bootloader loads kernel
-kernel initializes timer/uptime/video/keyboard/console
+Boot.asm loads the kernel
+kernel initializes paging, Kc, timer, uptime, filesystem, video, log, keyboard, and console
 wall time initializes lazily on first Time* use
 console commands work
 memory-contract ABI enforced in included kernel files
+ASMF manifest file loading works
+Run launches one to three loaded user programs
+loaded user programs run in ring 3
+user programs enter kernel services through int 80h
+cooperative task switching works for yield, exit, sleep, and keyboard wait
+LOG.TXT captures console output
+STARTUP.TXT can automate smoke tests and shutdown
 ```
 
-### Phase 2 — Kernel Call Interface skeleton
+### Remaining direction
 
-Current status: started and smoke-tested.
-
-Implemented so far:
+Future growth should build from the current foundation:
 
 ```text
-Kc.asm
-KcNumber
-KcStatus
-KcArg*
-KcResult*
-KcDispatch
-KcValidate
-KcLookup
-small KcTable
-KcTmGetUptime
-KcVdWriteStr
-KcTsYield
-KcTsLoadProgram
-KcTsExit
-KcFsOpen
-KcFsRead
-KcFsClose
-KcTmSleep
-KcKbRead
-KcTsGetInfo
+richer task/process/session identity
+more complete filesystem behavior
+additional block devices
+logical user sessions
+optional nonresident task/backing-store policy
+timer interrupt event collection
+runaway-task watchdog policy
+possible preemptive scheduling only if it proves useful
 ```
 
-The kernel test path can invoke calls internally with `call KcDispatch` through
-the operator-console `KcTest` command. Loaded user programs enter through
-`int 80h` and exchange arguments/results through their KcBlock.
-
-### Phase 3 — Simple user program arena
-
-Add:
-
-```text
-UserBase
-UserLimit
-one manually loaded test program
-simple user stack
-controlled entry/return
-```
-
-The first user program can be extremely small.
-
-### Phase 4 — Multiple resident tasks
-
-Add:
-
-```text
-task table
-resident task states
-save/restore task context
-round-robin or manual yield
-```
-
-No swapping is required if all test tasks fit in memory.
-
-### Phase 5 — Optional swapping
-
-Only after resident task switching works:
-
-```text
-task backing store
-resident/nonresident task state
-swap in/out policy
-```
-
-Swapping should not be part of the first context-switch implementation.
-
-### Phase 6 — Hardware timer scheduling
-
-Once task save/restore is solid:
-
-```text
-timer interrupt
-preemptive scheduling
-priority policy
-sleep/timeouts
-```
+Swapping should remain separate from task switching. Hardware timer scheduling
+should remain separate from timer interrupt event collection.
 
 ---
 
-## 19. Scheduling, Interrupts, and Runaway Task Policy
+## 20. Scheduling, Interrupts, and Runaway Task Policy
 
 AsmOSx86 should distinguish interrupts from scheduling.
 
@@ -1119,7 +1188,7 @@ A task that refuses to cooperate may be terminated.
 
 ---
 
-## 20. Blocking Kernel Calls and Task Readiness
+## 21. Blocking Kernel Calls and Task Readiness
 
 Some Kernel Calls complete immediately. Others may need to wait for a device, file operation, input event, timer, or other external condition.
 
@@ -1257,7 +1326,7 @@ The user program does not need to know whether the service completed immediately
 
 ---
 
-## 21. Kernel Call Communication Area
+## 22. Kernel Call Communication Area
 
 Each user task should have a standard Kernel Call communication area.
 
@@ -1410,7 +1479,7 @@ even if the task was blocked and resumed before the result became available.
 
 ---
 
-## User Sessions, Sign-On, and Menu Panels
+## 23. User Sessions, Sign-On, and Menu Panels
 
 AsmOSx86 should use the concept of a user session rather than centering the userland model around a shell.
 
@@ -1584,7 +1653,7 @@ User sessions receive logical input and logical video services.
 
 ---
 
-## 22. Design Principles
+## 24. Design Principles
 
 ### Keep the kernel resident
 
@@ -1608,45 +1677,50 @@ User programs do not call arbitrary kernel routines.
 
 ### Start simple
 
-Use direct calls and simple tables before introducing interrupts, privilege transitions, or gates.
+Use direct calls and simple tables for kernel-originated paths. Use the current
+`int 80h` ring 3 path for user-originated services. Avoid adding larger
+frameworks until the current memory-backed contracts need them.
 
 ### Add hardware complexity deliberately
 
 Introduce hardware features only when they clarify or support the execution
 model being tested. Paging is now part of the current user-program loading
-model; privilege rings, preemption, and fuller hardware enforcement can still
+model, and ring 3 is now the current userland enforcement mechanism.
+Preemption, richer interrupt use, and broader hardware enforcement can still
 come later.
 
 ---
 
-## 23. Out of Scope For Now
+## 25. Out of Scope For Now
 
 AsmOSx86 does not need these immediately:
 
 ```text
-filesystem
-device model
-privilege separation
+general-purpose file write/create/delete
+full native filesystem allocation
+full dynamic device model
+logical user sessions
+nonresident task swapping
 preemptive scheduler
 ```
 
 Those can come later.
 
-The near-term goal is a clean conceptual path from:
+The current completed foundation is:
 
 ```text
-resident kernel + console
+resident kernel + console + ASMF file loading + ring 3 user tasks
 ```
 
-to:
+The next growth path is toward:
 
 ```text
-resident kernel + kernel call interface + simple user task
+resident kernel + kernel call interface + logical sessions + richer filesystem
 ```
 
 ---
 
-## 24. Working Definition
+## 26. Working Definition
 
 AsmOSx86 is a resident 32-bit protected-mode kernel loaded at `00100000h`.
 

@@ -61,6 +61,8 @@ Next sectors  Prog2.bin
 Next sectors  Prog3.bin
 Next sectors  Prog4.bin, if present
 Next sectors  Data.txt, if present
+Next sectors  Startup.txt, if present
+Final sectors LOG.TXT reserved console mirror
 ```
 
 The manifest is one 512-byte sector.
@@ -98,7 +100,7 @@ That script writes the manifest and raw file data.
 
 `KERNEL.BIN` is required.
 
-The script also includes optional files when they exist:
+The script also includes optional input files when they exist:
 
 ```text
 PROG1.BIN
@@ -106,14 +108,21 @@ PROG2.BIN
 PROG3.BIN
 PROG4.BIN
 DATA.TXT
-LOG.TXT
+STARTUP.TXT
 ```
 
 `LOG.TXT` is a reserved kernel-owned console mirror file. The build script
 preallocates it, and the kernel clears it during startup before logging begins.
 
-The console `Run` command can launch `PROG1.BIN`, `PROG2.BIN`, and `PROG3.BIN`
-together with `run prog1.bin | prog2.bin | prog3.bin`.
+`STARTUP.TXT` is optional. When present, the kernel console reads it after
+initialization and runs each nonblank line through the normal console command
+dispatcher. `Startup.txt` is the source file normally packed into the image as
+`STARTUP.TXT`. Its expected contents are ordinary console commands, such as
+diagnostics, smoke-test runs, setup commands, or `shutdown` for an automated
+test image.
+
+The console `Run` command can launch one to three programs together, for example
+`run prog1.bin | prog2.bin | prog3.bin`.
 
 ## Real Hardware Note
 

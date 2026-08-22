@@ -9,6 +9,8 @@ User programs voluntarily enter the kernel through scheduling points such as:
 ```text
 KcTsYield
 KcTsExit
+KcTmSleep
+KcKbRead
 ```
 
 The kernel can then choose the next ready task and switch to it.
@@ -42,6 +44,9 @@ per-task physical program allocation above the kernel
 fixed user virtual base at 00200000h
 per-task KcBlock page at 00210000h
 round-robin scan for the next Ready task
+cooperative sleep blocking and wake checks
+keyboard-read blocking until a key event is available
+interrupt-aware switch paths for user yield/exit/sleep/key services
 ```
 
 The current user-program loader reads raw `PROG*.BIN` files through the
@@ -65,10 +70,10 @@ What does not exist yet:
 ```text
 timer interrupt scheduling
 preemptive task interruption
-sleep/block wait queues
 runtime budget accounting
 runaway-task enforcement
 interrupt-safe scheduler state
+general wait queues for filesystem/device I/O
 ```
 
 The empty IDT is loaded during kernel startup, and the PIT is polled for current

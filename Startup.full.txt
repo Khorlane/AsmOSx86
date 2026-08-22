@@ -1,0 +1,34 @@
+date
+time
+uptime
+help
+fstest
+kctest
+run nope.bin
+run prog4.bin
+run prog4.bin -- int80
+run prog4.bin -- info
+run prog4.bin -- cpl
+run prog4.bin -- sleep
+run prog4.bin -- load
+run prog4.bin -- getmem
+run /trusted prog4.bin -- getmem
+run /system prog4.bin -- system
+run prog4.bin -- auth
+run /trusted prog4.bin -- auth
+run /system prog4.bin -- auth
+run prog4.bin -- freemem
+run /trusted prog4.bin -- freemem
+run /system prog4.bin -- systemfree
+run prog4.bin -- bad-print
+run prog4.bin -- bad-open
+run prog4.bin -- bad-read
+run prog4.bin -- bad-zero-call
+run prog4.bin -- bad-call-number
+run prog4.bin -- bad
+run prog1.bin | prog2.bin | prog3.bin
+run prog4.bin -- sleep | prog1.bin | prog4.bin -- bad
+run prog4.bin -- priv
+run prog4.bin -- mem
+run prog4.bin -- legacy
+shutdown

@@ -63,12 +63,12 @@ Bochs remains the normal AsmOSx86 test environment throughout the transition.
 
 Early Asm32x86 work can happen on Windows while AsmOSx86 continues to boot and
 run in Bochs. Build scripts can copy generated userland programs and tools into
-the FAT12 floppy image for AsmOSx86 testing.
+the raw `ASMF` floppy image for AsmOSx86 testing.
 
 As the OS grows, Bochs can be used to prove:
 
 - fixed-virtual-base raw user-program loading
-- FAT12 file reading
+- ASMF manifest file reading
 - kernel-call behavior
 - userland task execution
 - Asm32x86 running as an AsmOSx86 userland program

@@ -43,9 +43,14 @@ pCnLogMsg        dd 0                  ; Pointer to log message
 pCnRunInput      dd 0                  ; Pointer to Run argument scanner
 pCnRunFileDst    dd 0                  ; Pointer to Run file destination
 pCnRunArgDst     dd 0                  ; Pointer to Run argument destination
+pCnRunAuthDst    dd 0                  ; Pointer to Run authority destination
 pCnTmpInput      dd 0                  ; Pointer to temp: input payload
 pCnTmpTable      dd 0                  ; Pointer to temp: command table
 CnRunCount       dd 0                  ; Run program count
+CnRunAuthority   dd 0                  ; TASK_AUTH_* authority for Run loads
+CnRunAuth1       dd 0                  ; Run authority for task 1
+CnRunAuth2       dd 0                  ; Run authority for task 2
+CnRunAuth3       dd 0                  ; Run authority for task 3
 CnRunParseOk     dd 0                  ; 1 when Run parse succeeds
 CnRunFailTask    dd 0                  ; Run load failure task index
 CnCmdLineLen     dw 0                  ; Command line length
@@ -94,7 +99,7 @@ String  CnRunMsg1,"Run: loading programs"
 String  CnRunMsg2,"Run: running programs"
 String  CnRunMsg3,"Run: complete"
 String  CnRunExit,"Run: task exit 0000"
-String  CnRunUsage,"Run usage: run <program> [-- <arg>] [| <program> [-- <arg>]]"
+String  CnRunUsage,"Run usage: run [/trusted|/system] <program> [-- <arg>] [| ...]"
 String  CnRunFail,"Run: load failed task 0 status 0000"
 
 ; ----- Console commands -----
@@ -806,9 +811,21 @@ CnDoCmdKcTest:
 ;   Input:
 ;     pCnCmdArg/CnCmdArgLen = run launch specs from command line.
 ;   Output:
-;     Loads 1..3 named user programs, then runs them cooperatively together.
+;     Loads 1..3 normal user programs, then runs them cooperatively together.
 ;------------------------------------------------------------------------------
 CnDoCmdRun:
+  mov   dword[CnRunAuthority],TASK_AUTH_NORMAL
+  call  CnDoCmdRunCommon
+  ret
+
+;------------------------------------------------------------------------------
+; CnDoCmdRunCommon
+;   Input:
+;     CnRunAuthority = TASK_AUTH_* authority to assign to each loaded task.
+;   Output:
+;     Loads 1..3 named user programs, then runs them cooperatively together.
+;------------------------------------------------------------------------------
+CnDoCmdRunCommon:
   mov   ax,[CnCmdArgLen]
   test  ax,ax
   jz    CnDoCmdRunUsage
@@ -917,6 +934,7 @@ CnDoCmdRunFail:
 ;   Output:
 ;     CnRunCount = number of parsed launch specs.
 ;     CnRunFile1..3/CnRunArg1..3 = parsed filenames and optional arguments.
+;     CnRunAuth1..3 = parsed or default TASK_AUTH_* launch authority.
 ;     CnRunParseOk = 1 when the command matches the supported run grammar.
 ;------------------------------------------------------------------------------
 CnRunParseSpecs:
@@ -928,6 +946,10 @@ CnRunParseSpecs:
   mov   word[CnRunArg1],0
   mov   word[CnRunArg2],0
   mov   word[CnRunArg3],0
+  mov   eax,[CnRunAuthority]
+  mov   [CnRunAuth1],eax
+  mov   [CnRunAuth2],eax
+  mov   [CnRunAuth3],eax
   mov   eax,[pCnCmdArg]
   mov   [pCnRunInput],eax
   mov   ax,[CnCmdArgLen]
@@ -941,6 +963,7 @@ CnRunParseSpecsLoop:
   cmp   eax,3
   jae   CnRunParseSpecsDone
   call  CnRunSelectDsts
+  call  CnRunCopyAuthority
   call  CnRunCopyFile
   mov   ax,[CnRunFileLen]
   test  ax,ax
@@ -1008,7 +1031,7 @@ CnRunSkipSpacesDone:
 ;------------------------------------------------------------------------------
 ; CnRunSelectDsts
 ;   Output:
-;     pCnRunFileDst/pCnRunArgDst point at the current launch-spec buffers.
+;     pCnRunFileDst/pCnRunArgDst/pCnRunAuthDst point at current buffers.
 ;------------------------------------------------------------------------------
 CnRunSelectDsts:
   mov   eax,[CnRunCount]
@@ -1020,18 +1043,91 @@ CnRunSelectDsts:
   mov   [pCnRunFileDst],eax
   lea   eax,[CnRunArg1]
   mov   [pCnRunArgDst],eax
+  lea   eax,[CnRunAuth1]
+  mov   [pCnRunAuthDst],eax
   ret
 CnRunSelectDsts2:
   lea   eax,[CnRunFile2]
   mov   [pCnRunFileDst],eax
   lea   eax,[CnRunArg2]
   mov   [pCnRunArgDst],eax
+  lea   eax,[CnRunAuth2]
+  mov   [pCnRunAuthDst],eax
   ret
 CnRunSelectDsts3:
   lea   eax,[CnRunFile3]
   mov   [pCnRunFileDst],eax
   lea   eax,[CnRunArg3]
   mov   [pCnRunArgDst],eax
+  lea   eax,[CnRunAuth3]
+  mov   [pCnRunAuthDst],eax
+  ret
+
+;------------------------------------------------------------------------------
+; CnRunCopyAuthority
+;   Output:
+;     Consumes optional /trusted or /system launch authority for current spec.
+;------------------------------------------------------------------------------
+CnRunCopyAuthority:
+  mov   ax,[CnRunInputLeft]
+  cmp   ax,7
+  jb    CnRunCopyAuthorityDone
+  mov   esi,[pCnRunInput]
+  cmp   byte[esi],'/'
+  jne   CnRunCopyAuthorityDone
+  cmp   byte[esi+1],'s'
+  jne   CnRunCopyAuthorityTrusted
+  cmp   byte[esi+2],'y'
+  jne   CnRunCopyAuthorityTrusted
+  cmp   byte[esi+3],'s'
+  jne   CnRunCopyAuthorityTrusted
+  cmp   byte[esi+4],'t'
+  jne   CnRunCopyAuthorityTrusted
+  cmp   byte[esi+5],'e'
+  jne   CnRunCopyAuthorityTrusted
+  cmp   byte[esi+6],'m'
+  jne   CnRunCopyAuthorityTrusted
+  cmp   ax,7
+  je    CnRunCopyAuthoritySystem
+  cmp   byte[esi+7],' '
+  jne   CnRunCopyAuthorityTrusted
+CnRunCopyAuthoritySystem:
+  mov   edi,[pCnRunAuthDst]
+  mov   dword[edi],TASK_AUTH_SYSTEM
+  add   esi,7
+  mov   [pCnRunInput],esi
+  sub   word[CnRunInputLeft],7
+  call  CnRunSkipSpaces
+  ret
+CnRunCopyAuthorityTrusted:
+  cmp   ax,8
+  jb    CnRunCopyAuthorityDone
+  cmp   byte[esi+1],'t'
+  jne   CnRunCopyAuthorityDone
+  cmp   byte[esi+2],'r'
+  jne   CnRunCopyAuthorityDone
+  cmp   byte[esi+3],'u'
+  jne   CnRunCopyAuthorityDone
+  cmp   byte[esi+4],'s'
+  jne   CnRunCopyAuthorityDone
+  cmp   byte[esi+5],'t'
+  jne   CnRunCopyAuthorityDone
+  cmp   byte[esi+6],'e'
+  jne   CnRunCopyAuthorityDone
+  cmp   byte[esi+7],'d'
+  jne   CnRunCopyAuthorityDone
+  cmp   ax,8
+  je    CnRunCopyAuthorityTrustedOk
+  cmp   byte[esi+8],' '
+  jne   CnRunCopyAuthorityDone
+CnRunCopyAuthorityTrustedOk:
+  mov   edi,[pCnRunAuthDst]
+  mov   dword[edi],TASK_AUTH_TRUSTED
+  add   esi,8
+  mov   [pCnRunInput],esi
+  sub   word[CnRunInputLeft],8
+  call  CnRunSkipSpaces
+CnRunCopyAuthorityDone:
   ret
 
 ;------------------------------------------------------------------------------
@@ -1128,10 +1224,36 @@ CnRunLoadTask:
   mov   [CnRunFailTask],eax
   mov   [TaskProgramTaskIndex],eax
   mov   dword[KcNumber],KcTsLoadProgram
+  call  CnRunSelectTaskAuthority
   call  KcDispatch
   mov   eax,[KcStatus]
   cmp   eax,KC_STATUS_OK
   jne   CnRunLoadTaskDone
   call  TaskProgramSetArg
 CnRunLoadTaskDone:
+  ret
+
+;------------------------------------------------------------------------------
+; CnRunSelectTaskAuthority
+;   Input:
+;     KcArg1 = task table index.
+;   Output:
+;     KcArg3 = selected TASK_AUTH_* launch authority.
+;------------------------------------------------------------------------------
+CnRunSelectTaskAuthority:
+  mov   eax,[KcArg1]
+  cmp   eax,2
+  je    CnRunSelectTaskAuthority2
+  cmp   eax,3
+  je    CnRunSelectTaskAuthority3
+  mov   eax,[CnRunAuth1]
+  mov   [KcArg3],eax
+  ret
+CnRunSelectTaskAuthority2:
+  mov   eax,[CnRunAuth2]
+  mov   [KcArg3],eax
+  ret
+CnRunSelectTaskAuthority3:
+  mov   eax,[CnRunAuth3]
+  mov   [KcArg3],eax
   ret
