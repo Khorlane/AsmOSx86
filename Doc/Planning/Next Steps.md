@@ -1,8 +1,8 @@
 # Next Steps
 
 These are near-term implementation notes for AsmOSx86. They intentionally keep
-hardware interrupts, ring 3, and preemptive scheduling near the bottom of the
-list for now.
+hardware interrupts and preemptive scheduling near the bottom of the list for
+now.
 
 ## Guiding Bias
 

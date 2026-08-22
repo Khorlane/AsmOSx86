@@ -86,7 +86,8 @@ PG_USER_FLAGS    = present + writable + user-accessible
 PG_KCBLOCK_FLAGS = present + writable + user-accessible
 ```
 
-The future ring 3 names remain as policy markers:
+The older `PG_FUTURE_*` names remain as policy markers for the same active
+permission intent:
 
 ```text
 PG_FUTURE_KERNEL_FLAGS  = present + writable
@@ -94,7 +95,7 @@ PG_FUTURE_USER_FLAGS    = present + writable + user-accessible
 PG_FUTURE_KCBLOCK_FLAGS = present + writable + user-accessible
 ```
 
-That means the intended future policy is:
+That means the active policy is:
 
 ```text
 kernel identity mappings -> supervisor-only

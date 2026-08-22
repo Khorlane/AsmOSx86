@@ -309,8 +309,8 @@ TaskPut4HexDone:
 ;   Output:
 ;     TaskUserOk = 1 if the range is inside the user program or KcBlock area.
 ;   Notes:
-;     This is convention enforcement today. Future ring 3 paging enforcement
-;     should make illegal user memory access fault before kernel use.
+;     Kc handlers validate user pointers before kernel routines use them, even
+;     though ring 3 paging now faults direct illegal user memory access.
 ;--------------------------------------------------------------------------------------------------
 TaskValidateUserRange:
   mov   dword[TaskUserOk],0
@@ -950,8 +950,8 @@ TaskProgramPrintExitCodesNDone:
 ;   Output:
 ;     TaskEnterStatus = TASK_ENTER_STATUS_*.
 ;   Notes:
-;     Future ring 3 transition point. TaskEnterEnabled keeps the iretd path
-;     disabled until the rest of the user/kernel boundary is ready.
+;     Low-level ring transition routine. TaskEnterEnabled remains as a simple
+;     guard around the iretd path.
 ;--------------------------------------------------------------------------------------------------
 TaskEnterUserMode:
   mov   dword[TaskEnterStatus],TASK_ENTER_STATUS_NO_TASK

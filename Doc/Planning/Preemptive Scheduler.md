@@ -48,14 +48,17 @@ The current user-program loader reads raw `PROG*.BIN` files through the
 `KcFsOpen` / `KcFsRead` / `KcFsClose` path, which currently resolves files
 through the `ASMF` manifest on the raw floppy image.
 
-The current switch point is `TaskYield`. It saves the current task's `ESP`,
-marks the current task ready unless it has exited, scans the task table for the
-next `Ready` task, maps that task's program into the shared user virtual range,
-loads the selected task's saved `ESP`, and returns through that task's stack.
+The current cooperative switch point is `TaskYield`. It saves the current
+kernel task's `ESP`, marks the current task ready unless it has exited, scans
+the task table for the next `Ready` task, maps that task's program into the
+shared user virtual range, and resumes the selected task. Kernel tasks resume
+through their saved stack; user tasks resume through a saved ring 3 `iretd`
+frame.
 
-The current user/kernel entry path for user tasks is `KcUserDispatch`.
-`KcTsYield` and `KcTsExit` are handled specially because they can change which
-task resumes after the kernel call.
+The current user/kernel entry path for user tasks is `int 80h`. Kc calls still
+use the current task's KcBlock, and switching/blocking calls are handled
+through interrupt-aware task routines because they can change which task resumes
+after the kernel call.
 
 What does not exist yet:
 
@@ -66,7 +69,6 @@ sleep/block wait queues
 runtime budget accounting
 runaway-task enforcement
 interrupt-safe scheduler state
-ring 3 enforcement
 ```
 
 The empty IDT is loaded during kernel startup, and the PIT is polled for current
@@ -198,7 +200,6 @@ timer-based runaway detection = likely desirable later
 preemptive scheduler          = optional, maybe not planned
 ```
 
-Privilege separation through ring 3 is more clearly desirable as a future OS
-hardening step. Full preemptive scheduling is more optional. The cooperative
-model plus watchdog enforcement may be enough for the kind of OS AsmOSx86 is
-becoming.
+Privilege separation through ring 3 is now present as an initial OS hardening
+step. Full preemptive scheduling is more optional. The cooperative model plus
+watchdog enforcement may be enough for the kind of OS AsmOSx86 is becoming.

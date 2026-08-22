@@ -246,7 +246,7 @@ KcUserDispatchSleep:
 ;--------------------------------------------------------------------------------------------------
 ; KcUserInterruptEntry
 ;   Output:
-;     Returns from the future ring 3 kernel-call interrupt gate.
+;     Handles a ring 3 int 80h kernel-call entry.
 ;   Notes:
 ;     Non-switching calls dispatch through the existing KcBlock path.
 ;     Scheduler/blocking calls use interrupt-aware task switch routines because

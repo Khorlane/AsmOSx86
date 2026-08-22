@@ -70,9 +70,7 @@ PG_USER_KC_PTE  equ PG_USER_PTE+PG_USER_MAX_PAGES
 ; Fault Policy Intent
 ;--------------------------------------------------------------------------------------------------
 ; Current:
-;   Page faults and general protection faults both halt forever.
-; Future ring 3:
-;   Faults from ring 0 are kernel panics.
+;   Faults from ring 0 halt forever.
 ;   Faults from ring 3 terminate the current user task and return to scheduler.
 ;   General protection faults catch privileged instructions and bad selectors.
 

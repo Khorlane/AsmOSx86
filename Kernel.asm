@@ -34,8 +34,8 @@ GDTTable:
   dq 0x0000000000000000                 ; Null Descriptor
   dq 0x00CF9A000000FFFF                 ; Code Segment Descriptor
   dq 0x00CF92000000FFFF                 ; Data Segment Descriptor
-  dq 0x00CFFA000000FFFF                 ; Future ring 3 code descriptor
-  dq 0x00CFF2000000FFFF                 ; Future ring 3 data descriptor
+  dq 0x00CFFA000000FFFF                 ; Ring 3 code descriptor
+  dq 0x00CFF2000000FFFF                 ; Ring 3 data descriptor
 GdtTssDescriptor:
   dw TSS_LIMIT
   dw TSS_BASE & 0FFFFh
@@ -55,8 +55,8 @@ GDTDescriptor:
   NULL_DESC             equ 00h         ; Null Descriptor
   CODE_DESC             equ 08h         ; Code Segment Descriptor
   DATA_DESC             equ 10h         ; Data Segment Descriptor
-  USER_CODE_DESC        equ 18h         ; Future ring 3 code descriptor
-  USER_DATA_DESC        equ 20h         ; Future ring 3 data descriptor
+  USER_CODE_DESC        equ 18h         ; Ring 3 code descriptor
+  USER_DATA_DESC        equ 20h         ; Ring 3 data descriptor
   TSS_DESC              equ 28h         ; Future ring transition TSS descriptor
   USER_CODE_SEL         equ USER_CODE_DESC|03h
   USER_DATA_SEL         equ USER_DATA_DESC|03h
