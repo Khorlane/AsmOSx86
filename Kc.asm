@@ -6,8 +6,8 @@
 ;   Provide memory-backed kernel-call dispatcher.
 ;
 ;   Kernel tests may call KcDispatch directly through the global Kc fields.
-;   Userland enters through KcUserDispatch, which copies arguments/results
-;   through the current task's KcBlock.
+;   Userland enters through int 80h and exchanges arguments/results through the
+;   current task's KcBlock.
 ;
 ;   The contract is intentionally shaped as the user/kernel service boundary.
 ;
@@ -27,9 +27,9 @@
 ; Notes
 ;   - Kernel calls use memory-backed inputs and outputs.
 ;   - Registers are scratch only.
-;   - User programs must not call subsystem routines directly in the future.
+;   - User programs must not call subsystem routines directly.
 ;   - KcDispatch is for kernel-originated calls and may receive kernel pointers.
-;   - KcUserDispatch is for user-originated calls and must validate user pointers.
+;   - KcUserDispatch copies user KcBlock calls through service validation.
 ;   - Handler routines are internal dispatch-table entries.
 ;**************************************************************************************************
 
@@ -152,7 +152,8 @@ KcInit:
 ;     KcResult0..KcResult1 = service-specific results
 ;   Notes:
 ;     Kernel-originated dispatch path. Kernel callers may pass kernel pointers.
-;     Userland must enter through KcUserDispatch so pointer validation can run.
+;     Userland enters through int 80h, then flows through KcUserDispatch so
+;     pointer validation can run.
 ;--------------------------------------------------------------------------------------------------
 KcDispatch:
   mov   dword[KcResult0],0
@@ -178,7 +179,8 @@ KcDispatchDone:
 ;     Copies KcStatus/KcResult0/KcResult1 back to the current task's block when
 ;     the call returns to the same task.
 ;   Notes:
-;     Fixed gateway entry lives at 00100005h in Kernel.asm.
+;     Legacy fixed gateway entry lives at 00100005h in Kernel.asm.
+;     Current user programs reach this path through KcUserInterruptEntry.
 ;     User pointer arguments must be validated by service-specific handlers
 ;     before they are used as kernel addresses.
 ;--------------------------------------------------------------------------------------------------
