@@ -38,6 +38,7 @@ Start:
   cmp   eax,STATUS_OK                   ;  if bad
   jne   Prog4CloseAndExit               ;    can't continue, close file, then exit
   call  PrintLine                       ; Print
+  call  MaybeCplTest                    ; Optional CS selector proof
   call  MaybeInt80Test                  ; Optional int 80h proof
   call  MaybeKeyTest                    ; Optional keyboard read proof
   call  MaybeSleepTest                  ; Optional cooperative sleep proof
@@ -98,6 +99,21 @@ PrintLine:
   mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],KC_VD_WRITE_STR
   mov   dword[KC_BLOCK+KC_BLOCK_ARG0],DataBuffer
   int   080h
+  ret
+
+MaybeCplTest:
+  cmp   word[USER_ARG],3
+  jne   MaybeCplTestDone
+  cmp   byte[USER_ARG+2],'c'
+  jne   MaybeCplTestDone
+  cmp   byte[USER_ARG+3],'p'
+  jne   MaybeCplTestDone
+  cmp   byte[USER_ARG+4],'l'
+  jne   MaybeCplTestDone
+  xor   eax,eax
+  mov   ax,cs
+  mov   [Prog4ExitCode],eax
+MaybeCplTestDone:
   ret
 
 MaybeBadPrintTest:
