@@ -13,23 +13,25 @@ raw user program binaries
 loaded from the ASMF manifest filesystem
 mapped at a fixed virtual base
 cooperative task switching
-kernel calls by convention
+kernel calls through int 80h
+ring 3 user task entry
 ```
 
-That is userland as an execution model, but not yet hardware-enforced user mode.
+That is now userland as both an execution model and a first hardware-enforced
+ring 3 path.
 
 ## Current Code Reality
 
-AsmOSx86 has useful groundwork, but it does not yet have hardware-enforced
-privilege separation.
+AsmOSx86 now has an initial hardware-enforced ring 3 user path. It is still
+small and cooperative, but user programs no longer run with kernel selectors.
 
 Current implemented groundwork:
 
 ```text
 Kernel runs in protected mode at 00100000h
 Kernel owns GDT and IDT setup
-Future ring 3 GDT code/data descriptors and selector names exist
-Future TSS descriptor, selector, storage, and TR load exist
+Ring 3 GDT code/data descriptors and selector names exist
+TSS descriptor, selector, storage, and TR load exist
 TSS ESP0 tracks the selected task's kernel stack top
 Paging is enabled
 First 16 MiB are identity-mapped
@@ -37,40 +39,40 @@ Shared user virtual range begins at 00200000h
 User KcBlock virtual page is at 00210000h
 Each loaded user task has its own physical program pages
 Task switches remap the shared user virtual range to the selected task
-Kernel-call gateway exists at 00100005h
+Legacy kernel-call gateway exists at 00100005h
+User programs enter the kernel through int 80h
 KcUserDispatch copies arguments/results through the current task's KcBlock
 KcDispatch is the kernel-originated path and may receive kernel pointers
 KcUserDispatch is the user-originated path and requires service validation
-DPL 3 Kc interrupt gate exists at vector 80h for non-switching calls
+DPL 3 Kc interrupt gate exists at vector 80h for user service calls
+Yield, exit, sleep, and keyboard read have interrupt-aware switch paths
 General-protection fault IDT vector 13 is installed
 Page-fault IDT vector 14 is installed
-General-protection faults and page faults currently halt forever
+General-protection faults and page faults terminate user tasks
+Kernel faults still halt forever
 Fault handlers record the fault vector and current task execution-mode tag
-Task records have future user-mode EIP, ESP, CS, DS, SS, and EFLAGS fields
-Loaded user tasks have a prepared future iretd frame
-TaskEnterUserMode validates its frame and has a guarded iretd path
+Task records have user-mode EIP, ESP, CS, DS, SS, and EFLAGS fields
+Loaded user tasks have a prepared iretd frame
+TaskEnterUserMode validates its frame and enters ring 3 through iretd
 Task records carry a kernel/user execution-mode tag
 TaskIsUserMode exposes the execution-mode tag through a helper
 Prog4 has denial probes for invalid KcVdWriteStr, KcFsOpen, and KcFsRead pointers
 Prog4 has denial probes for zero and unknown Kc call numbers
+Prog4 can report its CS selector with the cpl argument
+Prog4 can trigger a user #GP with the priv argument
 Paging permission intent is named separately from current ring-0-safe flags
 ```
 
 Current important limitations:
 
 ```text
-Ring 3 descriptors are scaffolding only and are not used yet
-TSS is loaded but only scaffolding until ring transitions exist
-No ring transition stack switching
-Kc interrupt gate rejects scheduler/blocking calls
-Loaded user program and KcBlock pages are user-accessible
-Kernel and user tasks still run with ring 0 segment selectors
-Future user-mode task fields are populated but not consumed by the scheduler
-Future iretd frames are prepared but not consumed by the scheduler
-TaskEnterUserMode is disabled by default and does not consume the frame yet
-Task execution-mode tags are informational only
-TaskIsUserMode is used only to classify halt-only faults
-User programs are constrained by convention, not by CPU privilege checks
+The scheduler is still cooperative
+There is no preemptive timer interrupt
+There is not yet a full process/session model
+There is not yet a full user-fault reporting model
+The old fixed gateway still exists as a legacy entry point
+Only the currently selected user stack page is marked user-accessible
+User pointer validation is still intentionally small and service-specific
 ```
 
 ## Paging Permission Intent
@@ -108,11 +110,13 @@ pages. Kernel identity mappings still use supervisor-only flags.
 Current fault behavior is intentionally simple:
 
 ```text
-general protection fault -> halt forever
-page fault               -> halt forever
+kernel general protection fault -> halt forever
+kernel page fault               -> halt forever
+user general protection fault   -> terminate current task with 0F0D
+user page fault                 -> terminate current task with 0F0E
 ```
 
-The future ring 3 policy is:
+The current ring 3 policy is:
 
 ```text
 fault from ring 0 -> kernel panic/halt
@@ -124,8 +128,8 @@ privilege violations, such as user code attempting privileged instructions or
 loading invalid selectors. Page faults matter because they are how the CPU
 reports invalid or disallowed memory access.
 
-So the current system has a useful userland execution model and paging-backed
-address layout, but not actual user/kernel privilege enforcement yet.
+So the current system has a useful userland execution model, paging-backed
+address layout, and initial user/kernel privilege enforcement.
 
 Future privilege separation would mean:
 
@@ -181,28 +185,23 @@ tables.
 The long-term distinction is:
 
 ```text
-Today:
-  user programs cooperate by convention
+Now:
+  user programs are constrained by hardware
 
 Later:
-  user programs are constrained by hardware
+  fault handling and process/session policy become richer
 ```
 
 ## Likely Requirements
 
-Fully implementing this later would likely require:
+Fully maturing this later would likely require:
 
 ```text
-GDT entries for ring 3 user code and data
-TSS descriptor and ring 0 stack fields
-kernel pages marked supervisor-only
-user pages marked user-accessible
-a controlled kernel entry path
-IDT trap/interrupt gate for Kc calls
-TSS setup for ring transition stack switching
-fault handlers that distinguish kernel faults from user task faults
-task state that records user-mode CS/DS/SS/ESP/EIP
-validation of user pointers passed through Kc*
+more complete user fault reporting
+clearer task/process identity
+more denial tests for privileged instructions and invalid memory
+validation of every user pointer passed through Kc*
+eventual syscall ABI cleanup if the Kc surface grows
 denial tests that prove invalid user pointers are rejected before use
 ```
 
@@ -223,18 +222,22 @@ Recommended groundwork:
 - Keep hardware access inside kernel-owned drivers.
 - Keep filesystem access behind `KcFs*` and filesystem/block-device layers.
 - Avoid teaching user programs to depend on kernel globals or kernel labels.
-- Keep adding small userland denial tests before turning on hardware enforcement.
-- Start adding fault handlers before relying on faults for enforcement.
+- Keep adding small userland denial tests as hardware enforcement grows.
+- Keep fault handling simple until task/process policy needs more detail.
 - Keep boot-stage code separate from protected-mode kernel/userland rules.
 
-This groundwork does not require implementing ring 3 immediately. It simply
-keeps the current design from painting itself into a corner.
+This groundwork keeps the current ring 3 path from painting itself into a
+corner as the userland surface grows.
 
-## Deferred Work
+## Remaining Work
 
-Privilege separation is real OS work and belongs in deferred work.
+Privilege separation is now real enough for AsmOSx86 to run loaded user tasks
+with ring 3 selectors and enter the kernel through `int 80h`.
 
-It is not needed before the cooperative user-program model, paging-based virtual
-layout, kernel calls, and task switching are stable. Once those pieces are
-solid, ring 3 enforcement becomes a natural next hardening step rather than a
-rewrite.
+The remaining work is about maturing the policy around that mechanism:
+
+- richer user fault reporting
+- clearer task/process/session identity
+- more denial tests for privileged operations and invalid memory
+- broader user-pointer validation as more Kc services are added
+- eventual preemptive scheduling when hardware interrupts move up the list

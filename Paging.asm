@@ -57,9 +57,9 @@ PG_USER_KC_PTE  equ PG_USER_PTE+PG_USER_MAX_PAGES
 ;--------------------------------------------------------------------------------------------------
 ; Current:
 ;   PG_KERNEL_FLAGS is supervisor-only. PG_USER_FLAGS and PG_KCBLOCK_FLAGS are
-;   user-accessible so the future ring 3 entry path can reach loaded programs
-;   and their KcBlock pages.
-; Future ring 3:
+;   user-accessible so ring 3 tasks can reach loaded programs and their
+;   KcBlock pages.
+; Future:
 ;   Kernel identity mappings stay supervisor-only.
 ;   Fault handlers decide whether a fault is kernel panic or user task death.
 

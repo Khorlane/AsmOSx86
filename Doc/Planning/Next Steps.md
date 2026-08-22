@@ -122,6 +122,16 @@ run prog4.bin -- int80
   calls KcVdWriteStr through int 80h
   exits 0080 when the software interrupt path works
 
+run prog4.bin -- cpl
+  runs the normal DATA.TXT path
+  exits with the user code selector
+  expects 001B when the task is actually running in ring 3
+
+run prog4.bin -- priv
+  runs the normal DATA.TXT path
+  deliberately executes privileged CLI from user code
+  expects the kernel to terminate the task with 0F0D
+
 run prog1.bin | prog2.bin | prog3.bin
   loads three named programs from one console command line
   proves file-loaded multi-task cooperative scheduling without hard-coded names
@@ -146,6 +156,8 @@ bad-call-number   KcLookup rejects unknown call number      0046
 sleep             KcTmSleep blocks and wakes cooperatively  0007
 key               KcKbRead blocks until keyboard input      0047
 int80             KcVdWriteStr through int 80h              0080
+cpl               user CS selector proof                    001B
+priv              privileged instruction fault              0F0D
 ```
 
 Kernel-call boundary:
@@ -162,7 +174,8 @@ KcFsRead validates destination buffer ranges for user-originated calls.
 Prog4 has denial modes for bad print, bad open, and bad read user pointers.
 Prog4 has dispatch denial modes for zero and unknown Kc call numbers.
 KcKbRead blocks user tasks until a keyboard event is available.
-Kc interrupt vector 80h accepts non-switching calls and rejects switching calls.
+Kc interrupt vector 80h handles userland service calls.
+Yield, exit, sleep, and keyboard-read calls use interrupt-aware task switching.
 ```
 
 Tasking and scheduling:
@@ -172,13 +185,16 @@ The scheduler is cooperative.
 Task states include Free, Ready, Running, Blocked, and Exited.
 TaskSetReady, TaskBlock, and TaskWake exist.
 Task records contain future user-mode EIP, ESP, CS, DS, SS, and EFLAGS fields.
-Loaded user tasks have prepared future iretd frames.
-TaskEnterUserMode validates its frame and has a guarded iretd path.
+Loaded user tasks have prepared iretd frames.
+TaskEnterUserMode validates its frame and enters ring 3 with iretd.
 Task records carry a kernel/user execution-mode tag.
-TaskIsUserMode exposes that tag for future fault/transition code.
+TaskIsUserMode exposes that tag for fault/transition code.
 KcTmSleep is the first real cooperative blocking service.
 TaskYield wakes blocked sleep tasks whose deadlines have expired.
 Timer wake checks happen only when the cooperative scheduler runs.
+User programs enter the kernel with int 80h.
+Interrupt-aware yield, exit, sleep, and keyboard-read paths save/restore
+ring 3 frames.
 ```
 
 Paging:
@@ -186,31 +202,32 @@ Paging:
 ```text
 Paging is enabled.
 User programs share a fixed virtual base.
-Future ring 3 GDT code/data selectors are defined:
+Ring 3 GDT code/data selectors are defined:
   USER_CODE_SEL
   USER_DATA_SEL
-They are scaffolding only and are not used yet.
-Future TSS selector and storage are defined:
+Loaded user tasks enter with USER_CODE_SEL/USER_DATA_SEL.
+TSS selector and storage are defined:
   TSS_SEL
   Tss32
 TR is loaded during kernel startup.
 TSS ESP0 tracks the selected task's kernel stack top.
+The selected user task's stack page is mapped user-accessible.
 Fault IDT gates are installed for:
   general protection fault vector 13
   page fault vector 14
-Both fault handlers currently halt forever.
+Kernel faults halt forever.
+User faults terminate the current task and return to the scheduler.
 Fault handlers record the fault vector and current task execution-mode tag.
 Paging flag names express intent:
   PG_KERNEL_FLAGS
   PG_USER_FLAGS
   PG_KCBLOCK_FLAGS
-Future ring 3 page flags are named separately:
+Future page flags are named separately:
   PG_FUTURE_KERNEL_FLAGS
   PG_FUTURE_USER_FLAGS
   PG_FUTURE_KCBLOCK_FLAGS
 Loaded user program and KcBlock mappings are user-accessible.
 Kernel identity mappings remain supervisor-only.
-Ring 3 and user/supervisor enforcement are future work.
 ```
 
 ## Near-Term Candidates
@@ -248,22 +265,20 @@ possible future improvements:
   optional current-working-device or file context
 ```
 
-5. Keep paging ready for later privilege separation.
+5. Keep hardening privilege separation.
 
 ```text
-current flag bits remain unchanged until ring 3 work begins
-future ring 3 GDT selectors are named but unused
-future TSS selector/storage are named and TR is loaded
-future ring-transition stack pointer tracks the selected task
-future user-mode task frame fields are populated but unused
-future iretd frames are prepared but unused
-future TaskEnterUserMode routine is guarded and disabled by default
-future task execution-mode tags are present but informational only
-future TaskIsUserMode helper classifies halt-only faults
-future Kc interrupt gate is used only for non-switching calls
-future flag names document the intended user/supervisor policy
-fault handlers are named but still halt-only
+ring 3 GDT selectors are active for loaded user tasks
+TSS selector/storage are named and TR is loaded
+ring-transition stack pointer tracks the selected task
+user-mode task frame fields are consumed by TaskEnterUserMode
+iretd frames are prepared and consumed by the scheduler
+task execution-mode tags classify faults
+Kc interrupt gate handles user service calls
+fault handlers terminate user tasks and halt on kernel faults
 keep kernel mappings supervisor-only
+keep tightening user pointer validation
+keep adding denial tests for privileged operations and invalid memory
 ```
 
 ## Standard Smoke-Test Loop
@@ -290,6 +305,8 @@ run prog4.bin -- bad-zero-call
 run prog4.bin -- bad-call-number
 run prog4.bin -- sleep
 run prog4.bin -- key
+run prog4.bin -- cpl
+run prog4.bin -- priv
 run prog1.bin | prog2.bin | prog3.bin
 run prog4.bin -- sleep | prog1.bin | prog4.bin -- bad
 ```
