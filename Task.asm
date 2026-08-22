@@ -30,6 +30,7 @@
 ;   - TaskProgramSetArg
 ;   - TaskProgramStartN
 ;   - TaskProgramPrintExitCodesN
+;   - TaskEnterUserMode
 ;   - TaskExit
 ;   - TaskYield
 ;
@@ -54,6 +55,9 @@ TASK_STATE_BLOCKED   equ 3
 TASK_STATE_EXITED    equ 4
 TASK_STATUS_OK       equ 0
 TASK_STATUS_BAD_TASK equ 1
+TASK_ENTER_STATUS_DISABLED equ 1
+TASK_ENTER_STATUS_NO_TASK  equ 2
+TASK_ENTER_STATUS_NO_FRAME equ 3
 
 ;--------------------------------------------------------------------------------------------------
 ; Task Record Layout
@@ -178,6 +182,7 @@ TaskProgramArgCopyLeft dd 0             ; work: task argument bytes left
 TaskProgramRunCount dd 0                ; input: count of task slots 1..N to run
 TaskProgramCheckIndex dd 0              ; work: task completion scan index
 TaskProgramPrintIndex dd 0              ; work: task exit-code print index
+TaskEnterStatus     dd 0                ; output: TASK_ENTER_STATUS_*
 TaskProgramEntryPtr  dd 0               ; output: loaded program entry address
 TaskProgramKcBlockPtr dd 0              ; output: loaded program KcBlock address
 TaskProgramNextLoadBase dd 0            ; work: next dynamic user-program load base
@@ -749,6 +754,20 @@ TaskProgramPrintExitCodesNNext:
   inc   dword[TaskProgramPrintIndex]
   jmp   TaskProgramPrintExitCodesN1
 TaskProgramPrintExitCodesNDone:
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; TaskEnterUserMode
+;   Input:
+;     pTaskRecord = selected task record with a prepared TASK_USER_IRET_ESP.
+;   Output:
+;     TaskEnterStatus = TASK_ENTER_STATUS_DISABLED.
+;   Notes:
+;     Future ring 3 transition point. This routine intentionally does not
+;     consume the iretd frame yet, and no hardware interrupts are required.
+;--------------------------------------------------------------------------------------------------
+TaskEnterUserMode:
+  mov   dword[TaskEnterStatus],TASK_ENTER_STATUS_DISABLED
   ret
 
 ;--------------------------------------------------------------------------------------------------
