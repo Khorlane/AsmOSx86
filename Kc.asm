@@ -22,7 +22,7 @@
 ; Public API
 ;   - KcInit
 ;   - KcDispatch
-;   - KcUserDispatch
+;   - KcBlockDispatch
 ;   - KcLegacyGatewayDenied
 ;
 ; Notes
@@ -30,7 +30,7 @@
 ;   - Registers are scratch only.
 ;   - User programs must not call subsystem routines directly.
 ;   - KcDispatch is for kernel-originated calls and may receive kernel pointers.
-;   - KcUserDispatch copies user KcBlock calls through service validation.
+;   - KcBlockDispatch copies user KcBlock calls through service validation.
 ;   - Handler routines are internal dispatch-table entries.
 ;**************************************************************************************************
 
@@ -169,7 +169,7 @@ KcInit:
 ;     KcResult0..KcResult1 = service-specific results
 ;   Notes:
 ;     Kernel-originated dispatch path. Kernel callers may pass kernel pointers.
-;     Userland enters through int 80h, then flows through KcUserDispatch so
+;     Userland enters through int 80h, then flows through KcBlockDispatch so
 ;     pointer validation can run.
 ;--------------------------------------------------------------------------------------------------
 KcDispatch:
@@ -189,7 +189,7 @@ KcDispatchDone:
   ret
 
 ;--------------------------------------------------------------------------------------------------
-; KcUserDispatch
+; KcBlockDispatch
 ;   Input:
 ;     Current task's TASK_KCBLOCK_PTR points to a 32-byte user kernel-call block.
 ;   Output:
@@ -200,21 +200,21 @@ KcDispatchDone:
 ;     User pointer arguments must be validated by service-specific handlers
 ;     before they are used as kernel addresses.
 ;--------------------------------------------------------------------------------------------------
-KcUserDispatch:
+KcBlockDispatch:
   call  TaskGetCurrentRecord
   mov   edi,[pTaskRecord]
   test  edi,edi
-  jz    KcUserDispatchDone
+  jz    KcBlockDispatchDone
   mov   esi,[edi+TASK_KCBLOCK_PTR]
   test  esi,esi
-  jz    KcUserDispatchDone
+  jz    KcBlockDispatchDone
   mov   eax,[esi+KC_BLOCK_NUMBER]
   cmp   eax,KcTsYield
-  je    KcUserDispatchYield
+  je    KcBlockDispatchYield
   cmp   eax,KcTsExit
-  je    KcUserDispatchExit
+  je    KcBlockDispatchExit
   cmp   eax,KcTmSleep
-  je    KcUserDispatchSleep
+  je    KcBlockDispatchSleep
   mov   [KcNumber],eax
   mov   eax,[esi+KC_BLOCK_ARG0]
   mov   [KcArg0],eax
@@ -230,29 +230,29 @@ KcUserDispatch:
   call  TaskGetCurrentRecord
   mov   edi,[pTaskRecord]
   test  edi,edi
-  jz    KcUserDispatchDone
+  jz    KcBlockDispatchDone
   mov   esi,[edi+TASK_KCBLOCK_PTR]
   test  esi,esi
-  jz    KcUserDispatchDone
+  jz    KcBlockDispatchDone
   mov   eax,[KcStatus]
   mov   [esi+KC_BLOCK_STATUS],eax
   mov   eax,[KcResult0]
   mov   [esi+KC_BLOCK_RESULT0],eax
   mov   eax,[KcResult1]
   mov   [esi+KC_BLOCK_RESULT1],eax
-KcUserDispatchDone:
+KcBlockDispatchDone:
   ret
-KcUserDispatchYield:
+KcBlockDispatchYield:
   mov   dword[esi+KC_BLOCK_STATUS],KC_STATUS_OK
   call  TaskYield
   ret
-KcUserDispatchExit:
+KcBlockDispatchExit:
   mov   eax,[esi+KC_BLOCK_ARG0]
   mov   [TaskExitCode],eax
   mov   dword[esi+KC_BLOCK_STATUS],KC_STATUS_OK
   call  TaskExit
   ret
-KcUserDispatchSleep:
+KcBlockDispatchSleep:
   mov   eax,[esi+KC_BLOCK_ARG0]
   mov   [TaskSleepMs],eax
   mov   dword[esi+KC_BLOCK_STATUS],KC_STATUS_OK
@@ -311,7 +311,7 @@ KcUserInterruptEntry:
   je    KcUserInterruptSleep
   cmp   eax,KcKbRead
   je    KcUserInterruptKeyRead
-  call  KcUserDispatch
+  call  KcBlockDispatch
   jmp   KcUserInterruptEntryDone
 KcUserInterruptYield:
   mov   dword[esi+KC_BLOCK_STATUS],KC_STATUS_OK

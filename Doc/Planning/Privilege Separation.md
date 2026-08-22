@@ -41,9 +41,10 @@ Each loaded user task has its own physical program pages
 Task switches remap the shared user virtual range to the selected task
 Legacy kernel-call gateway address 00100005h is reserved and denied
 User programs enter the kernel through int 80h
-KcUserDispatch copies arguments/results through the current task's KcBlock
+KcBlockDispatch copies arguments/results through the current task's KcBlock
 KcDispatch is the kernel-originated path and may receive kernel pointers
-KcUserDispatch is the user-originated path and requires service validation
+KcUserInterruptEntry is the user-originated entry path
+KcBlockDispatch dispatches the current task's KcBlock with service validation
 DPL 3 Kc interrupt gate exists at vector 80h for user service calls
 Yield, exit, sleep, and keyboard read have interrupt-aware switch paths
 KcTsGetInfo returns current task index and user-mode tag

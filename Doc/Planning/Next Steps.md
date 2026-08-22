@@ -19,6 +19,8 @@ Prefer work that:
 
 ## Current Checkpoint
 
+Ring 3 userland is documented in `Doc/Ring3.md`.
+
 Storage and boot:
 
 ```text
@@ -191,7 +193,7 @@ Kernel-call boundary:
 ```text
 KcDispatch rejects call number zero.
 KcLookup rejects unknown service numbers.
-KcUserDispatch requires a current task and KcBlock before dispatching.
+KcBlockDispatch requires a current task and KcBlock before dispatching.
 File and video Kc handlers reject basic null/zero arguments.
 TaskValidateUserRange checks user-provided ranges against the user virtual
 program area and the KcBlock page.
