@@ -43,6 +43,7 @@ KC_STATUS_OK       equ 0
 KC_STATUS_INVALID  equ 1
 KC_STATUS_BAD_ARG  equ 2
 KC_STATUS_DENIED   equ 3
+KC_AUTH_KERNEL     equ 0FFFFFFFFh
 
 ;--------------------------------------------------------------------------------------------------
 ; Kernel Call Numbers
@@ -120,6 +121,7 @@ KcInterruptEnabled dd 1                 ; input: 1 enables non-switching int 80h
 KcInterruptEntered dd 0                 ; debug: count of int 80h entries
 KcInterruptRejected dd 0                ; debug: count of rejected int 80h calls
 KcHandler          dd 0                 ; work: resolved handler address
+KcRequiredAuthority dd 0                ; work: minimum TASK_AUTH_* or KC_AUTH_KERNEL
 pKcTable           dd 0                 ; work: current table entry pointer
 KcTableLeft        dd 0                 ; work: remaining table entries
 KcIdtEntry         dd 0                 ; work: selected IDT entry pointer
@@ -130,22 +132,22 @@ String  KcLegacyGatewayDeniedStr,"Legacy Kc gateway denied"
 ;--------------------------------------------------------------------------------------------------
 align 4
 KcTable:
-  dd KcTmGetUptime, KcTmGetUptimeHandler
-  dd KcVdWriteStr,  KcVdWriteStrHandler
-  dd KcTsYield,     KcTsYieldHandler
-  dd KcTsLoadProgram,KcTsLoadProgramHandler
-  dd KcTsExit,      KcTsExitHandler
-  dd KcFsOpen,      KcFsOpenHandler
-  dd KcFsRead,      KcFsReadHandler
-  dd KcFsClose,     KcFsCloseHandler
-  dd KcTmSleep,     KcTmSleepHandler
-  dd KcKbRead,      KcKbReadHandler
-  dd KcTsGetInfo,   KcTsGetInfoHandler
-  dd KcMmGetMemory, KcMmGetMemoryHandler
-  dd KcMmFreeMemory,KcMmFreeMemoryHandler
-  dd KcTsGetAuthority,KcTsGetAuthorityHandler
+  dd KcTmGetUptime, KcTmGetUptimeHandler,TASK_AUTH_NORMAL
+  dd KcVdWriteStr,  KcVdWriteStrHandler,TASK_AUTH_NORMAL
+  dd KcTsYield,     KcTsYieldHandler,TASK_AUTH_NORMAL
+  dd KcTsLoadProgram,KcTsLoadProgramHandler,KC_AUTH_KERNEL
+  dd KcTsExit,      KcTsExitHandler,TASK_AUTH_NORMAL
+  dd KcFsOpen,      KcFsOpenHandler,TASK_AUTH_NORMAL
+  dd KcFsRead,      KcFsReadHandler,TASK_AUTH_NORMAL
+  dd KcFsClose,     KcFsCloseHandler,TASK_AUTH_NORMAL
+  dd KcTmSleep,     KcTmSleepHandler,TASK_AUTH_NORMAL
+  dd KcKbRead,      KcKbReadHandler,TASK_AUTH_NORMAL
+  dd KcTsGetInfo,   KcTsGetInfoHandler,TASK_AUTH_NORMAL
+  dd KcMmGetMemory, KcMmGetMemoryHandler,TASK_AUTH_TRUSTED
+  dd KcMmFreeMemory,KcMmFreeMemoryHandler,TASK_AUTH_TRUSTED
+  dd KcTsGetAuthority,KcTsGetAuthorityHandler,TASK_AUTH_NORMAL
 KcTableEnd:
-KcTableCount equ (KcTableEnd-KcTable)/8
+KcTableCount equ (KcTableEnd-KcTable)/12
 
 ;--------------------------------------------------------------------------------------------------
 ; External Routines
@@ -197,6 +199,10 @@ KcDispatch:
   cmp   eax,KC_STATUS_OK
   jne   KcDispatchDone
   call  KcLookup
+  mov   eax,[KcStatus]
+  cmp   eax,KC_STATUS_OK
+  jne   KcDispatchDone
+  call  KcAuthorize
   mov   eax,[KcStatus]
   cmp   eax,KC_STATUS_OK
   jne   KcDispatchDone
@@ -377,6 +383,7 @@ KcUserInterruptEntryDone:
 ;   Notes:
 ;     Basic validation rejects call number zero.
 ;     KcLookup rejects unknown nonzero call numbers.
+;     KcAuthorize enforces the table's minimum caller authority.
 ;     Service handlers validate their own argument shape and user pointers.
 ;--------------------------------------------------------------------------------------------------
 KcValidate:
@@ -395,12 +402,14 @@ KcValidateDone:
 ;   Output:
 ;     KcStatus  = KC_STATUS_OK if found, else KC_STATUS_INVALID
 ;     KcHandler = handler address if found, else 0
+;     KcRequiredAuthority = policy value from the dispatch table
 ;   Notes:
 ;     Linear scan is intentional for the first skeleton.
 ;--------------------------------------------------------------------------------------------------
 KcLookup:
   mov   dword[KcStatus],KC_STATUS_INVALID
   mov   dword[KcHandler],0
+  mov   dword[KcRequiredAuthority],0
   mov   eax,KcTable
   mov   [pKcTable],eax
   mov   eax,KcTableCount
@@ -413,7 +422,7 @@ KcLookup1:
   mov   eax,[edi]
   cmp   eax,[KcNumber]
   je    KcLookup2
-  add   edi,8
+  add   edi,12
   mov   [pKcTable],edi
   mov   eax,[KcTableLeft]
   dec   eax
@@ -422,8 +431,41 @@ KcLookup1:
 KcLookup2:
   mov   eax,[edi+4]
   mov   [KcHandler],eax
+  mov   eax,[edi+8]
+  mov   [KcRequiredAuthority],eax
   mov   dword[KcStatus],KC_STATUS_OK
 KcLookupDone:
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; KcAuthorize
+;   Input:
+;     KcRequiredAuthority = policy value from the dispatch table.
+;   Output:
+;     KcStatus = KC_STATUS_OK if the caller passes policy, else DENIED.
+;   Notes:
+;     Kernel-originated dispatch can call any registered service. User-originated
+;     dispatch must meet the table's TASK_AUTH_* minimum.
+;--------------------------------------------------------------------------------------------------
+KcAuthorize:
+  mov   dword[KcStatus],KC_STATUS_OK
+  mov   eax,[KcCallFromUser]
+  test  eax,eax
+  jz    KcAuthorizeDone
+  mov   eax,[KcRequiredAuthority]
+  cmp   eax,KC_AUTH_KERNEL
+  je    KcAuthorizeDenied
+  call  TaskGetCurrentRecord
+  mov   edi,[pTaskRecord]
+  test  edi,edi
+  jz    KcAuthorizeDenied
+  mov   eax,[edi+TASK_AUTHORITY]
+  cmp   eax,[KcRequiredAuthority]
+  jb    KcAuthorizeDenied
+  ret
+KcAuthorizeDenied:
+  mov   dword[KcStatus],KC_STATUS_DENIED
+KcAuthorizeDone:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -487,33 +529,6 @@ KcValidateUserReadBuffer:
   jnz   KcValidateUserReadBufferDone
   mov   dword[KcStatus],KC_STATUS_BAD_ARG
 KcValidateUserReadBufferDone:
-  ret
-
-;--------------------------------------------------------------------------------------------------
-; KcRequireTrusted
-;   Output:
-;     KcStatus = KC_STATUS_OK if the caller is kernel-originated or the current
-;                user task has trusted/system authority; otherwise DENIED.
-;   Notes:
-;     Shared policy gate for trusted-only kernel-call services.
-;--------------------------------------------------------------------------------------------------
-KcRequireTrusted:
-  mov   dword[KcStatus],KC_STATUS_DENIED
-  call  TaskGetCurrentRecord
-  mov   edi,[pTaskRecord]
-  test  edi,edi
-  jz    KcRequireTrustedDone
-  call  TaskIsUserMode
-  mov   eax,[TaskModeIsUser]
-  test  eax,eax
-  jz    KcRequireTrustedOk
-  mov   edi,[pTaskRecord]
-  mov   eax,[edi+TASK_AUTHORITY]
-  cmp   eax,TASK_AUTH_TRUSTED
-  jb    KcRequireTrustedDone
-KcRequireTrustedOk:
-  mov   dword[KcStatus],KC_STATUS_OK
-KcRequireTrustedDone:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -676,10 +691,6 @@ KcTsLoadProgramHandler1:
 KcMmGetMemoryHandler:
   mov   dword[KcResult0],0
   mov   dword[KcResult1],0
-  call  KcRequireTrusted
-  mov   eax,[KcStatus]
-  cmp   eax,KC_STATUS_OK
-  jne   KcMmGetMemoryDenied
   mov   eax,[KcArg0]
   mov   [TaskMemoryRequestBytes],eax
   call  TaskMemoryGet
@@ -695,9 +706,6 @@ KcMmGetMemoryHandler:
 KcMmGetMemoryFailed:
   mov   dword[KcStatus],KC_STATUS_BAD_ARG
   ret
-KcMmGetMemoryDenied:
-  mov   dword[KcStatus],KC_STATUS_DENIED
-  ret
 
 ;--------------------------------------------------------------------------------------------------
 ; KcMmFreeMemoryHandler
@@ -712,10 +720,6 @@ KcMmGetMemoryDenied:
 KcMmFreeMemoryHandler:
   mov   dword[KcResult0],0
   mov   dword[KcResult1],0
-  call  KcRequireTrusted
-  mov   eax,[KcStatus]
-  cmp   eax,KC_STATUS_OK
-  jne   KcMmFreeMemoryDenied
   mov   eax,[KcArg0]
   mov   [TaskMemoryPointer],eax
   mov   eax,[KcArg1]
@@ -730,9 +734,6 @@ KcMmFreeMemoryHandler:
   ret
 KcMmFreeMemoryFailed:
   mov   dword[KcStatus],KC_STATUS_BAD_ARG
-  ret
-KcMmFreeMemoryDenied:
-  mov   dword[KcStatus],KC_STATUS_DENIED
   ret
 
 ;--------------------------------------------------------------------------------------------------

@@ -694,6 +694,7 @@ KcResult1       - Result value 1
 KcDispatch      - Dispatch requested kernel call
 KcValidate      - Validate call number, arguments, caller/task state
 KcLookup        - Resolve call number to handler through KcTable
+KcAuthorize     - Enforce KcTable minimum authority before handler dispatch
 ```
 
 Current tested calls:
@@ -714,6 +715,11 @@ KcTsGetAuthority - Return current task authority tag
 KcMmGetMemory   - Trusted-only page-rounded user-memory allocation
 KcMmFreeMemory  - Trusted-only stack-like user-memory release
 ```
+
+The dispatch table records each service's minimum caller authority. User-originated
+calls are rejected before reaching the handler when the current task does not
+meet that policy. Kernel-originated dispatch can still call registered services
+such as program loading.
 
 ### Filesystem — `KcFs*`
 

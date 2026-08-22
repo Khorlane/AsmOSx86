@@ -97,6 +97,10 @@ For example, a future device-control call should not let the device layer decide
 whether an ordinary task is trusted. The Kc layer should check the task's
 authority first, then route the request to the device layer.
 
+The current Kc dispatch table now carries each service's minimum authority, and
+user-originated dispatch checks that policy before calling the service handler.
+That keeps trusted-only enforcement centralized as new kernel calls are added.
+
 ## Task Authority Field
 
 Task records now carry one authority value:
