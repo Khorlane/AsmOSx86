@@ -12,10 +12,19 @@ $RepoRoot = Split-Path -Parent $PSScriptRoot
 function Wait-ForKey {
   Write-Host ""
   Write-Host "Press any key to continue..."
-  [void][System.Console]::ReadKey($true)
+  try {
+    [void][System.Console]::ReadKey($true)
+  }
+  catch {
+    Write-Host "(No interactive console available; continuing.)"
+  }
 }
 
-Clear-Host
+try {
+  Clear-Host
+}
+catch {
+}
 Write-Host ""
 Write-Host "--------------------------------"
 Write-Host "- Boot up AsmOSx86 using Bochs -"
