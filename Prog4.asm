@@ -439,8 +439,9 @@ MaybeGetMemoryTest:
   je    MaybeGetMemoryTestDenied
   cmp   eax,STATUS_OK
   jne   MaybeGetMemoryTestDone
-  mov   eax,[KC_BLOCK+KC_BLOCK_RESULT1]
-  cmp   eax,4096
+  call  CheckMemoryProbe
+  mov   eax,[Prog4Status]
+  cmp   eax,STATUS_OK
   jne   MaybeGetMemoryTestFailed
   mov   dword[pProg4Msg],MsgGetMemoryTrustedOk
   call  PrintProg4Msg
@@ -463,8 +464,9 @@ MaybeGetMemoryTestSystem:
   mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
   cmp   eax,STATUS_OK
   jne   MaybeGetMemoryTestFailed
-  mov   eax,[KC_BLOCK+KC_BLOCK_RESULT1]
-  cmp   eax,4096
+  call  CheckMemoryProbe
+  mov   eax,[Prog4Status]
+  cmp   eax,STATUS_OK
   jne   MaybeGetMemoryTestFailed
   mov   dword[pProg4Msg],MsgGetMemorySystemOk
   call  PrintProg4Msg
@@ -474,6 +476,23 @@ GetMemoryProbe:
   mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],KC_MM_GET_MEMORY
   mov   dword[KC_BLOCK+KC_BLOCK_ARG0],4096
   int   080h
+  ret
+
+CheckMemoryProbe:
+  mov   dword[Prog4Status],1
+  mov   eax,[KC_BLOCK+KC_BLOCK_RESULT0]
+  test  eax,eax
+  jz    CheckMemoryProbeDone
+  mov   [Prog4MemoryPtr],eax
+  mov   eax,[KC_BLOCK+KC_BLOCK_RESULT1]
+  cmp   eax,4096
+  jne   CheckMemoryProbeDone
+  mov   eax,[Prog4MemoryPtr]
+  mov   dword[eax],00C0FFEEh
+  cmp   dword[eax],00C0FFEEh
+  jne   CheckMemoryProbeDone
+  mov   dword[Prog4Status],STATUS_OK
+CheckMemoryProbeDone:
   ret
 MaybeGetMemoryTestDenied:
   mov   dword[pProg4Msg],MsgGetMemoryDeniedOk
@@ -504,12 +523,16 @@ MaybeFreeMemoryTest:
   jne   MaybeFreeMemoryTestDone
   cmp   byte[USER_ARG+8],'m'
   jne   MaybeFreeMemoryTestDone
-  call  FreeMemoryProbe
+  call  FreeMemoryProbeReal
   mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
   cmp   eax,STATUS_DENIED
   je    MaybeFreeMemoryTestDenied
+  mov   eax,[Prog4Status]
   cmp   eax,STATUS_OK
-  jne   MaybeFreeMemoryTestDone
+  jne   MaybeFreeMemoryTestFailed
+  mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
+  cmp   eax,STATUS_OK
+  jne   MaybeFreeMemoryTestFailed
   mov   eax,[KC_BLOCK+KC_BLOCK_RESULT1]
   cmp   eax,4096
   jne   MaybeFreeMemoryTestFailed
@@ -540,7 +563,10 @@ MaybeFreeMemoryTestSystem:
   jne   MaybeFreeMemoryTestDone
   cmp   byte[USER_ARG+11],'e'
   jne   MaybeFreeMemoryTestDone
-  call  FreeMemoryProbe
+  call  FreeMemoryProbeReal
+  mov   eax,[Prog4Status]
+  cmp   eax,STATUS_OK
+  jne   MaybeFreeMemoryTestFailed
   mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
   cmp   eax,STATUS_OK
   jne   MaybeFreeMemoryTestFailed
@@ -556,6 +582,25 @@ FreeMemoryProbe:
   mov   dword[KC_BLOCK+KC_BLOCK_ARG0],0
   mov   dword[KC_BLOCK+KC_BLOCK_ARG1],4096
   int   080h
+  ret
+
+FreeMemoryProbeReal:
+  mov   dword[Prog4Status],1
+  call  GetMemoryProbe
+  mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
+  cmp   eax,STATUS_OK
+  jne   FreeMemoryProbeRealDone
+  call  CheckMemoryProbe
+  mov   eax,[Prog4Status]
+  cmp   eax,STATUS_OK
+  jne   FreeMemoryProbeRealDone
+  mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],KC_MM_FREE_MEMORY
+  mov   eax,[Prog4MemoryPtr]
+  mov   [KC_BLOCK+KC_BLOCK_ARG0],eax
+  mov   dword[KC_BLOCK+KC_BLOCK_ARG1],4096
+  int   080h
+  mov   dword[Prog4Status],STATUS_OK
+FreeMemoryProbeRealDone:
   ret
 MaybeFreeMemoryTestDenied:
   mov   dword[pProg4Msg],MsgFreeMemoryDeniedOk
@@ -833,6 +878,7 @@ MsgAuthSystemOk      dw 23
                      db "Prog4: auth system OK",13,10
 MsgAuthFail          dw 18
                      db "Prog4: auth FAIL",13,10
+Prog4MemoryPtr       dd 0
 DataBuffer           dw 0
 DataBufferText:
   times DATA_BUFFER_SIZE db 0

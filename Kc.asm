@@ -662,13 +662,9 @@ KcTsLoadProgramHandler1:
 ;   Input:
 ;     KcArg0 = requested byte count.
 ;   Output:
-;     KcStatus  = KC_STATUS_OK or KC_STATUS_DENIED.
-;     KcResult0 = reserved for future memory pointer.
-;     KcResult1 = accepted byte count when allowed.
-;   Notes:
-;     First privilege-policy proof for a trusted-only service. This does not
-;     allocate pages yet; it proves that normal ring 3 tasks cannot use the
-;     future memory-growth service while trusted tasks can pass the gate.
+;     KcStatus  = KC_STATUS_OK, KC_STATUS_DENIED, or KC_STATUS_BAD_ARG.
+;     KcResult0 = allocated user virtual pointer.
+;     KcResult1 = page-rounded allocated byte count.
 ;--------------------------------------------------------------------------------------------------
 KcMmGetMemoryHandler:
   mov   dword[KcResult0],0
@@ -678,8 +674,19 @@ KcMmGetMemoryHandler:
   cmp   eax,KC_STATUS_OK
   jne   KcMmGetMemoryDenied
   mov   eax,[KcArg0]
+  mov   [TaskMemoryRequestBytes],eax
+  call  TaskMemoryGet
+  mov   eax,[TaskMemoryStatus]
+  cmp   eax,TASK_MEMORY_STATUS_OK
+  jne   KcMmGetMemoryFailed
+  mov   eax,[TaskMemoryPointer]
+  mov   [KcResult0],eax
+  mov   eax,[TaskMemoryBytes]
   mov   [KcResult1],eax
   mov   dword[KcStatus],KC_STATUS_OK
+  ret
+KcMmGetMemoryFailed:
+  mov   dword[KcStatus],KC_STATUS_BAD_ARG
   ret
 KcMmGetMemoryDenied:
   mov   dword[KcStatus],KC_STATUS_DENIED
@@ -688,15 +695,12 @@ KcMmGetMemoryDenied:
 ;--------------------------------------------------------------------------------------------------
 ; KcMmFreeMemoryHandler
 ;   Input:
-;     KcArg0 = future memory pointer.
+;     KcArg0 = memory pointer returned by KcMmGetMemory.
 ;     KcArg1 = byte count to free.
 ;   Output:
-;     KcStatus  = KC_STATUS_OK or KC_STATUS_DENIED.
-;     KcResult0 = reserved for future allocator status.
-;     KcResult1 = accepted byte count when allowed.
-;   Notes:
-;     Trusted-only policy proof for the future free side of the memory-growth
-;     service family. This does not release pages yet.
+;     KcStatus  = KC_STATUS_OK, KC_STATUS_DENIED, or KC_STATUS_BAD_ARG.
+;     KcResult0 = 0.
+;     KcResult1 = page-rounded freed byte count.
 ;--------------------------------------------------------------------------------------------------
 KcMmFreeMemoryHandler:
   mov   dword[KcResult0],0
@@ -705,9 +709,20 @@ KcMmFreeMemoryHandler:
   mov   eax,[KcStatus]
   cmp   eax,KC_STATUS_OK
   jne   KcMmFreeMemoryDenied
+  mov   eax,[KcArg0]
+  mov   [TaskMemoryPointer],eax
   mov   eax,[KcArg1]
+  mov   [TaskMemoryRequestBytes],eax
+  call  TaskMemoryFree
+  mov   eax,[TaskMemoryStatus]
+  cmp   eax,TASK_MEMORY_STATUS_OK
+  jne   KcMmFreeMemoryFailed
+  mov   eax,[TaskMemoryBytes]
   mov   [KcResult1],eax
   mov   dword[KcStatus],KC_STATUS_OK
+  ret
+KcMmFreeMemoryFailed:
+  mov   dword[KcStatus],KC_STATUS_BAD_ARG
   ret
 KcMmFreeMemoryDenied:
   mov   dword[KcStatus],KC_STATUS_DENIED
