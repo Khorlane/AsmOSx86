@@ -149,10 +149,10 @@ run prog4.bin -- load
   exits 0048 when program loading is kernel-owned
 
 run prog4.bin -- legacy
-  destructive/manual halt test
   runs the normal DATA.TXT path
   deliberately calls legacy gateway address 00100005h
-  expects "Legacy Kc gateway denied" and a system halt
+  expects a user page fault at eip/address 00100005h
+  exits 0F0E because ring 3 cannot fetch the supervisor-only gateway
 
 run prog1.bin | prog2.bin | prog3.bin
   loads three named programs from one console command line
@@ -183,7 +183,7 @@ info              KcTsGetInfo task/mode proof               0101
 priv              privileged instruction fault              0F0D
 mem               supervisor-only kernel memory fault       0F0E
 load              user KcTsLoadProgram denied               0048
-legacy            legacy gateway denied                     halt
+legacy            legacy gateway page fault                 0F0E
 ```
 
 Kernel-call boundary:
@@ -342,15 +342,9 @@ run prog4.bin -- info
 run prog4.bin -- priv
 run prog4.bin -- mem
 run prog4.bin -- load
+run prog4.bin -- legacy
 run prog1.bin | prog2.bin | prog3.bin
 run prog4.bin -- sleep | prog1.bin | prog4.bin -- bad
-```
-
-Manual destructive halt test, run separately only when checking the legacy
-gateway quarantine:
-
-```text
-run prog4.bin -- legacy
 ```
 
 After that, choose the next feature based on what feels most useful:

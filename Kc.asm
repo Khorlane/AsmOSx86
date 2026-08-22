@@ -266,7 +266,8 @@ KcUserDispatchSleep:
 ;   Output:
 ;     Prints a diagnostic and halts.
 ;   Notes:
-;     Fixed address 00100005h is reserved so old user binaries fail loudly.
+;     Ring 3 attempts page fault before reaching this supervisor-only address.
+;     This handler makes accidental ring 0 jumps to the old gateway fail loudly.
 ;     Current user programs must enter through int 80h.
 ;--------------------------------------------------------------------------------------------------
 KcLegacyGatewayDenied:

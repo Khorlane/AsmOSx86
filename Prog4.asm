@@ -49,7 +49,7 @@ Start:
   call  MaybePrivTest                   ; Optional privilege-fault proof
   call  MaybeMemTest                    ; Optional kernel-memory fault proof
   call  MaybeLoadTest                   ; Optional user load-program denial proof
-  call  MaybeLegacyTest                 ; Optional legacy-gateway halt proof
+  call  MaybeLegacyTest                 ; Optional legacy-gateway page-fault proof
   call  MaybeBadPrintTest               ; Optional bad-print proof
   call  MaybeBadOpenTest                ; Optional bad-open proof
   call  MaybeBadReadTest                ; Optional bad-read proof
