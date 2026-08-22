@@ -111,6 +111,12 @@ run prog4.bin -- sleep
   wakes through cooperative scheduler checks
   exits 0007
 
+run prog4.bin -- key
+  runs the normal DATA.TXT path
+  calls KcKbRead
+  blocks until a key event is available
+  exits 0047 when the user task resumes
+
 run prog1.bin | prog2.bin | prog3.bin
   loads three named programs from one console command line
   proves file-loaded multi-task cooperative scheduling without hard-coded names
@@ -133,6 +139,7 @@ bad-read          bad KcFsRead destination pointer          0044
 bad-zero-call     KcValidate rejects call number 0          0045
 bad-call-number   KcLookup rejects unknown call number      0046
 sleep             KcTmSleep blocks and wakes cooperatively  0007
+key               KcKbRead blocks until keyboard input      0047
 ```
 
 Kernel-call boundary:
@@ -148,6 +155,7 @@ KcVdWriteStr and KcFsOpen validate full Str ranges for user-originated calls.
 KcFsRead validates destination buffer ranges for user-originated calls.
 Prog4 has denial modes for bad print, bad open, and bad read user pointers.
 Prog4 has dispatch denial modes for zero and unknown Kc call numbers.
+KcKbRead blocks user tasks until a keyboard event is available.
 ```
 
 Tasking and scheduling:
@@ -197,7 +205,6 @@ avoid large validation frameworks for now
 
 ```text
 possible candidates:
-  keyboard wait
   file/device wait
   cooperative timer sleep variants
 ```
@@ -241,6 +248,7 @@ run prog4.bin -- bad-read
 run prog4.bin -- bad-zero-call
 run prog4.bin -- bad-call-number
 run prog4.bin -- sleep
+run prog4.bin -- key
 run prog1.bin | prog2.bin | prog3.bin
 run prog4.bin -- sleep | prog1.bin | prog4.bin -- bad
 ```

@@ -13,6 +13,7 @@ KC_TS_EXIT          equ 5
 KC_FS_OPEN          equ 6
 KC_FS_READ          equ 7
 KC_FS_CLOSE         equ 8
+KC_KB_READ          equ 10
 KC_BLOCK            equ 00210000h
 USER_ARG            equ 00210020h
 KC_BLOCK_NUMBER     equ 0
@@ -38,6 +39,7 @@ Start:
   cmp   eax,STATUS_OK                   ;  if bad
   jne   Prog4CloseAndExit               ;    can't continue, close file, then exit
   call  PrintLine                       ; Print
+  call  MaybeKeyTest                    ; Optional keyboard read proof
   call  MaybeSleepTest                  ; Optional cooperative sleep proof
   call  MaybeBadPrintTest               ; Optional bad-print proof
   call  MaybeBadOpenTest                ; Optional bad-open proof
@@ -201,6 +203,34 @@ MaybeSleepTest:
   call  ebx
   mov   dword[Prog4ExitCode],7
 MaybeSleepTestDone:
+  ret
+
+MaybeKeyTest:
+  cmp   word[USER_ARG],3
+  jne   MaybeKeyTestDone
+  cmp   byte[USER_ARG+2],'k'
+  jne   MaybeKeyTestDone
+  cmp   byte[USER_ARG+3],'e'
+  jne   MaybeKeyTestDone
+  cmp   byte[USER_ARG+4],'y'
+  jne   MaybeKeyTestDone
+  mov   dword[pProg4Msg],MsgKeyPrompt
+  call  PrintProg4Msg
+  mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],KC_KB_READ
+  mov   ebx,KERNEL_CALL_GATEWAY
+  call  ebx
+  mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
+  cmp   eax,STATUS_OK
+  jne   MaybeKeyTestFailed
+  mov   dword[pProg4Msg],MsgKeyOk
+  call  PrintProg4Msg
+  mov   dword[Prog4ExitCode],47
+  ret
+MaybeKeyTestFailed:
+  mov   dword[pProg4Msg],MsgKeyFail
+  call  PrintProg4Msg
+  mov   dword[Prog4ExitCode],94
+MaybeKeyTestDone:
   ret
 
 MaybeBadZeroCallTest:
@@ -418,6 +448,12 @@ MsgBadCallNumberOk   dw 27
                      db "Prog4: bad-call-number OK",13,10
 MsgBadCallNumberFail dw 29
                      db "Prog4: bad-call-number FAIL",13,10
+MsgKeyPrompt         dw 20
+                     db "Prog4: press a key",13,10
+MsgKeyOk             dw 15
+                     db "Prog4: key OK",13,10
+MsgKeyFail           dw 17
+                     db "Prog4: key FAIL",13,10
 DataBuffer           dw 0
 DataBufferText:
   times DATA_BUFFER_SIZE db 0

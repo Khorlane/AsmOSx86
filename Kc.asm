@@ -52,6 +52,7 @@ KcFsOpen           equ 6
 KcFsRead           equ 7
 KcFsClose          equ 8
 KcTmSleep          equ 9
+KcKbRead           equ 10
 
 ;--------------------------------------------------------------------------------------------------
 ; User Kernel-Call Block Layout
@@ -96,6 +97,7 @@ KcTable:
   dd KcFsRead,      KcFsReadHandler
   dd KcFsClose,     KcFsCloseHandler
   dd KcTmSleep,     KcTmSleepHandler
+  dd KcKbRead,      KcKbReadHandler
 KcTableEnd:
 KcTableCount equ (KcTableEnd-KcTable)/8
 
@@ -365,6 +367,32 @@ KcTmSleepHandler:
   mov   dword[KcResult1],0
   mov   dword[KcStatus],KC_STATUS_OK
   call  TaskSleep
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; KcKbReadHandler
+;   Output:
+;     KcStatus  = KC_STATUS_OK or KC_STATUS_BAD_ARG.
+;     KcResult0 = KEY_* event type.
+;     KcResult1 = ASCII character for KEY_CHAR, otherwise 0.
+;   Notes:
+;     User-originated calls block cooperatively until one key event is available.
+;--------------------------------------------------------------------------------------------------
+KcKbReadHandler:
+  mov   eax,[KcCallFromUser]
+  test  eax,eax
+  jz    KcKbReadHandlerBad
+  call  TaskKeyboardRead
+  mov   eax,[TaskKeyType]
+  mov   [KcResult0],eax
+  mov   eax,[TaskKeyChar]
+  mov   [KcResult1],eax
+  mov   dword[KcStatus],KC_STATUS_OK
+  ret
+KcKbReadHandlerBad:
+  mov   dword[KcResult0],KEY_NONE
+  mov   dword[KcResult1],0
+  mov   dword[KcStatus],KC_STATUS_BAD_ARG
   ret
 
 ;--------------------------------------------------------------------------------------------------

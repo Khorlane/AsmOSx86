@@ -23,6 +23,7 @@
 ;   - TaskBlock
 ;   - TaskWake
 ;   - TaskSleep
+;   - TaskKeyboardRead
 ;   - TaskProgramLoad
 ;   - TaskProgramInit
 ;   - TaskProgramGetExitCode
@@ -72,7 +73,10 @@ TASK_KCBLOCK_PHYS    equ 44
 TASK_WAKE_LO         equ 48
 TASK_WAKE_HI         equ 52
 TASK_SLEEP_ACTIVE    equ 56
-TASK_RECORD_SIZE     equ 60
+TASK_KEY_WAIT_ACTIVE equ 60
+TASK_KEY_TYPE        equ 64
+TASK_KEY_CHAR        equ 68
+TASK_RECORD_SIZE     equ 72
 
 ;--------------------------------------------------------------------------------------------------
 ; Task Table and Stack-Slot Constants
@@ -127,6 +131,12 @@ TaskWakeNowLo        dd 0               ; work: current ticks low
 TaskWakeNowHi        dd 0               ; work: current ticks high
 TaskWakeScanIndex    dd 0               ; work: sleep wake scan index
 TaskWakeScanLeft     dd 0               ; work: sleep wake scan entries left
+TaskKeyType          dd 0               ; output: keyboard event type
+TaskKeyChar          dd 0               ; output: keyboard event char
+TaskKeyScanIndex     dd 0               ; work: keyboard wait scan index
+TaskKeyScanLeft      dd 0               ; work: keyboard wait scan entries left
+TaskKeyFoundIndex    dd 0               ; work: keyboard waiter index
+TaskKeyFoundPtr      dd 0               ; work: keyboard waiter record
 TaskScanIndex        dd 0               ; work: scheduler table scan index
 TaskScanLeft         dd 0               ; work: scheduler entries left to scan
 TaskStackSlot        dd 0               ; input: stack slot index
@@ -354,6 +364,53 @@ TaskSleepDone:
   ret
 
 ;--------------------------------------------------------------------------------------------------
+; TaskKeyboardRead
+;   Output:
+;     TaskKeyType = KEY_* event type.
+;     TaskKeyChar = ASCII character for KEY_CHAR, otherwise 0.
+;   Notes:
+;     Blocks the current task until a keyboard event is available.
+;     Wake checks happen when TaskYield is entered; no keyboard IRQ is required.
+;--------------------------------------------------------------------------------------------------
+TaskKeyboardRead:
+  mov   dword[TaskKeyType],KEY_NONE
+  mov   dword[TaskKeyChar],0
+  call  KbGetKey
+  movzx eax,byte[KbOutHasKey]
+  test  eax,eax
+  jz    TaskKeyboardReadBlock
+  movzx eax,byte[KbOutType]
+  mov   [TaskKeyType],eax
+  movzx eax,byte[KbOutChar]
+  mov   [TaskKeyChar],eax
+  ret
+TaskKeyboardReadBlock:
+  mov   eax,[TaskCurrentIndex]
+  mov   [TaskIndex],eax
+  call  TaskGetRecord
+  mov   edi,[pTaskRecord]
+  test  edi,edi
+  jz    TaskKeyboardReadDone
+  mov   dword[edi+TASK_KEY_WAIT_ACTIVE],1
+  mov   dword[edi+TASK_KEY_TYPE],KEY_NONE
+  mov   dword[edi+TASK_KEY_CHAR],0
+  mov   eax,[TaskCurrentIndex]
+  mov   [TaskStateIndex],eax
+  call  TaskBlock
+  call  TaskYield
+  call  TaskGetCurrentRecord
+  mov   edi,[pTaskRecord]
+  test  edi,edi
+  jz    TaskKeyboardReadDone
+  mov   eax,[edi+TASK_KEY_TYPE]
+  mov   [TaskKeyType],eax
+  mov   eax,[edi+TASK_KEY_CHAR]
+  mov   [TaskKeyChar],eax
+  mov   dword[edi+TASK_KEY_WAIT_ACTIVE],0
+TaskKeyboardReadDone:
+  ret
+
+;--------------------------------------------------------------------------------------------------
 ; TaskProgramLoad
 ;   Input:
 ;     pTaskProgramName     = pointer to kernel Str filename.
@@ -444,6 +501,9 @@ TaskProgramLoad:
   mov   dword[edi+TASK_WAKE_LO],0
   mov   dword[edi+TASK_WAKE_HI],0
   mov   dword[edi+TASK_SLEEP_ACTIVE],0
+  mov   dword[edi+TASK_KEY_WAIT_ACTIVE],0
+  mov   dword[edi+TASK_KEY_TYPE],0
+  mov   dword[edi+TASK_KEY_CHAR],0
   mov   dword[edi+TASK_EXIT_CODE],0
   mov   dword[edi+TASK_RUN_COUNT],0
   mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_OK
@@ -520,6 +580,9 @@ TaskProgramInit2:
   mov   dword[edi+TASK_WAKE_LO],0
   mov   dword[edi+TASK_WAKE_HI],0
   mov   dword[edi+TASK_SLEEP_ACTIVE],0
+  mov   dword[edi+TASK_KEY_WAIT_ACTIVE],0
+  mov   dword[edi+TASK_KEY_TYPE],0
+  mov   dword[edi+TASK_KEY_CHAR],0
   mov   dword[TaskProgramArgPtr],0
   ret
 
@@ -714,6 +777,7 @@ TaskYield1:
 TaskYield2:
   mov   [TaskScanIndex],eax
   call  TaskWakeSleepers
+  call  TaskWakeKeyboardWaiters
   mov   dword[TaskScanLeft],MAX_TASKS
 TaskYield3:
   mov   eax,[TaskScanLeft]
@@ -802,6 +866,58 @@ TaskWakeSleepersNext:
   dec   dword[TaskWakeScanLeft]
   jmp   TaskWakeSleepers1
 TaskWakeSleepersDone:
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; TaskWakeKeyboardWaiters
+;   Output:
+;     Wakes the first task blocked on keyboard input if a key event is available.
+;   Notes:
+;     Polls the keyboard only when a keyboard waiter exists, so console input is
+;     not consumed during ordinary command-line editing.
+;--------------------------------------------------------------------------------------------------
+TaskWakeKeyboardWaiters:
+  mov   dword[TaskKeyFoundIndex],0
+  mov   dword[TaskKeyFoundPtr],0
+  mov   dword[TaskKeyScanIndex],0
+  mov   dword[TaskKeyScanLeft],MAX_TASKS
+TaskWakeKeyboardWaitersFind:
+  mov   eax,[TaskKeyScanLeft]
+  test  eax,eax
+  jz    TaskWakeKeyboardWaitersDone
+  mov   eax,[TaskKeyScanIndex]
+  mov   [TaskIndex],eax
+  call  TaskGetRecord
+  mov   edi,[pTaskRecord]
+  test  edi,edi
+  jz    TaskWakeKeyboardWaitersNext
+  cmp   dword[edi+TASK_STATE],TASK_STATE_BLOCKED
+  jne   TaskWakeKeyboardWaitersNext
+  cmp   dword[edi+TASK_KEY_WAIT_ACTIVE],1
+  jne   TaskWakeKeyboardWaitersNext
+  mov   eax,[TaskKeyScanIndex]
+  mov   [TaskKeyFoundIndex],eax
+  mov   [TaskKeyFoundPtr],edi
+  jmp   TaskWakeKeyboardWaitersPoll
+TaskWakeKeyboardWaitersNext:
+  inc   dword[TaskKeyScanIndex]
+  dec   dword[TaskKeyScanLeft]
+  jmp   TaskWakeKeyboardWaitersFind
+TaskWakeKeyboardWaitersPoll:
+  call  KbGetKey
+  movzx eax,byte[KbOutHasKey]
+  test  eax,eax
+  jz    TaskWakeKeyboardWaitersDone
+  mov   edi,[TaskKeyFoundPtr]
+  movzx eax,byte[KbOutType]
+  mov   [edi+TASK_KEY_TYPE],eax
+  movzx eax,byte[KbOutChar]
+  mov   [edi+TASK_KEY_CHAR],eax
+  mov   dword[edi+TASK_KEY_WAIT_ACTIVE],0
+  mov   eax,[TaskKeyFoundIndex]
+  mov   [TaskStateIndex],eax
+  call  TaskWake
+TaskWakeKeyboardWaitersDone:
   ret
 
 ;--------------------------------------------------------------------------------------------------
