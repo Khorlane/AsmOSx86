@@ -510,7 +510,7 @@ MaybeFreeMemoryTest:
   cmp   word[USER_ARG],7
   jne   MaybeFreeMemoryTestSystem
   cmp   byte[USER_ARG+2],'f'
-  jne   MaybeFreeMemoryTestDone
+  jne   MaybeBadFreeMemoryTest
   cmp   byte[USER_ARG+3],'r'
   jne   MaybeFreeMemoryTestDone
   cmp   byte[USER_ARG+4],'e'
@@ -577,9 +577,46 @@ MaybeFreeMemoryTestSystem:
   call  PrintProg4Msg
   mov   dword[Prog4ExitCode],0000004Eh
   ret
+
+MaybeBadFreeMemoryTest:
+  cmp   byte[USER_ARG+2],'b'
+  jne   MaybeFreeMemoryTestDone
+  cmp   byte[USER_ARG+3],'a'
+  jne   MaybeFreeMemoryTestDone
+  cmp   byte[USER_ARG+4],'d'
+  jne   MaybeFreeMemoryTestDone
+  cmp   byte[USER_ARG+5],'f'
+  jne   MaybeFreeMemoryTestDone
+  cmp   byte[USER_ARG+6],'r'
+  jne   MaybeFreeMemoryTestDone
+  cmp   byte[USER_ARG+7],'e'
+  jne   MaybeFreeMemoryTestDone
+  cmp   byte[USER_ARG+8],'e'
+  jne   MaybeFreeMemoryTestDone
+  call  BadFreeMemoryProbe
+  mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
+  cmp   eax,STATUS_BAD_ARG
+  jne   MaybeBadFreeMemoryTestFailed
+  mov   dword[pProg4Msg],MsgBadFreeMemoryOk
+  call  PrintProg4Msg
+  mov   dword[Prog4ExitCode],00000053h
+  ret
+MaybeBadFreeMemoryTestFailed:
+  mov   dword[pProg4Msg],MsgBadFreeMemoryFail
+  call  PrintProg4Msg
+  mov   dword[Prog4ExitCode],00000091h
+  ret
+
 FreeMemoryProbe:
   mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],KC_MM_FREE_MEMORY
   mov   dword[KC_BLOCK+KC_BLOCK_ARG0],0
+  mov   dword[KC_BLOCK+KC_BLOCK_ARG1],4096
+  int   080h
+  ret
+
+BadFreeMemoryProbe:
+  mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],KC_MM_FREE_MEMORY
+  mov   dword[KC_BLOCK+KC_BLOCK_ARG0],00200001h
   mov   dword[KC_BLOCK+KC_BLOCK_ARG1],4096
   int   080h
   ret
@@ -870,6 +907,10 @@ MsgFreeMemorySystemOk dw 26
                      db "Prog4: freemem system OK",13,10
 MsgFreeMemoryFail    dw 21
                      db "Prog4: freemem FAIL",13,10
+MsgBadFreeMemoryOk   dw 19
+                     db "Prog4: badfree OK",13,10
+MsgBadFreeMemoryFail dw 21
+                     db "Prog4: badfree FAIL",13,10
 MsgAuthNormalOk      dw 23
                      db "Prog4: auth normal OK",13,10
 MsgAuthTrustedOk     dw 24

@@ -6,5 +6,6 @@ run /trusted prog4.bin -- auth
 run /system prog4.bin -- auth
 run prog4.bin -- freemem
 run /trusted prog4.bin -- freemem
+run /trusted prog4.bin -- badfree
 run /system prog4.bin -- systemfree
 shutdown
