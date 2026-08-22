@@ -166,6 +166,9 @@ TaskScanLeft         dd 0               ; work: scheduler entries left to scan
 TaskStackSlot        dd 0               ; input: stack slot index
 TaskStackBottom      dd 0               ; output: stack slot bottom address
 TaskStackTop         dd 0               ; output: stack slot top address
+TaskStackMapPte      dd 0               ; work: stack page-table entry pointer
+TaskStackMapPhys     dd 0               ; work: stack page physical address
+TaskStackMapLeft     dd 0               ; work: stack pages left to map
 pTaskRecord          dd 0               ; output: selected task record pointer
 TaskPut4DecVal       dd 0               ; input: value 0..9999
 pTaskPut4DecDst      dd 0               ; input: destination payload pointer
@@ -1285,6 +1288,56 @@ TaskMapSelectedProgram1:
 TaskMapSelectedProgram2:
   mov   [PgUserPhysBase],eax
   call  PgMapUserProgram
+  call  TaskMapSelectedStack
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; TaskMapSelectedStack
+;   Input:
+;     pTaskRecord = selected task record.
+;   Output:
+;     Stack arena pages are supervisor-only except the selected user stack.
+;--------------------------------------------------------------------------------------------------
+TaskMapSelectedStack:
+  mov   eax,PgTable0+((STACK_ARENA_BOTTOM/PG_PAGE_SIZE)*4)
+  mov   [TaskStackMapPte],eax
+  mov   eax,STACK_ARENA_BOTTOM
+  mov   [TaskStackMapPhys],eax
+  mov   dword[TaskStackMapLeft],STACK_SLOT_COUNT
+TaskMapSelectedStack1:
+  mov   eax,[TaskStackMapLeft]
+  test  eax,eax
+  jz    TaskMapSelectedStack2
+  mov   eax,[TaskStackMapPhys]
+  or    eax,PG_KERNEL_FLAGS
+  mov   edi,[TaskStackMapPte]
+  mov   [edi],eax
+  add   edi,4
+  mov   [TaskStackMapPte],edi
+  mov   eax,[TaskStackMapPhys]
+  add   eax,PG_PAGE_SIZE
+  mov   [TaskStackMapPhys],eax
+  dec   dword[TaskStackMapLeft]
+  jmp   TaskMapSelectedStack1
+TaskMapSelectedStack2:
+  mov   edi,[pTaskRecord]
+  test  edi,edi
+  jz    TaskMapSelectedStackDone
+  cmp   dword[edi+TASK_MODE],TASK_MODE_USER
+  jne   TaskMapSelectedStackDone
+  mov   eax,[edi+TASK_STACK_BOTTOM]
+  test  eax,eax
+  jz    TaskMapSelectedStackDone
+  and   eax,0FFFFF000h
+  mov   ebx,eax
+  shr   ebx,12
+  shl   ebx,2
+  add   ebx,PgTable0
+  or    eax,PG_USER_FLAGS
+  mov   [ebx],eax
+TaskMapSelectedStackDone:
+  mov   eax,PgDirectory
+  mov   cr3,eax
   ret
 
 ;--------------------------------------------------------------------------------------------------
