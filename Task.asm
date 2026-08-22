@@ -18,6 +18,7 @@
 ; Public API
 ;   - TaskGetCurrentRecord
 ;   - TaskPut4Dec
+;   - TaskPut4Hex
 ;   - TaskValidateUserRange
 ;   - TaskSetReady
 ;   - TaskBlock
@@ -173,6 +174,9 @@ TaskStackMapLeft     dd 0               ; work: stack pages left to map
 pTaskRecord          dd 0               ; output: selected task record pointer
 TaskPut4DecVal       dd 0               ; input: value 0..9999
 pTaskPut4DecDst      dd 0               ; input: destination payload pointer
+TaskPut4HexVal       dd 0               ; input: low 16 bits to format
+pTaskPut4HexDst      dd 0               ; input: destination payload pointer
+TaskPut4HexShift     dd 0               ; work: current nibble shift
 TaskUserPtr          dd 0               ; input: user pointer to validate
 TaskUserSize         dd 0               ; input: validation byte count
 TaskUserLimit        dd 0               ; work: exclusive range limit
@@ -261,6 +265,40 @@ TaskPut4Dec:
   mov   al,dl
   add   al,'0'
   mov   [edi+3],al
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; TaskPut4Hex
+;   Input:
+;     TaskPut4HexVal = low 16 bits to format.
+;     pTaskPut4HexDst = destination payload pointer.
+;   Output:
+;     [pTaskPut4HexDst original..original+3] = four uppercase hex digits.
+;--------------------------------------------------------------------------------------------------
+TaskPut4Hex:
+  mov   edi,[pTaskPut4HexDst]
+  mov   dword[TaskPut4HexShift],12
+TaskPut4Hex1:
+  mov   eax,[TaskPut4HexVal]
+  mov   ecx,[TaskPut4HexShift]
+  shr   eax,cl
+  and   eax,0000000Fh
+  cmp   eax,10
+  jb    TaskPut4Hex2
+  add   al,'A'-10
+  jmp   TaskPut4Hex3
+TaskPut4Hex2:
+  add   al,'0'
+TaskPut4Hex3:
+  mov   [edi],al
+  inc   edi
+  mov   eax,[TaskPut4HexShift]
+  test  eax,eax
+  jz    TaskPut4HexDone
+  sub   eax,4
+  mov   [TaskPut4HexShift],eax
+  jmp   TaskPut4Hex1
+TaskPut4HexDone:
   ret
 
 ;--------------------------------------------------------------------------------------------------
