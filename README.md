@@ -1,7 +1,7 @@
 # 🧠 AsmOSx86  
 *A Hobbyist Operating System in x86 Assembly*
 
-AsmOSx86 is a 32-bit x86 operating system written entirely in NASM assembly and designed to run in protected mode. Its long-term goal is to build a clear, minimal, educational kernel with explicit subsystem boundaries, memory-backed contracts, resident kernel services, controlled user/kernel interaction, and a simple path toward cooperative multitasking and user programs.
+AsmOSx86 is a 32-bit x86 operating system written entirely in NASM assembly and designed to run in protected mode. Its long-term goal is to build a clear, minimal, educational kernel with explicit subsystem boundaries, memory-backed contracts, resident kernel services, controlled user/kernel interaction, cooperative multitasking, and ring 3 user programs.
 
 ---
 
@@ -9,8 +9,8 @@ AsmOSx86 is a 32-bit x86 operating system written entirely in NASM assembly and 
 - Resident protected-mode kernel
 - Monolithic early design
 - Memory-backed service contracts
-- Cooperative multitasking direction
-- Future controlled user/kernel interface
+- Cooperative multitasking
+- Ring 3 user/kernel boundary through `int 80h`
 
 ## 🛠️ Development Environment
 - Windows 11  

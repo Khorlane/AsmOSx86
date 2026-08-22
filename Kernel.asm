@@ -134,7 +134,7 @@ FlushCS:
   lea   eax,[IDT2]                      ; Load the IDT
   lidt  [eax]                           ;  register
   call  PgInit                          ; Enable identity-mapped paging
-  call  KcInit                          ; Install future kernel-call interrupt gate
+  call  KcInit                          ; Install user kernel-call interrupt gate
 
   ; Initialize subsystems
   call  TimerInit                       ; Initialize timer

@@ -53,6 +53,9 @@ The current kernel provides:
   - `KcFsOpen`
   - `KcFsRead`
   - `KcFsClose`
+  - `KcTmSleep`
+  - `KcKbRead`
+  - `KcTsGetInfo`
 - simple built-in commands:
   - `Clear`
   - `Date`
@@ -108,13 +111,14 @@ EDX:EAX = return value
 EDI = output pointer
 ```
 
-This rule applies to kernel routines and to future user/kernel interfaces.
+This rule applies to kernel routines and to user/kernel interfaces.
 
 ### Why this matters
 
 This rule simplifies reasoning in assembly. It makes every routine boundary explicit and prevents accidental dependencies on transient register state.
 
-It also fits the future kernel-call model: user programs will request services by filling a memory-backed parameter block, not by relying on arbitrary live registers.
+It also fits the kernel-call model: user programs request services by filling a
+memory-backed parameter block, not by relying on arbitrary live registers.
 
 ---
 
@@ -588,11 +592,14 @@ Current tested calls:
 KcTmGetUptime   - Return monotonic uptime seconds in KcResult0
 KcVdWriteStr    - Write a kernel Str through the video subsystem
 KcTsYield       - Cooperative scheduling point
-KcTsLoadProgram - Load a raw user program from the filesystem and prepare a task
+KcTsLoadProgram - Load a raw user program from the filesystem and prepare a task (kernel-originated only)
 KcTsExit        - End the current task with an exit code
 KcFsOpen        - Open an existing disk file
 KcFsRead        - Read bytes from an open file
 KcFsClose       - Close an open file handle
+KcTmSleep       - Block current task until a cooperative wake deadline
+KcKbRead        - Block current task until one keyboard event is available
+KcTsGetInfo     - Return current task index and user-mode tag
 ```
 
 ### Filesystem — `KcFs*`
@@ -904,9 +911,17 @@ KcVdWriteStr
 KcTsYield
 KcTsLoadProgram
 KcTsExit
+KcFsOpen
+KcFsRead
+KcFsClose
+KcTmSleep
+KcKbRead
+KcTsGetInfo
 ```
 
-The current test path invokes calls internally with `call KcDispatch` through the operator-console `KcTest` command.
+The kernel test path can invoke calls internally with `call KcDispatch` through
+the operator-console `KcTest` command. Loaded user programs enter through
+`int 80h` and exchange arguments/results through their KcBlock.
 
 ### Phase 3 — Simple user program arena
 
@@ -1635,8 +1650,11 @@ resident kernel + kernel call interface + simple user task
 
 AsmOSx86 is a resident 32-bit protected-mode kernel loaded at `00100000h`.
 
-It uses a memory-contract ABI internally and should expose future user/kernel services through a memory-backed Kernel Call Interface abbreviated `Kc`.
+It uses a memory-contract ABI internally and exposes user/kernel services through
+a memory-backed Kernel Call Interface abbreviated `Kc`.
 
 The kernel remains fixed in memory. User programs live above the kernel. If multiple user programs fit in memory, context switching only changes CPU/task state. Swapping is optional and only needed when runnable tasks cannot all remain resident.
 
-The current console, timer, wall-time, uptime, keyboard, video, utility, and initial kernel-call subsystems form the practical base for the next step: moving from a tested in-kernel `KcDispatch` path toward a first controlled user program.
+The current console, timer, wall-time, uptime, keyboard, video, utility,
+filesystem, task, paging, and kernel-call subsystems support loaded ring 3 user
+programs through `int 80h`.
