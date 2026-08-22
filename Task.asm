@@ -76,7 +76,13 @@ TASK_SLEEP_ACTIVE    equ 56
 TASK_KEY_WAIT_ACTIVE equ 60
 TASK_KEY_TYPE        equ 64
 TASK_KEY_CHAR        equ 68
-TASK_RECORD_SIZE     equ 72
+TASK_USER_EIP        equ 72
+TASK_USER_ESP        equ 76
+TASK_USER_CS         equ 80
+TASK_USER_DS         equ 84
+TASK_USER_SS         equ 88
+TASK_USER_EFLAGS     equ 92
+TASK_RECORD_SIZE     equ 96
 
 ;--------------------------------------------------------------------------------------------------
 ; Task Table and Stack-Slot Constants
@@ -106,6 +112,7 @@ USER_PROGRAM_KCBLOCK_BASE       equ USER_PROGRAM_VIRTUAL_BASE+USER_PROGRAM_KCBLO
 USER_PROGRAM_ARG_SIZE           equ 128
 USER_PROGRAM_ARG_OFFSET         equ USER_PROGRAM_KCBLOCK_OFFSET+USER_PROGRAM_KCBLOCK_SIZE
 USER_PROGRAM_ARG_BASE           equ USER_PROGRAM_VIRTUAL_BASE+USER_PROGRAM_ARG_OFFSET
+USER_PROGRAM_INITIAL_EFLAGS     equ 00000002h
 
 ;--------------------------------------------------------------------------------------------------
 ; User Memory Contract
@@ -498,6 +505,13 @@ TaskProgramLoad:
   mov   [edi+TASK_PROGRAM_PAGES],ebx
   mov   ebx,[TaskProgramKcBlockPhysPtr]
   mov   [edi+TASK_KCBLOCK_PHYS],ebx
+  mov   dword[edi+TASK_USER_EIP],USER_PROGRAM_VIRTUAL_BASE
+  mov   eax,[TaskStackTop]
+  mov   [edi+TASK_USER_ESP],eax
+  mov   dword[edi+TASK_USER_CS],USER_CODE_SEL
+  mov   dword[edi+TASK_USER_DS],USER_DATA_SEL
+  mov   dword[edi+TASK_USER_SS],USER_DATA_SEL
+  mov   dword[edi+TASK_USER_EFLAGS],USER_PROGRAM_INITIAL_EFLAGS
   mov   dword[edi+TASK_WAKE_LO],0
   mov   dword[edi+TASK_WAKE_HI],0
   mov   dword[edi+TASK_SLEEP_ACTIVE],0
@@ -577,6 +591,12 @@ TaskProgramInit2:
   mov   dword[edi+TASK_PROGRAM_PHYS],0
   mov   dword[edi+TASK_PROGRAM_PAGES],0
   mov   dword[edi+TASK_KCBLOCK_PHYS],0
+  mov   dword[edi+TASK_USER_EIP],0
+  mov   dword[edi+TASK_USER_ESP],0
+  mov   dword[edi+TASK_USER_CS],0
+  mov   dword[edi+TASK_USER_DS],0
+  mov   dword[edi+TASK_USER_SS],0
+  mov   dword[edi+TASK_USER_EFLAGS],0
   mov   dword[edi+TASK_WAKE_LO],0
   mov   dword[edi+TASK_WAKE_HI],0
   mov   dword[edi+TASK_SLEEP_ACTIVE],0

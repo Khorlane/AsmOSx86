@@ -164,6 +164,7 @@ Tasking and scheduling:
 The scheduler is cooperative.
 Task states include Free, Ready, Running, Blocked, and Exited.
 TaskSetReady, TaskBlock, and TaskWake exist.
+Task records contain future user-mode EIP, ESP, CS, DS, SS, and EFLAGS fields.
 KcTmSleep is the first real cooperative blocking service.
 TaskYield wakes blocked sleep tasks whose deadlines have expired.
 Timer wake checks happen only when the cooperative scheduler runs.
@@ -178,6 +179,10 @@ Future ring 3 GDT code/data selectors are defined:
   USER_CODE_SEL
   USER_DATA_SEL
 They are scaffolding only and are not used yet.
+Future TSS selector and storage are defined:
+  TSS_SEL
+  Tss32
+TR is loaded during kernel startup.
 Fault IDT gates are installed for:
   general protection fault vector 13
   page fault vector 14
@@ -234,6 +239,8 @@ possible future improvements:
 ```text
 current flag bits remain unchanged until ring 3 work begins
 future ring 3 GDT selectors are named but unused
+future TSS selector/storage are named and TR is loaded
+future user-mode task frame fields are populated but unused
 future flag names document the intended user/supervisor policy
 fault handlers are named but still halt-only
 later add the x86 user/supervisor bit to user-facing mappings

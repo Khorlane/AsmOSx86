@@ -725,6 +725,8 @@ CnDoCmdRunStart:
   mov   dword[TaskProgramTaskIndex],1
   call  TaskProgramGetExitCode
   mov   eax,[TaskProgramExitCode]
+  call  TaskProgramSplitExitCode
+  mov   eax,[TaskExitCodeSum]
   mov   [TaskPut4DecVal],eax
   lea   eax,[CnRunExit+17]
   mov   [pTaskPut4DecDst],eax

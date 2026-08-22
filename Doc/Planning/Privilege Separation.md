@@ -29,6 +29,7 @@ Current implemented groundwork:
 Kernel runs in protected mode at 00100000h
 Kernel owns GDT and IDT setup
 Future ring 3 GDT code/data descriptors and selector names exist
+Future TSS descriptor, selector, storage, and TR load exist
 Paging is enabled
 First 16 MiB are identity-mapped
 Shared user virtual range begins at 00200000h
@@ -42,6 +43,7 @@ KcUserDispatch is the user-originated path and requires service validation
 General-protection fault IDT vector 13 is installed
 Page-fault IDT vector 14 is installed
 General-protection faults and page faults currently halt forever
+Task records have future user-mode EIP, ESP, CS, DS, SS, and EFLAGS fields
 Prog4 has denial probes for invalid KcVdWriteStr, KcFsOpen, and KcFsRead pointers
 Prog4 has denial probes for zero and unknown Kc call numbers
 Paging permission intent is named separately from current ring-0-safe flags
@@ -51,11 +53,12 @@ Current important limitations:
 
 ```text
 Ring 3 descriptors are scaffolding only and are not used yet
-No TSS
+TSS is loaded but only scaffolding until ring transitions exist
 No ring transition stack switching
 No trap/interrupt gate for user kernel calls
 Paging entries are present/writable but not user-accessible
 Kernel and user tasks still run with ring 0 segment selectors
+Future user-mode task fields are populated but not consumed by the scheduler
 User programs are constrained by convention, not by CPU privilege checks
 ```
 
@@ -180,6 +183,7 @@ Fully implementing this later would likely require:
 
 ```text
 GDT entries for ring 3 user code and data
+TSS descriptor and ring 0 stack fields
 kernel pages marked supervisor-only
 user pages marked user-accessible
 a controlled kernel entry path

@@ -36,6 +36,13 @@ GDTTable:
   dq 0x00CF92000000FFFF                 ; Data Segment Descriptor
   dq 0x00CFFA000000FFFF                 ; Future ring 3 code descriptor
   dq 0x00CFF2000000FFFF                 ; Future ring 3 data descriptor
+GdtTssDescriptor:
+  dw TSS_LIMIT
+  dw TSS_BASE & 0FFFFh
+  db (TSS_BASE >> 16) & 0FFh
+  db TSS_DESCRIPTOR_ATTR
+  db 0
+  db (TSS_BASE >> 24) & 0FFh
 GDTTableEnd:
 
 GDTDescriptor:
@@ -50,8 +57,18 @@ GDTDescriptor:
   DATA_DESC             equ 10h         ; Data Segment Descriptor
   USER_CODE_DESC        equ 18h         ; Future ring 3 code descriptor
   USER_DATA_DESC        equ 20h         ; Future ring 3 data descriptor
+  TSS_DESC              equ 28h         ; Future ring transition TSS descriptor
   USER_CODE_SEL         equ USER_CODE_DESC|03h
   USER_DATA_SEL         equ USER_DATA_DESC|03h
+  TSS_SEL               equ TSS_DESC
+
+;--------------------------------------------------------------------------------------------------
+; Task State Segment (TSS) Equates
+;--------------------------------------------------------------------------------------------------
+  TSS_LIMIT             equ 0067h       ; 32-bit TSS size minus 1
+  TSS_BASE              equ Tss32-$$+00100000h
+  TSS_DESCRIPTOR_ATTR   equ 089h        ; Present ring 0 available 32-bit TSS
+  TSS_KERNEL_ESP0       equ 00090000h   ; Future ring transition kernel stack top
 
 ;--------------------------------------------------------------------------------------------------
 ; Interrupt Descriptor Table (IDT)
@@ -60,6 +77,17 @@ IDT1: times 256 dq 0
 IDT2:
   dw 2047
   dd IDT1
+
+;--------------------------------------------------------------------------------------------------
+; Task State Segment (TSS)
+;--------------------------------------------------------------------------------------------------
+; Scaffolding only: the descriptor exists for future ring 3 stack transitions,
+; and the kernel loads TR during startup. User tasks still run in ring 0.
+Tss32:
+  dd 0                                  ; Previous task link
+  dd TSS_KERNEL_ESP0                    ; ESP0 for future user-to-kernel entry
+  dd DATA_DESC                          ; SS0 for future user-to-kernel entry
+  times 92 db 0
 
 ;--------------------------------------------------------------------------------------------------
 ; Include Macros
@@ -99,6 +127,8 @@ FlushCS:
   mov   es,ax                           ;  Extra segment
   mov   fs,ax                           ;  General-purpose segment
   mov   gs,ax                           ;  General-purpose segment
+  mov   ax,TSS_SEL                      ; Load the future ring transition TSS
+  ltr   ax                              ;  into the task register
   mov   esp,90000h                      ; Stack begins from 90000h
   lea   eax,[IDT2]                      ; Load the IDT
   lidt  [eax]                           ;  register
