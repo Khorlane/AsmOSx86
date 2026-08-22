@@ -26,7 +26,8 @@ user #PF terminates the task with 0F0E
 KcTsLoadProgram is kernel-originated only
 tasks carry a TASK_AUTH_* authority value
 Run can launch trusted/system ring 3 test tasks through launch prefixes
-KcMmGetMemory and KcMmFreeMemory are trusted-only policy proofs
+KcMmGetMemory and KcMmFreeMemory are real trusted-only page services
+trusted FreeMemory rejects bad pointer arguments after passing the policy gate
 legacy gateway address 00100005h is denied
 STARTUP.TXT can exercise privilege smoke tests through ordinary console commands
 ```
@@ -48,6 +49,7 @@ In other words:
 ```text
 ring 3 enforcement: done
 first privilege policy gate: done
+trusted memory service enforcement: done
 broader privilege policy model: future
 ```
 
@@ -133,8 +135,8 @@ KcTsGetInfo        normal allowed
 KcTsGetAuthority   normal allowed
 
 KcTsLoadProgram    kernel-originated only today
-KcMmGetMemory      trusted/system only
-KcMmFreeMemory     trusted/system only
+KcMmGetMemory      trusted/system only, page-rounded per-task allocation
+KcMmFreeMemory     trusted/system only, stack-like page release
 future KcDevCtl    trusted/system only
 future KcMount     trusted/system only
 future KcSession   system only
@@ -157,6 +159,18 @@ add tests for any new privileged service
 keep fault handling simple until richer process/session policy exists
 ```
 
+Completed validation probes:
+
+```text
+normal GetMemory denied
+trusted GetMemory allowed and returned memory is writable
+system GetMemory allowed and returned memory is writable
+normal FreeMemory denied
+trusted FreeMemory allowed after allocating a block
+system FreeMemory allowed after allocating a block
+trusted FreeMemory with a bad pointer returns BAD_ARG
+```
+
 ## Startup Policy Connection
 
 `STARTUP.TXT` is currently an automated console command stream.
@@ -176,8 +190,7 @@ Not needed immediately:
 
 ```text
 full process/session ownership model
-trusted/system task authority bits
-service permission matrix
+per-task service permission masks
 rich user fault reporting
 user identity or sign-on integration
 preemptive watchdog enforcement

@@ -65,14 +65,21 @@ KcTsGetAuthority   equ 14
 ;--------------------------------------------------------------------------------------------------
 ; Kernel Call User Policy
 ;--------------------------------------------------------------------------------------------------
-; User-allowed:
-;   KcTmGetUptime, KcVdWriteStr, KcTsYield, KcTsExit, KcFsOpen,
-;   KcFsRead, KcFsClose, KcTmSleep, KcKbRead, KcTsGetInfo,
-;   KcTsGetAuthority.
-; Trusted-only:
-;   KcMmGetMemory, KcMmFreeMemory.
-; Kernel-only:
-;   KcTsLoadProgram.
+; Service            Minimum caller authority       Notes
+; KcTmGetUptime      normal                         user allowed
+; KcVdWriteStr       normal                         user pointer validated
+; KcTsYield          normal                         interrupt-aware switch
+; KcTsLoadProgram    kernel                         KcDispatch only
+; KcTsExit           normal                         interrupt-aware exit
+; KcFsOpen           normal                         user pointer validated
+; KcFsRead           normal                         user pointer validated
+; KcFsClose          normal                         handle validated
+; KcTmSleep          normal                         interrupt-aware block
+; KcKbRead           normal                         interrupt-aware block
+; KcTsGetInfo        normal                         user allowed
+; KcMmGetMemory      trusted                        trusted/system only
+; KcMmFreeMemory     trusted                        trusted/system only
+; KcTsGetAuthority   normal                         user allowed
 ; User pointer validation:
 ;   KcVdWriteStr, KcFsOpen, KcFsRead.
 ; Interrupt-aware switching/blocking:

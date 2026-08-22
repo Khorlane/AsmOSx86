@@ -711,8 +711,8 @@ KcTmSleep       - Block current task until a cooperative wake deadline
 KcKbRead        - Block current task until one keyboard event is available
 KcTsGetInfo     - Return current task index and user-mode tag
 KcTsGetAuthority - Return current task authority tag
-KcMmGetMemory   - Trusted-only memory-service policy proof
-KcMmFreeMemory  - Trusted-only memory-service policy proof
+KcMmGetMemory   - Trusted-only page-rounded user-memory allocation
+KcMmFreeMemory  - Trusted-only stack-like user-memory release
 ```
 
 ### Filesystem — `KcFs*`
@@ -797,7 +797,14 @@ KcMmFreeMemory  - Release user memory
 KcMmInfo        - Get memory limits/available memory for task/session
 ```
 
-The first practical implementation should be much smaller than this list. The goal is to establish the boundary first, not to build a large service catalog immediately.
+The current `KcMmGetMemory` / `KcMmFreeMemory` implementation is intentionally
+small. Trusted/system tasks can grow their own user mapping by whole pages from
+the task's reserved user-program slot. `FreeMemory` currently releases only the
+most recent allocation, keeping the first allocator stack-like instead of a full
+heap.
+
+The broader memory-service list should remain small until real user programs
+need more.
 
 ---
 
