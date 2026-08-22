@@ -46,6 +46,8 @@ PG_PAGE_FAULT_VECTOR equ 14
 PG_FAULT_POLICY_HALT equ 1
 PG_FAULT_POLICY_FUTURE_USER_KILL equ 2
 PG_FAULT_POLICY_FUTURE_KERNEL_PANIC equ 3
+PG_USER_GP_EXIT_CODE equ 00000F0Dh
+PG_USER_PF_EXIT_CODE equ 00000F0Eh
 PG_USER_PTE     equ 512
 PG_USER_MAX_PAGES equ 16
 PG_USER_KC_PTE  equ PG_USER_PTE+PG_USER_MAX_PAGES
@@ -300,11 +302,17 @@ PgFillTable1:
 ;--------------------------------------------------------------------------------------------------
 ; PgGeneralProtectionFault
 ;   Output:
-;     Records fault classification, then halts forever.
+;     Kernel faults halt forever. User faults terminate the current task.
 ;--------------------------------------------------------------------------------------------------
 PgGeneralProtectionFault:
   mov   dword[PgLastFaultVector],PG_GP_FAULT_VECTOR
   call  PgClassifyFault
+  cmp   dword[PgLastFaultIsUser],1
+  jne   PgGeneralProtectionFaultHalt
+  mov   [TaskInterruptFrameEsp],esp
+  mov   dword[TaskExitCode],PG_USER_GP_EXIT_CODE
+  call  TaskExitFromInterrupt
+PgGeneralProtectionFaultHalt:
   cli
 PgGeneralProtectionFault1:
   hlt
@@ -313,11 +321,17 @@ PgGeneralProtectionFault1:
 ;--------------------------------------------------------------------------------------------------
 ; PgPageFault
 ;   Output:
-;     Records fault classification, then halts forever.
+;     Kernel faults halt forever. User faults terminate the current task.
 ;--------------------------------------------------------------------------------------------------
 PgPageFault:
   mov   dword[PgLastFaultVector],PG_PAGE_FAULT_VECTOR
   call  PgClassifyFault
+  cmp   dword[PgLastFaultIsUser],1
+  jne   PgPageFaultHalt
+  mov   [TaskInterruptFrameEsp],esp
+  mov   dword[TaskExitCode],PG_USER_PF_EXIT_CODE
+  call  TaskExitFromInterrupt
+PgPageFaultHalt:
   cli
 PgPageFault1:
   hlt
@@ -327,9 +341,6 @@ PgPageFault1:
 ; PgClassifyFault
 ;   Output:
 ;     PgLastFaultIsUser = 1 if current task is tagged user mode, else 0.
-;   Notes:
-;     Current policy still halts forever. This is future fault-routing
-;     groundwork for user-task termination vs kernel panic.
 ;--------------------------------------------------------------------------------------------------
 PgClassifyFault:
   mov   dword[PgLastFaultIsUser],0

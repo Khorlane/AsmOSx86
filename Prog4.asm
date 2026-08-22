@@ -41,6 +41,7 @@ Start:
   call  MaybeInt80Test                  ; Optional int 80h proof
   call  MaybeKeyTest                    ; Optional keyboard read proof
   call  MaybeSleepTest                  ; Optional cooperative sleep proof
+  call  MaybePrivTest                   ; Optional privilege-fault proof
   call  MaybeBadPrintTest               ; Optional bad-print proof
   call  MaybeBadOpenTest                ; Optional bad-open proof
   call  MaybeBadReadTest                ; Optional bad-read proof
@@ -254,6 +255,22 @@ MaybeInt80TestFailed:
   call  PrintProg4Msg
   mov   dword[Prog4ExitCode],93
 MaybeInt80TestDone:
+  ret
+
+MaybePrivTest:
+  cmp   word[USER_ARG],4
+  jne   MaybePrivTestDone
+  cmp   byte[USER_ARG+2],'p'
+  jne   MaybePrivTestDone
+  cmp   byte[USER_ARG+3],'r'
+  jne   MaybePrivTestDone
+  cmp   byte[USER_ARG+4],'i'
+  jne   MaybePrivTestDone
+  cmp   byte[USER_ARG+5],'v'
+  jne   MaybePrivTestDone
+  cli
+  mov   dword[Prog4ExitCode],91
+MaybePrivTestDone:
   ret
 
 MaybeBadZeroCallTest:
