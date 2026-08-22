@@ -232,7 +232,8 @@ Fault IDT gates are installed for:
   page fault vector 14
 Kernel faults halt forever.
 User faults terminate the current task and return to the scheduler.
-Fault handlers record the fault vector and current task execution-mode tag.
+Fault handlers classify user faults from the CPU-pushed CS selector.
+User fault diagnostics print vector, CS, EIP, and CR2 before task exit.
 Paging flag names express intent:
   PG_KERNEL_FLAGS
   PG_USER_FLAGS

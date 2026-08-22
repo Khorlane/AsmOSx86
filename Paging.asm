@@ -11,7 +11,7 @@
 ;   - Identity-mapped page directory and page tables
 ;   - Shared user virtual page-range remapping
 ;   - CR3/CR0 paging enable path
-;   - Minimal halt handlers for page fault and general protection fault
+;   - Minimal fault handlers for page fault and general protection fault
 ;
 ; Notes
 ;   - Maps the first 16 MiB as present, writable pages.
@@ -19,7 +19,8 @@
 ;   - User/supervisor enforcement is not enabled yet because all code still
 ;     runs in ring 0.
 ;   - Paging does not enable hardware IRQs.
-;   - Page faults and general protection faults currently halt forever.
+;   - Kernel page faults and general protection faults halt forever.
+;   - User page faults and general protection faults terminate the current task.
 ;**************************************************************************************************
 
 [bits 32]
@@ -93,8 +94,12 @@ PgFaultVector   dd 0                    ; work: IDT vector to install
 PgFaultHandler  dd 0                    ; work: fault handler address
 PgFaultFrameEsp dd 0                    ; work: ESP at CPU-pushed fault frame
 PgFaultCs       dd 0                    ; debug: CS from CPU-pushed fault frame
+PgFaultEip      dd 0                    ; debug: EIP from CPU-pushed fault frame
+PgFaultError    dd 0                    ; debug: error code from CPU-pushed fault frame
+PgFaultCr2      dd 0                    ; debug: CR2 linear address for page faults
 PgLastFaultVector dd 0                  ; debug: last fault vector entered
 PgLastFaultIsUser dd 0                  ; debug: 1 if fault frame came from ring 3
+String  PgUserFaultStr,"User fault 0000 cs 0000 eip 00000000 addr 00000000"
 
 align 4096
 PgDirectory:
@@ -309,10 +314,12 @@ PgFillTable1:
 ;--------------------------------------------------------------------------------------------------
 PgGeneralProtectionFault:
   mov   [PgFaultFrameEsp],esp
+  mov   dword[PgFaultCr2],0
   mov   dword[PgLastFaultVector],PG_GP_FAULT_VECTOR
   call  PgClassifyFault
   cmp   dword[PgLastFaultIsUser],1
   jne   PgGeneralProtectionFaultHalt
+  call  PgPrintUserFault
   mov   [TaskInterruptFrameEsp],esp
   mov   dword[TaskExitCode],PG_USER_GP_EXIT_CODE
   call  TaskExitFromInterrupt
@@ -329,10 +336,13 @@ PgGeneralProtectionFault1:
 ;--------------------------------------------------------------------------------------------------
 PgPageFault:
   mov   [PgFaultFrameEsp],esp
+  mov   eax,cr2
+  mov   [PgFaultCr2],eax
   mov   dword[PgLastFaultVector],PG_PAGE_FAULT_VECTOR
   call  PgClassifyFault
   cmp   dword[PgLastFaultIsUser],1
   jne   PgPageFaultHalt
+  call  PgPrintUserFault
   mov   [TaskInterruptFrameEsp],esp
   mov   dword[TaskExitCode],PG_USER_PF_EXIT_CODE
   call  TaskExitFromInterrupt
@@ -349,9 +359,16 @@ PgPageFault1:
 ;--------------------------------------------------------------------------------------------------
 PgClassifyFault:
   mov   dword[PgLastFaultIsUser],0
+  mov   dword[PgFaultError],0
+  mov   dword[PgFaultEip],0
+  mov   dword[PgFaultCs],0
   mov   ebx,[PgFaultFrameEsp]
   test  ebx,ebx
   jz    PgClassifyFaultDone
+  mov   eax,[ebx]
+  mov   [PgFaultError],eax
+  mov   eax,[ebx+4]
+  mov   [PgFaultEip],eax
   movzx eax,word[ebx+8]
   mov   [PgFaultCs],eax
   and   eax,00000003h
@@ -359,4 +376,48 @@ PgClassifyFault:
   jne   PgClassifyFaultDone
   mov   dword[PgLastFaultIsUser],1
 PgClassifyFaultDone:
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; PgPrintUserFault
+;   Output:
+;     Prints one compact user-fault diagnostic line.
+;--------------------------------------------------------------------------------------------------
+PgPrintUserFault:
+  mov   eax,[PgLastFaultVector]
+  mov   [TaskPut4HexVal],eax
+  lea   eax,[PgUserFaultStr+13]
+  mov   [pTaskPut4HexDst],eax
+  call  TaskPut4Hex
+  mov   eax,[PgFaultCs]
+  mov   [TaskPut4HexVal],eax
+  lea   eax,[PgUserFaultStr+21]
+  mov   [pTaskPut4HexDst],eax
+  call  TaskPut4Hex
+  mov   eax,[PgFaultEip]
+  shr   eax,16
+  mov   [TaskPut4HexVal],eax
+  lea   eax,[PgUserFaultStr+30]
+  mov   [pTaskPut4HexDst],eax
+  call  TaskPut4Hex
+  mov   eax,[PgFaultEip]
+  mov   [TaskPut4HexVal],eax
+  lea   eax,[PgUserFaultStr+34]
+  mov   [pTaskPut4HexDst],eax
+  call  TaskPut4Hex
+  mov   eax,[PgFaultCr2]
+  shr   eax,16
+  mov   [TaskPut4HexVal],eax
+  lea   eax,[PgUserFaultStr+44]
+  mov   [pTaskPut4HexDst],eax
+  call  TaskPut4Hex
+  mov   eax,[PgFaultCr2]
+  mov   [TaskPut4HexVal],eax
+  lea   eax,[PgUserFaultStr+48]
+  mov   [pTaskPut4HexDst],eax
+  call  TaskPut4Hex
+  lea   eax,[PgUserFaultStr]
+  mov   [pVdStr],eax
+  call  VdPutStr
+  call  CnCrLf
   ret

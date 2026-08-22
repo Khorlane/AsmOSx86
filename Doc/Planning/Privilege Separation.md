@@ -50,7 +50,8 @@ General-protection fault IDT vector 13 is installed
 Page-fault IDT vector 14 is installed
 General-protection faults and page faults terminate user tasks
 Kernel faults still halt forever
-Fault handlers record the fault vector and current task execution-mode tag
+Fault handlers classify user faults from the CPU-pushed CS selector
+User fault diagnostics print vector, CS, EIP, and CR2 before task exit
 Task records have user-mode EIP, ESP, CS, DS, SS, and EFLAGS fields
 Loaded user tasks have a prepared iretd frame
 TaskEnterUserMode validates its frame and enters ring 3 through iretd
@@ -118,6 +119,15 @@ kernel general protection fault -> halt forever
 kernel page fault               -> halt forever
 user general protection fault   -> terminate current task with 0F0D
 user page fault                 -> terminate current task with 0F0E
+```
+
+User fault diagnostics currently include:
+
+```text
+fault vector
+faulting CS
+faulting EIP
+CR2 linear address for page faults
 ```
 
 The current ring 3 policy is:
