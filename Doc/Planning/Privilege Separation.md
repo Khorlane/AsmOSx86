@@ -27,38 +27,37 @@ KcTsLoadProgram is kernel-originated only
 tasks carry a TASK_AUTH_* authority value
 Run can launch trusted/system ring 3 test tasks through launch prefixes
 KcMmGetMemory and KcMmFreeMemory are real trusted-only page services
+KcMmInfo is a normal-user memory introspection service
 trusted FreeMemory rejects bad pointer arguments after passing the policy gate
 legacy gateway address 00100005h is denied
 STARTUP.TXT can exercise privilege smoke tests through ordinary console commands
 ```
 
-That means the basic enforcement milestone is done.
+That means the active privilege-separation and privilege-policy foundation
+milestone is done.
 
-## Remaining Planning Area
+## Completion State
 
-The remaining topic is not "can AsmOSx86 run ring 3 user programs?".
-
-The remaining topic is:
-
-```text
-What authority should different userland tasks have?
-```
-
-In other words:
+This document no longer describes an active implementation push. The current
+state is:
 
 ```text
 ring 3 enforcement: done
 first privilege policy gate: done
+central Kc authority table: done
 trusted memory service enforcement: done
-broader privilege policy model: future
+trusted memory allocator boundary probes: done
+startup-driven privilege smoke tests: done
 ```
 
-## Future Userland Authority Levels
+Future privilege work should be driven by new real services, not by this
+foundation milestone.
 
-AsmOSx86 may eventually distinguish between ordinary user programs and trusted
-or system user programs.
+## Userland Authority Levels
 
-Conceptual authority levels:
+AsmOSx86 currently distinguishes ordinary, trusted, and system user tasks.
+
+Current authority levels:
 
 ```text
 normal user task
@@ -141,19 +140,19 @@ KcTsGetAuthority   normal allowed
 KcTsLoadProgram    kernel-originated only today
 KcMmGetMemory      trusted/system only, page-rounded per-task allocation
 KcMmFreeMemory     trusted/system only, stack-like page release
-future KcDevCtl    trusted/system only
-future KcMount     trusted/system only
-future KcSession   system only
-future KcShutdown  console/system only
+future KcDevCtl    trusted/system only when it exists
+future KcMount     trusted/system only when it exists
+future KcSession   system only when it exists
+future KcShutdown  console/system only when it exists
 ```
 
-The exact list can wait until those services exist.
+The exact future list can wait until those services exist.
 
-## Validation Work That Remains
+## Validation Work
 
 Current user-pointer validation is intentionally service-specific.
 
-Future work:
+Current rule:
 
 ```text
 broaden pointer validation as new Kc services are added
@@ -163,7 +162,7 @@ add tests for any new privileged service
 keep fault handling simple until richer process/session policy exists
 ```
 
-Completed validation probes:
+Completed startup-driven validation probes:
 
 ```text
 normal GetMemory denied
@@ -171,10 +170,12 @@ trusted GetMemory allowed and returned memory is writable
 system GetMemory allowed and returned memory is writable
 normal MmInfo allowed and returns mapped/max user memory
 trusted GetMemory changes mapped memory reported by MmInfo
+trusted GetMemory refuses to grow beyond the user memory limit
 normal FreeMemory denied
 trusted FreeMemory allowed after allocating a block
 system FreeMemory allowed after allocating a block
 trusted FreeMemory with a bad pointer returns BAD_ARG
+trusted FreeMemory enforces stack-like release order
 ```
 
 ## Startup Policy Connection
@@ -182,7 +183,7 @@ trusted FreeMemory with a bad pointer returns BAD_ARG
 `STARTUP.TXT` is currently an automated console command stream.
 
 Longer term, it can evolve into boot-time policy for starting trusted/system
-userland tasks. That future policy should still use the same distinction:
+userland tasks. That future policy should keep the same distinction:
 
 ```text
 kernel mode             ring 0 kernel code
@@ -190,7 +191,7 @@ ordinary userland       ring 3, normal authority
 trusted/system userland ring 3, elevated authority granted by kernel policy
 ```
 
-## Deferred Work
+## Deferred Future Work
 
 Not needed immediately:
 
@@ -202,5 +203,5 @@ user identity or sign-on integration
 preemptive watchdog enforcement
 ```
 
-The current ring 3 enforcement foundation should remain small and stable while
-the policy model grows only when real services need it.
+The current ring 3 enforcement and Kc authority foundation should remain small
+and stable while the policy model grows only when real services need it.
