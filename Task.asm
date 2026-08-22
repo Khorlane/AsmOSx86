@@ -80,6 +80,8 @@ TASK_SLEEP_ACTIVE    equ 56
 TASK_KEY_WAIT_ACTIVE equ 60
 TASK_KEY_TYPE        equ 64
 TASK_KEY_CHAR        equ 68
+TASK_MODE_KERNEL     equ 0
+TASK_MODE_USER       equ 1
 TASK_USER_EIP        equ 72
 TASK_USER_ESP        equ 76
 TASK_USER_CS         equ 80
@@ -87,7 +89,8 @@ TASK_USER_DS         equ 84
 TASK_USER_SS         equ 88
 TASK_USER_EFLAGS     equ 92
 TASK_USER_IRET_ESP   equ 96
-TASK_RECORD_SIZE     equ 100
+TASK_MODE            equ 100
+TASK_RECORD_SIZE     equ 104
 
 ;--------------------------------------------------------------------------------------------------
 ; Task Table and Stack-Slot Constants
@@ -526,6 +529,7 @@ TaskProgramLoad:
   mov   dword[edi+TASK_USER_SS],USER_DATA_SEL
   mov   dword[edi+TASK_USER_EFLAGS],USER_PROGRAM_INITIAL_EFLAGS
   call  TaskPrepareUserIretFrame
+  mov   dword[edi+TASK_MODE],TASK_MODE_USER
   mov   dword[edi+TASK_WAKE_LO],0
   mov   dword[edi+TASK_WAKE_HI],0
   mov   dword[edi+TASK_SLEEP_ACTIVE],0
@@ -612,6 +616,7 @@ TaskProgramInit2:
   mov   dword[edi+TASK_USER_SS],0
   mov   dword[edi+TASK_USER_EFLAGS],0
   mov   dword[edi+TASK_USER_IRET_ESP],0
+  mov   dword[edi+TASK_MODE],TASK_MODE_KERNEL
   mov   dword[edi+TASK_WAKE_LO],0
   mov   dword[edi+TASK_WAKE_HI],0
   mov   dword[edi+TASK_SLEEP_ACTIVE],0

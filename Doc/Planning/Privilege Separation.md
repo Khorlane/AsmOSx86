@@ -48,6 +48,7 @@ General-protection faults and page faults currently halt forever
 Task records have future user-mode EIP, ESP, CS, DS, SS, and EFLAGS fields
 Loaded user tasks have a prepared future iretd frame
 TaskEnterUserMode exists but returns disabled
+Task records carry a kernel/user execution-mode tag
 Prog4 has denial probes for invalid KcVdWriteStr, KcFsOpen, and KcFsRead pointers
 Prog4 has denial probes for zero and unknown Kc call numbers
 Paging permission intent is named separately from current ring-0-safe flags
@@ -65,6 +66,7 @@ Kernel and user tasks still run with ring 0 segment selectors
 Future user-mode task fields are populated but not consumed by the scheduler
 Future iretd frames are prepared but not consumed by the scheduler
 TaskEnterUserMode does not consume the iretd frame yet
+Task execution-mode tags are informational only
 User programs are constrained by convention, not by CPU privilege checks
 ```
 
