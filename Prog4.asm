@@ -239,12 +239,12 @@ MaybeKeyTest:
   jne   MaybeKeyTestFailed
   mov   dword[pProg4Msg],MsgKeyOk
   call  PrintProg4Msg
-  mov   dword[Prog4ExitCode],47
+  mov   dword[Prog4ExitCode],00000047h
   ret
 MaybeKeyTestFailed:
   mov   dword[pProg4Msg],MsgKeyFail
   call  PrintProg4Msg
-  mov   dword[Prog4ExitCode],94
+  mov   dword[Prog4ExitCode],00000094h
 MaybeKeyTestDone:
   ret
 
@@ -267,12 +267,12 @@ MaybeInt80Test:
   mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
   cmp   eax,STATUS_OK
   jne   MaybeInt80TestFailed
-  mov   dword[Prog4ExitCode],80
+  mov   dword[Prog4ExitCode],00000080h
   ret
 MaybeInt80TestFailed:
   mov   dword[pProg4Msg],MsgInt80Fail
   call  PrintProg4Msg
-  mov   dword[Prog4ExitCode],93
+  mov   dword[Prog4ExitCode],00000093h
 MaybeInt80TestDone:
   ret
 
@@ -288,7 +288,7 @@ MaybePrivTest:
   cmp   byte[USER_ARG+5],'v'
   jne   MaybePrivTestDone
   cli
-  mov   dword[Prog4ExitCode],91
+  mov   dword[Prog4ExitCode],00000091h
 MaybePrivTestDone:
   ret
 
@@ -302,7 +302,7 @@ MaybeMemTest:
   cmp   byte[USER_ARG+4],'m'
   jne   MaybeMemTestDone
   mov   eax,[00100000h]
-  mov   dword[Prog4ExitCode],92
+  mov   dword[Prog4ExitCode],00000092h
 MaybeMemTestDone:
   ret
 
@@ -325,10 +325,10 @@ MaybeLoadTest:
   mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
   cmp   eax,STATUS_BAD_ARG
   jne   MaybeLoadTestFailed
-  mov   dword[Prog4ExitCode],48
+  mov   dword[Prog4ExitCode],00000048h
   ret
 MaybeLoadTestFailed:
-  mov   dword[Prog4ExitCode],88
+  mov   dword[Prog4ExitCode],00000088h
 MaybeLoadTestDone:
   ret
 
@@ -411,12 +411,12 @@ BadPrintTest:
   jne   BadPrintTestFailed
   mov   dword[pProg4Msg],MsgBadPrintOk
   call  PrintProg4Msg
-  mov   dword[Prog4ExitCode],42
+  mov   dword[Prog4ExitCode],00000042h
   ret
 BadPrintTestFailed:
   mov   dword[pProg4Msg],MsgBadPrintFail
   call  PrintProg4Msg
-  mov   dword[Prog4ExitCode],99
+  mov   dword[Prog4ExitCode],00000099h
   ret
 
 BadOpenTest:
@@ -428,12 +428,12 @@ BadOpenTest:
   jne   BadOpenTestFailed
   mov   dword[pProg4Msg],MsgBadOpenOk
   call  PrintProg4Msg
-  mov   dword[Prog4ExitCode],43
+  mov   dword[Prog4ExitCode],00000043h
   ret
 BadOpenTestFailed:
   mov   dword[pProg4Msg],MsgBadOpenFail
   call  PrintProg4Msg
-  mov   dword[Prog4ExitCode],98
+  mov   dword[Prog4ExitCode],00000098h
   ret
 
 BadReadTest:
@@ -448,12 +448,12 @@ BadReadTest:
   jne   BadReadTestFailed
   mov   dword[pProg4Msg],MsgBadReadOk
   call  PrintProg4Msg
-  mov   dword[Prog4ExitCode],44
+  mov   dword[Prog4ExitCode],00000044h
   ret
 BadReadTestFailed:
   mov   dword[pProg4Msg],MsgBadReadFail
   call  PrintProg4Msg
-  mov   dword[Prog4ExitCode],97
+  mov   dword[Prog4ExitCode],00000097h
   ret
 
 BadZeroCallTest:
@@ -464,12 +464,12 @@ BadZeroCallTest:
   jne   BadZeroCallTestFailed
   mov   dword[pProg4Msg],MsgBadZeroCallOk
   call  PrintProg4Msg
-  mov   dword[Prog4ExitCode],45
+  mov   dword[Prog4ExitCode],00000045h
   ret
 BadZeroCallTestFailed:
   mov   dword[pProg4Msg],MsgBadZeroCallFail
   call  PrintProg4Msg
-  mov   dword[Prog4ExitCode],96
+  mov   dword[Prog4ExitCode],00000096h
   ret
 
 BadCallNumberTest:
@@ -480,12 +480,12 @@ BadCallNumberTest:
   jne   BadCallNumberTestFailed
   mov   dword[pProg4Msg],MsgBadCallNumberOk
   call  PrintProg4Msg
-  mov   dword[Prog4ExitCode],46
+  mov   dword[Prog4ExitCode],00000046h
   ret
 BadCallNumberTestFailed:
   mov   dword[pProg4Msg],MsgBadCallNumberFail
   call  PrintProg4Msg
-  mov   dword[Prog4ExitCode],95
+  mov   dword[Prog4ExitCode],00000095h
   ret
 
 PrintProg4Msg:

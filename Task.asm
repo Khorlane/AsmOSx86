@@ -924,10 +924,20 @@ TaskProgramPrintExitCodesN1:
   mov   eax,[edi+TASK_EXIT_CODE]
   call  TaskProgramSplitExitCode
   mov   eax,[TaskExitCodeSum]
+  mov   ebx,[TaskExitCodeYield]
+  test  ebx,ebx
+  jz    TaskProgramPrintExitCodesNHex
   mov   [TaskPut4DecVal],eax
   lea   eax,[TaskProgramExitStr+14]
   mov   [pTaskPut4DecDst],eax
   call  TaskPut4Dec
+  jmp   TaskProgramPrintExitCodesNHigh
+TaskProgramPrintExitCodesNHex:
+  mov   [TaskPut4HexVal],eax
+  lea   eax,[TaskProgramExitStr+14]
+  mov   [pTaskPut4HexDst],eax
+  call  TaskPut4Hex
+TaskProgramPrintExitCodesNHigh:
   mov   eax,[TaskExitCodeYield]
   mov   [TaskPut4DecVal],eax
   lea   eax,[TaskProgramExitStr+19]
