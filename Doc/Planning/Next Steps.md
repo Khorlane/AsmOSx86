@@ -137,6 +137,12 @@ run prog4.bin -- mem
   deliberately reads supervisor-only kernel memory from user code
   expects the kernel to terminate the task with 0F0E
 
+run prog4.bin -- load
+  runs the normal DATA.TXT path
+  deliberately requests KcTsLoadProgram from user code
+  expects KC_STATUS_BAD_ARG
+  exits 0048 when program loading is kernel-owned
+
 run prog1.bin | prog2.bin | prog3.bin
   loads three named programs from one console command line
   proves file-loaded multi-task cooperative scheduling without hard-coded names
@@ -164,6 +170,7 @@ int80             KcVdWriteStr through int 80h              0080
 cpl               user CS selector proof                    001B
 priv              privileged instruction fault              0F0D
 mem               supervisor-only kernel memory fault       0F0E
+load              user KcTsLoadProgram denied               0048
 ```
 
 Kernel-call boundary:
@@ -182,6 +189,8 @@ Prog4 has dispatch denial modes for zero and unknown Kc call numbers.
 KcKbRead blocks user tasks until a keyboard event is available.
 Kc interrupt vector 80h handles userland service calls.
 Yield, exit, sleep, and keyboard-read calls use interrupt-aware task switching.
+KcTsLoadProgram is kernel-originated only; userland Run requests still go
+through the console.
 ```
 
 Tasking and scheduling:
@@ -314,6 +323,7 @@ run prog4.bin -- key
 run prog4.bin -- cpl
 run prog4.bin -- priv
 run prog4.bin -- mem
+run prog4.bin -- load
 run prog1.bin | prog2.bin | prog3.bin
 run prog4.bin -- sleep | prog1.bin | prog4.bin -- bad
 ```

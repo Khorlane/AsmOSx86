@@ -61,6 +61,7 @@ Prog4 has denial probes for zero and unknown Kc call numbers
 Prog4 can report its CS selector with the cpl argument
 Prog4 can trigger a user #GP with the priv argument
 Prog4 can trigger a user #PF with the mem argument
+Prog4 can verify user KcTsLoadProgram calls are denied with the load argument
 Paging permission intent is named separately from current ring-0-safe flags
 ```
 
@@ -72,6 +73,7 @@ There is no preemptive timer interrupt
 There is not yet a full process/session model
 There is not yet a full user-fault reporting model
 The old fixed gateway still exists as a legacy entry point
+KcTsLoadProgram is kernel-originated only
 Only the currently selected user stack page is marked user-accessible
 User pointer validation is still intentionally small and service-specific
 ```

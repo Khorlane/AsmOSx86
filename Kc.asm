@@ -551,8 +551,12 @@ KcTsYieldHandler:
 ;     KcResult1 = 0
 ;   Notes:
 ;     Loads a raw user program from the filesystem and prepares a task.
+;     Current policy keeps this service kernel-originated only.
 ;--------------------------------------------------------------------------------------------------
 KcTsLoadProgramHandler:
+  mov   eax,[KcCallFromUser]
+  test  eax,eax
+  jnz   KcTsLoadProgramHandler1
   mov   eax,[KcArg0]
   test  eax,eax
   jz    KcTsLoadProgramHandler1

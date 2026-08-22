@@ -8,6 +8,7 @@
 
 KC_TM_SLEEP         equ 9
 KC_VD_WRITE_STR     equ 2
+KC_TS_LOAD_PROGRAM  equ 4
 KC_TS_EXIT          equ 5
 KC_FS_OPEN          equ 6
 KC_FS_READ          equ 7
@@ -44,6 +45,7 @@ Start:
   call  MaybeSleepTest                  ; Optional cooperative sleep proof
   call  MaybePrivTest                   ; Optional privilege-fault proof
   call  MaybeMemTest                    ; Optional kernel-memory fault proof
+  call  MaybeLoadTest                   ; Optional user load-program denial proof
   call  MaybeBadPrintTest               ; Optional bad-print proof
   call  MaybeBadOpenTest                ; Optional bad-open proof
   call  MaybeBadReadTest                ; Optional bad-read proof
@@ -304,6 +306,32 @@ MaybeMemTest:
 MaybeMemTestDone:
   ret
 
+MaybeLoadTest:
+  cmp   word[USER_ARG],4
+  jne   MaybeLoadTestDone
+  cmp   byte[USER_ARG+2],'l'
+  jne   MaybeLoadTestDone
+  cmp   byte[USER_ARG+3],'o'
+  jne   MaybeLoadTestDone
+  cmp   byte[USER_ARG+4],'a'
+  jne   MaybeLoadTestDone
+  cmp   byte[USER_ARG+5],'d'
+  jne   MaybeLoadTestDone
+  mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],KC_TS_LOAD_PROGRAM
+  mov   dword[KC_BLOCK+KC_BLOCK_ARG0],Prog1FileName
+  mov   dword[KC_BLOCK+KC_BLOCK_ARG1],1
+  mov   dword[KC_BLOCK+KC_BLOCK_ARG2],1
+  int   080h
+  mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
+  cmp   eax,STATUS_BAD_ARG
+  jne   MaybeLoadTestFailed
+  mov   dword[Prog4ExitCode],48
+  ret
+MaybeLoadTestFailed:
+  mov   dword[Prog4ExitCode],88
+MaybeLoadTestDone:
+  ret
+
 MaybeBadZeroCallTest:
   cmp   word[USER_ARG],13
   jne   MaybeBadZeroCallTestDone
@@ -491,6 +519,8 @@ Prog4Status          dd 0
 pProg4Msg            dd 0
 DataFileName         dw 8
                      db "DATA.TXT"
+Prog1FileName        dw 9
+                     db "PROG1.BIN"
 MsgBadPrintOk        dw 21
                      db "Prog4: bad-print OK",13,10
 MsgBadPrintFail      dw 23
