@@ -39,7 +39,7 @@ Shared user virtual range begins at 00200000h
 User KcBlock virtual page is at 00210000h
 Each loaded user task has its own physical program pages
 Task switches remap the shared user virtual range to the selected task
-Legacy kernel-call gateway exists at 00100005h
+Legacy kernel-call gateway address 00100005h is reserved and denied
 User programs enter the kernel through int 80h
 KcUserDispatch copies arguments/results through the current task's KcBlock
 KcDispatch is the kernel-originated path and may receive kernel pointers
@@ -75,7 +75,7 @@ The scheduler is still cooperative
 There is no preemptive timer interrupt
 There is not yet a full process/session model
 There is not yet a full user-fault reporting model
-The old fixed gateway still exists as a legacy entry point
+The old fixed gateway is quarantined as a denied legacy entry point
 KcTsLoadProgram is kernel-originated only
 Only the currently selected user stack page is marked user-accessible
 User pointer validation is still intentionally small and service-specific

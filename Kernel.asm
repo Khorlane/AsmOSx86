@@ -23,9 +23,9 @@
   jmp   Stage3                          ; Jump to entry point
 
 ;--------------------------------------------------------------------------------------------------
-; Legacy User Kernel-Call Gateway
+; Denied Legacy User Kernel-Call Gateway
 ;--------------------------------------------------------------------------------------------------
-  jmp   KcUserDispatch                  ; Legacy gateway at 00100005h
+  jmp   KcLegacyGatewayDenied           ; Reserved legacy gateway at 00100005h
 
 ;--------------------------------------------------------------------------------------------------
 ; Global Descriptor Table (GDT)

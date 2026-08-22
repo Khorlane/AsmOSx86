@@ -23,6 +23,7 @@
 ;   - KcInit
 ;   - KcDispatch
 ;   - KcUserDispatch
+;   - KcLegacyGatewayDenied
 ;
 ; Notes
 ;   - Kernel calls use memory-backed inputs and outputs.
@@ -95,6 +96,7 @@ KcHandler          dd 0                 ; work: resolved handler address
 pKcTable           dd 0                 ; work: current table entry pointer
 KcTableLeft        dd 0                 ; work: remaining table entries
 KcIdtEntry         dd 0                 ; work: selected IDT entry pointer
+String  KcLegacyGatewayDeniedStr,"Legacy Kc gateway denied"
 
 ;--------------------------------------------------------------------------------------------------
 ; Kernel Call Dispatch Table
@@ -181,7 +183,6 @@ KcDispatchDone:
 ;     Copies KcStatus/KcResult0/KcResult1 back to the current task's block when
 ;     the call returns to the same task.
 ;   Notes:
-;     Legacy fixed gateway entry lives at 00100005h in Kernel.asm.
 ;     Current user programs reach this path through KcUserInterruptEntry.
 ;     User pointer arguments must be validated by service-specific handlers
 ;     before they are used as kernel addresses.
@@ -246,6 +247,24 @@ KcUserDispatchSleep:
   mov   dword[esi+KC_BLOCK_RESULT1],0
   call  TaskSleep
   ret
+
+;--------------------------------------------------------------------------------------------------
+; KcLegacyGatewayDenied
+;   Output:
+;     Prints a diagnostic and halts.
+;   Notes:
+;     Fixed address 00100005h is reserved so old user binaries fail loudly.
+;     Current user programs must enter through int 80h.
+;--------------------------------------------------------------------------------------------------
+KcLegacyGatewayDenied:
+  lea   eax,[KcLegacyGatewayDeniedStr]
+  mov   [pVdStr],eax
+  call  VdPutStr
+  call  CnCrLf
+  cli
+KcLegacyGatewayDenied1:
+  hlt
+  jmp   KcLegacyGatewayDenied1
 
 ;--------------------------------------------------------------------------------------------------
 ; KcUserInterruptEntry

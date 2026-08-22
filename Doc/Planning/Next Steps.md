@@ -198,6 +198,7 @@ Yield, exit, sleep, and keyboard-read calls use interrupt-aware task switching.
 KcTsLoadProgram is kernel-originated only; userland Run requests still go
 through the console.
 KcTsGetInfo returns the current task index and user-mode tag.
+Legacy gateway address 00100005h is reserved and denied.
 ```
 
 Tasking and scheduling:
