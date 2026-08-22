@@ -6,6 +6,7 @@
 [bits 32]
   org   00200000h
 
+LEGACY_KC_GATEWAY   equ 00100005h
 KC_TM_SLEEP         equ 9
 KC_VD_WRITE_STR     equ 2
 KC_TS_LOAD_PROGRAM  equ 4
@@ -48,6 +49,7 @@ Start:
   call  MaybePrivTest                   ; Optional privilege-fault proof
   call  MaybeMemTest                    ; Optional kernel-memory fault proof
   call  MaybeLoadTest                   ; Optional user load-program denial proof
+  call  MaybeLegacyTest                 ; Optional legacy-gateway halt proof
   call  MaybeBadPrintTest               ; Optional bad-print proof
   call  MaybeBadOpenTest                ; Optional bad-open proof
   call  MaybeBadReadTest                ; Optional bad-read proof
@@ -361,6 +363,27 @@ MaybeLoadTest:
 MaybeLoadTestFailed:
   mov   dword[Prog4ExitCode],00000088h
 MaybeLoadTestDone:
+  ret
+
+MaybeLegacyTest:
+  cmp   word[USER_ARG],6
+  jne   MaybeLegacyTestDone
+  cmp   byte[USER_ARG+2],'l'
+  jne   MaybeLegacyTestDone
+  cmp   byte[USER_ARG+3],'e'
+  jne   MaybeLegacyTestDone
+  cmp   byte[USER_ARG+4],'g'
+  jne   MaybeLegacyTestDone
+  cmp   byte[USER_ARG+5],'a'
+  jne   MaybeLegacyTestDone
+  cmp   byte[USER_ARG+6],'c'
+  jne   MaybeLegacyTestDone
+  cmp   byte[USER_ARG+7],'y'
+  jne   MaybeLegacyTestDone
+  mov   ebx,LEGACY_KC_GATEWAY
+  call  ebx
+  mov   dword[Prog4ExitCode],00000087h
+MaybeLegacyTestDone:
   ret
 
 MaybeBadZeroCallTest:

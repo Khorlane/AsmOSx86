@@ -65,6 +65,7 @@ Prog4 can verify KcTsGetInfo with the info argument
 Prog4 can trigger a user #GP with the priv argument
 Prog4 can trigger a user #PF with the mem argument
 Prog4 can verify user KcTsLoadProgram calls are denied with the load argument
+Prog4 can manually verify the denied legacy gateway with the legacy argument
 Paging permission intent is named separately from current ring-0-safe flags
 ```
 
@@ -76,6 +77,7 @@ There is no preemptive timer interrupt
 There is not yet a full process/session model
 There is not yet a full user-fault reporting model
 The old fixed gateway is quarantined as a denied legacy entry point
+The legacy probe is destructive and expected to halt the system
 KcTsLoadProgram is kernel-originated only
 Only the currently selected user stack page is marked user-accessible
 User pointer validation is still intentionally small and service-specific
