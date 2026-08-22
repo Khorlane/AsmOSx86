@@ -91,8 +91,10 @@ PgUserPteAddr   dd 0                    ; work: current user PTE address
 PgUserMapPhys   dd 0                    ; work: current user physical page
 PgFaultVector   dd 0                    ; work: IDT vector to install
 PgFaultHandler  dd 0                    ; work: fault handler address
+PgFaultFrameEsp dd 0                    ; work: ESP at CPU-pushed fault frame
+PgFaultCs       dd 0                    ; debug: CS from CPU-pushed fault frame
 PgLastFaultVector dd 0                  ; debug: last fault vector entered
-PgLastFaultIsUser dd 0                  ; debug: 1 if current task is user mode
+PgLastFaultIsUser dd 0                  ; debug: 1 if fault frame came from ring 3
 
 align 4096
 PgDirectory:
@@ -306,6 +308,7 @@ PgFillTable1:
 ;     Kernel faults halt forever. User faults terminate the current task.
 ;--------------------------------------------------------------------------------------------------
 PgGeneralProtectionFault:
+  mov   [PgFaultFrameEsp],esp
   mov   dword[PgLastFaultVector],PG_GP_FAULT_VECTOR
   call  PgClassifyFault
   cmp   dword[PgLastFaultIsUser],1
@@ -325,6 +328,7 @@ PgGeneralProtectionFault1:
 ;     Kernel faults halt forever. User faults terminate the current task.
 ;--------------------------------------------------------------------------------------------------
 PgPageFault:
+  mov   [PgFaultFrameEsp],esp
   mov   dword[PgLastFaultVector],PG_PAGE_FAULT_VECTOR
   call  PgClassifyFault
   cmp   dword[PgLastFaultIsUser],1
@@ -341,12 +345,18 @@ PgPageFault1:
 ;--------------------------------------------------------------------------------------------------
 ; PgClassifyFault
 ;   Output:
-;     PgLastFaultIsUser = 1 if current task is tagged user mode, else 0.
+;     PgLastFaultIsUser = 1 if the CPU-pushed fault CS has RPL 3, else 0.
 ;--------------------------------------------------------------------------------------------------
 PgClassifyFault:
   mov   dword[PgLastFaultIsUser],0
-  call  TaskGetCurrentRecord
-  call  TaskIsUserMode
-  mov   eax,[TaskModeIsUser]
-  mov   [PgLastFaultIsUser],eax
+  mov   ebx,[PgFaultFrameEsp]
+  test  ebx,ebx
+  jz    PgClassifyFaultDone
+  movzx eax,word[ebx+8]
+  mov   [PgFaultCs],eax
+  and   eax,00000003h
+  cmp   eax,3
+  jne   PgClassifyFaultDone
+  mov   dword[PgLastFaultIsUser],1
+PgClassifyFaultDone:
   ret

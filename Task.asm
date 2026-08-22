@@ -1150,10 +1150,7 @@ TaskLoadRing0StackDone:
 ;   Input:
 ;     pTaskRecord = loaded user task record.
 ;   Output:
-;     TASK_USER_IRET_ESP points to a future iretd frame on the task stack.
-;   Notes:
-;     Current scheduling still returns through TASK_SAVED_ESP. This frame sits
-;     below that return slot and is not consumed yet.
+;     TASK_USER_IRET_ESP points to an initial iretd frame on the task stack.
 ;--------------------------------------------------------------------------------------------------
 TaskPrepareUserIretFrame:
   mov   edi,[pTaskRecord]
