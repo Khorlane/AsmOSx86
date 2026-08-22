@@ -87,8 +87,9 @@ KcArg3             dd 0                 ; input: argument 3
 KcResult0          dd 0                 ; output: result 0
 KcResult1          dd 0                 ; output: result 1
 KcCallFromUser     dd 0                 ; 1 while dispatching a user KcBlock call
-KcInterruptEnabled dd 0                 ; input: 1 enables future int 80h path
+KcInterruptEnabled dd 1                 ; input: 1 enables non-switching int 80h path
 KcInterruptEntered dd 0                 ; debug: count of int 80h entries
+KcInterruptRejected dd 0                ; debug: count of rejected int 80h calls
 KcHandler          dd 0                 ; work: resolved handler address
 pKcTable           dd 0                 ; work: current table entry pointer
 KcTableLeft        dd 0                 ; work: remaining table entries
@@ -122,7 +123,7 @@ KcTableCount equ (KcTableEnd-KcTable)/8
 ;     Installs the future ring 3 kernel-call interrupt gate.
 ;   Notes:
 ;     User programs still call the fixed 00100005h gateway. The interrupt gate
-;     is guarded by KcInterruptEnabled and returns immediately while disabled.
+;     accepts non-switching calls and rejects scheduler/blocking calls for now.
 ;--------------------------------------------------------------------------------------------------
 KcInit:
   mov   eax,KC_USER_INT_VECTOR
@@ -247,14 +248,38 @@ KcUserDispatchSleep:
 ;   Output:
 ;     Returns from the future ring 3 kernel-call interrupt gate.
 ;   Notes:
-;     Disabled by default. The enabled path can call KcUserDispatch, but must
-;     not be used for switching calls until interrupt-return scheduling exists.
+;     Non-switching calls can dispatch through the existing KcBlock path.
+;     Scheduler/blocking calls remain on the fixed gateway until interrupt-return
+;     scheduling exists.
 ;--------------------------------------------------------------------------------------------------
 KcUserInterruptEntry:
+  mov   esi,0
   cmp   dword[KcInterruptEnabled],1
   jne   KcUserInterruptEntryDone
   inc   dword[KcInterruptEntered]
+  call  TaskGetCurrentRecord
+  mov   edi,[pTaskRecord]
+  test  edi,edi
+  jz    KcUserInterruptReject
+  mov   esi,[edi+TASK_KCBLOCK_PTR]
+  test  esi,esi
+  jz    KcUserInterruptReject
+  mov   eax,[esi+KC_BLOCK_NUMBER]
+  cmp   eax,KcTsYield
+  je    KcUserInterruptReject
+  cmp   eax,KcTsExit
+  je    KcUserInterruptReject
+  cmp   eax,KcTmSleep
+  je    KcUserInterruptReject
+  cmp   eax,KcKbRead
+  je    KcUserInterruptReject
   call  KcUserDispatch
+  jmp   KcUserInterruptEntryDone
+KcUserInterruptReject:
+  inc   dword[KcInterruptRejected]
+  test  esi,esi
+  jz    KcUserInterruptEntryDone
+  mov   dword[esi+KC_BLOCK_STATUS],KC_STATUS_INVALID
 KcUserInterruptEntryDone:
   iretd
 

@@ -39,6 +39,7 @@ Start:
   cmp   eax,STATUS_OK                   ;  if bad
   jne   Prog4CloseAndExit               ;    can't continue, close file, then exit
   call  PrintLine                       ; Print
+  call  MaybeInt80Test                  ; Optional int 80h proof
   call  MaybeKeyTest                    ; Optional keyboard read proof
   call  MaybeSleepTest                  ; Optional cooperative sleep proof
   call  MaybeBadPrintTest               ; Optional bad-print proof
@@ -231,6 +232,34 @@ MaybeKeyTestFailed:
   call  PrintProg4Msg
   mov   dword[Prog4ExitCode],94
 MaybeKeyTestDone:
+  ret
+
+MaybeInt80Test:
+  cmp   word[USER_ARG],5
+  jne   MaybeInt80TestDone
+  cmp   byte[USER_ARG+2],'i'
+  jne   MaybeInt80TestDone
+  cmp   byte[USER_ARG+3],'n'
+  jne   MaybeInt80TestDone
+  cmp   byte[USER_ARG+4],'t'
+  jne   MaybeInt80TestDone
+  cmp   byte[USER_ARG+5],'8'
+  jne   MaybeInt80TestDone
+  cmp   byte[USER_ARG+6],'0'
+  jne   MaybeInt80TestDone
+  mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],KC_VD_WRITE_STR
+  mov   dword[KC_BLOCK+KC_BLOCK_ARG0],MsgInt80Ok
+  int   080h
+  mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
+  cmp   eax,STATUS_OK
+  jne   MaybeInt80TestFailed
+  mov   dword[Prog4ExitCode],80
+  ret
+MaybeInt80TestFailed:
+  mov   dword[pProg4Msg],MsgInt80Fail
+  call  PrintProg4Msg
+  mov   dword[Prog4ExitCode],93
+MaybeInt80TestDone:
   ret
 
 MaybeBadZeroCallTest:
@@ -454,6 +483,10 @@ MsgKeyOk             dw 15
                      db "Prog4: key OK",13,10
 MsgKeyFail           dw 17
                      db "Prog4: key FAIL",13,10
+MsgInt80Ok           dw 17
+                     db "Prog4: int80 OK",13,10
+MsgInt80Fail         dw 19
+                     db "Prog4: int80 FAIL",13,10
 DataBuffer           dw 0
 DataBufferText:
   times DATA_BUFFER_SIZE db 0

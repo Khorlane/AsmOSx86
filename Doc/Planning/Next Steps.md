@@ -117,6 +117,11 @@ run prog4.bin -- key
   blocks until a key event is available
   exits 0047 when the user task resumes
 
+run prog4.bin -- int80
+  runs the normal DATA.TXT path
+  calls KcVdWriteStr through int 80h
+  exits 0080 when the software interrupt path works
+
 run prog1.bin | prog2.bin | prog3.bin
   loads three named programs from one console command line
   proves file-loaded multi-task cooperative scheduling without hard-coded names
@@ -140,6 +145,7 @@ bad-zero-call     KcValidate rejects call number 0          0045
 bad-call-number   KcLookup rejects unknown call number      0046
 sleep             KcTmSleep blocks and wakes cooperatively  0007
 key               KcKbRead blocks until keyboard input      0047
+int80             KcVdWriteStr through int 80h              0080
 ```
 
 Kernel-call boundary:
@@ -156,7 +162,7 @@ KcFsRead validates destination buffer ranges for user-originated calls.
 Prog4 has denial modes for bad print, bad open, and bad read user pointers.
 Prog4 has dispatch denial modes for zero and unknown Kc call numbers.
 KcKbRead blocks user tasks until a keyboard event is available.
-Future Kc interrupt vector 80h is installed but disabled by default.
+Kc interrupt vector 80h accepts non-switching calls and rejects switching calls.
 ```
 
 Tasking and scheduling:
@@ -254,7 +260,7 @@ future iretd frames are prepared but unused
 future TaskEnterUserMode routine is guarded and disabled by default
 future task execution-mode tags are present but informational only
 future TaskIsUserMode helper classifies halt-only faults
-future Kc interrupt gate is guarded and not used by user programs
+future Kc interrupt gate is used only for non-switching calls
 future flag names document the intended user/supervisor policy
 fault handlers are named but still halt-only
 keep kernel mappings supervisor-only

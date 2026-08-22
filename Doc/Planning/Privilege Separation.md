@@ -41,7 +41,7 @@ Kernel-call gateway exists at 00100005h
 KcUserDispatch copies arguments/results through the current task's KcBlock
 KcDispatch is the kernel-originated path and may receive kernel pointers
 KcUserDispatch is the user-originated path and requires service validation
-Future DPL 3 Kc interrupt gate exists at vector 80h and is disabled by default
+DPL 3 Kc interrupt gate exists at vector 80h for non-switching calls
 General-protection fault IDT vector 13 is installed
 Page-fault IDT vector 14 is installed
 General-protection faults and page faults currently halt forever
@@ -62,7 +62,7 @@ Current important limitations:
 Ring 3 descriptors are scaffolding only and are not used yet
 TSS is loaded but only scaffolding until ring transitions exist
 No ring transition stack switching
-Kc interrupt gate is guarded and not used by user programs
+Kc interrupt gate rejects scheduler/blocking calls
 Loaded user program and KcBlock pages are user-accessible
 Kernel and user tasks still run with ring 0 segment selectors
 Future user-mode task fields are populated but not consumed by the scheduler
