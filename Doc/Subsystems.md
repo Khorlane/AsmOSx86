@@ -8,7 +8,8 @@ Use this file for:
 - current subsystem interfaces and ownership
 - current kernel string, console, time, utility, and `KernelCtx` behavior
 
-Use `Doc/Design.md` for high-level architecture and future direction.
+Use `Doc/Design.md` for high-level current architecture.
+Use `Doc/Future.md` for future-facing design notes.
 Use `Doc/Coding.md` for formatting, naming, commenting, and source-style rules.
 Use the source files themselves for exact implementation details.
 
@@ -24,7 +25,9 @@ Unless a section explicitly says it is about boot-stage code, this document desc
 - 386-safe unless a routine explicitly documents otherwise
 - No 64-bit instructions
 - No BIOS usage in kernel code
-- Core services are currently polled; interrupts are not required for current core behavior
+- Hardware IRQs are not required for current core behavior.
+- Ring 3 user programs enter kernel services through `int 80h`.
+- The IDT is used for the current kernel-call gate and user fault handling.
 
 ### Register Discipline
 
@@ -168,7 +171,7 @@ It decides which subsystems are initialized explicitly during boot and in what o
 Current initialization order in `Kernel.asm`:
 
 1. Load GDT and reload code/data segment state
-2. Load an empty IDT
+2. Load the IDT table
 3. `PgInit`
 4. `KcInit`
 5. `TimerInit`
@@ -181,12 +184,14 @@ Current initialization order in `Kernel.asm`:
 12. `CnStartupRun`
 13. Enter the main console loop
 
-This is the active source-of-truth sequence.
+This is the active implementation sequence.
 
 ### Current Dependency Notes
 
 - `TimerInit` must occur before timer-backed services are used.
 - `UptimeInit` must occur after timer initialization.
+- `PgInit` enables paging and installs page-fault/general-protection handling.
+- `KcInit` installs the `int 80h` user/kernel service gate.
 - `FsInit` must occur before filesystem services are used.
 - `VdInit` must occur before normal kernel screen output is relied on.
 - `FsLogInit` occurs after video initialization and before console startup
@@ -225,7 +230,8 @@ Correct rule today:
 - some services require explicit init
 - wall time currently supports first-use initialization internally
 
-This document should not claim that all subsystems forbid lazy init.
+Subsystem contracts should distinguish explicit initialization requirements from
+intentional first-use initialization.
 
 ---
 
