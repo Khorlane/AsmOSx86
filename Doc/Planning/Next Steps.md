@@ -156,7 +156,7 @@ KcFsRead validates destination buffer ranges for user-originated calls.
 Prog4 has denial modes for bad print, bad open, and bad read user pointers.
 Prog4 has dispatch denial modes for zero and unknown Kc call numbers.
 KcKbRead blocks user tasks until a keyboard event is available.
-Future Kc interrupt vector 80h is installed but points to a return-only stub.
+Future Kc interrupt vector 80h is installed but disabled by default.
 ```
 
 Tasking and scheduling:
@@ -254,7 +254,7 @@ future iretd frames are prepared but unused
 future TaskEnterUserMode routine is guarded and disabled by default
 future task execution-mode tags are present but informational only
 future TaskIsUserMode helper classifies halt-only faults
-future Kc interrupt gate is installed but not used by user programs
+future Kc interrupt gate is guarded and not used by user programs
 future flag names document the intended user/supervisor policy
 fault handlers are named but still halt-only
 keep kernel mappings supervisor-only

@@ -87,6 +87,8 @@ KcArg3             dd 0                 ; input: argument 3
 KcResult0          dd 0                 ; output: result 0
 KcResult1          dd 0                 ; output: result 1
 KcCallFromUser     dd 0                 ; 1 while dispatching a user KcBlock call
+KcInterruptEnabled dd 0                 ; input: 1 enables future int 80h path
+KcInterruptEntered dd 0                 ; debug: count of int 80h entries
 KcHandler          dd 0                 ; work: resolved handler address
 pKcTable           dd 0                 ; work: current table entry pointer
 KcTableLeft        dd 0                 ; work: remaining table entries
@@ -120,7 +122,7 @@ KcTableCount equ (KcTableEnd-KcTable)/8
 ;     Installs the future ring 3 kernel-call interrupt gate.
 ;   Notes:
 ;     User programs still call the fixed 00100005h gateway. The interrupt gate
-;     points to a return-only stub until the real ring transition path exists.
+;     is guarded by KcInterruptEnabled and returns immediately while disabled.
 ;--------------------------------------------------------------------------------------------------
 KcInit:
   mov   eax,KC_USER_INT_VECTOR
@@ -128,13 +130,13 @@ KcInit:
   mul   ebx
   lea   edi,[IDT1+eax]
   mov   [KcIdtEntry],edi
-  mov   eax,KcUserInterruptStub
+  mov   eax,KcUserInterruptEntry
   mov   [edi],ax
   mov   ax,CODE_DESC
   mov   [edi+2],ax
   mov   ax,KC_USER_INT_ATTR
   mov   [edi+4],ax
-  mov   eax,KcUserInterruptStub
+  mov   eax,KcUserInterruptEntry
   shr   eax,16
   mov   [edi+6],ax
   ret
@@ -241,14 +243,19 @@ KcUserDispatchSleep:
   ret
 
 ;--------------------------------------------------------------------------------------------------
-; KcUserInterruptStub
+; KcUserInterruptEntry
 ;   Output:
-;     Returns from the future ring 3 kernel-call interrupt gate without work.
+;     Returns from the future ring 3 kernel-call interrupt gate.
 ;   Notes:
-;     Placeholder only. The real interrupt entry will eventually copy through
-;     the KcBlock and return with iretd after hardware privilege transition.
+;     Disabled by default. The enabled path can call KcUserDispatch, but must
+;     not be used for switching calls until interrupt-return scheduling exists.
 ;--------------------------------------------------------------------------------------------------
-KcUserInterruptStub:
+KcUserInterruptEntry:
+  cmp   dword[KcInterruptEnabled],1
+  jne   KcUserInterruptEntryDone
+  inc   dword[KcInterruptEntered]
+  call  KcUserDispatch
+KcUserInterruptEntryDone:
   iretd
 
 ;--------------------------------------------------------------------------------------------------
