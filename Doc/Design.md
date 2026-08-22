@@ -1,4 +1,4 @@
-# AsmOSx86 High-Level Design and Concept Document
+# AsmOSx86 Design and Contracts
 
 ## 1. Purpose
 
@@ -1495,7 +1495,456 @@ even if the task was blocked and resumed before the result became available.
 
 ---
 
-## 23. User Sessions, Sign-On, and Menu Panels
+## 23. Current Subsystem Contracts
+
+Unless a subsection explicitly says it is about boot-stage code, these contracts
+describe the protected-mode kernel.
+
+### CPU, Mode, and ABI
+
+The protected-mode kernel runs as 32-bit, 386-safe code unless a routine
+explicitly documents otherwise.
+
+Kernel code does not use BIOS services. Hardware IRQs are not required for the
+current core behavior, but software interrupt entry is current reality:
+
+```text
+ring 3 user programs -> int 80h -> kernel services
+```
+
+The IDT is also used for user fault handling.
+
+The register rule is deliberately simple:
+
+```text
+Registers are scratch working state.
+Memory is the contract.
+```
+
+Callers must not assume an incoming register contains meaningful data. Callers
+must not assume registers survive a `call`. Callees do not promise to preserve
+general registers.
+
+Stable inputs and outputs must be expressed through documented memory locations,
+for example:
+
+```text
+TimerDelayMs
+TimerOutTicksLo
+TimerOutTicksHi
+pVdStr
+KbOutHasKey
+```
+
+Register-based inputs or outputs are exceptions and must be explicitly
+documented by the routine that uses them.
+
+`pusha` and `popa` are not the default public routine pattern.
+
+### Boot Stage Boundary
+
+Boot-stage code and kernel code are separate implementation domains.
+
+Boot-stage code:
+
+```text
+Boot.asm
+```
+
+`Boot.asm` runs before the protected-mode kernel is established. It may use
+real-mode assumptions, boot-sector constraints, bootloader-specific disk loading
+logic, and conventions that do not apply to the kernel.
+
+Boot-stage conventions do not define kernel ABI rules. The current boot process
+is documented in `Doc/BootProcess.md`.
+
+Boot-stage code may use NUL-terminated strings:
+
+```text
+CStr = NUL-terminated byte string
+```
+
+That format is not part of the protected-mode kernel string ABI.
+
+### Kernel Strings
+
+The protected-mode kernel uses one internal string format:
+
+```text
+Str = [u16 payload length][payload bytes]
+```
+
+The u16 length is the payload length in bytes. The two-byte length field is not
+included in the length.
+
+The canonical way to define a kernel `Str` at assembly time is the `String`
+macro in `Macros.asm`. It writes the payload length as a `dw` and emits the
+payload bytes immediately afterward.
+
+Kernel routines operate on `Str` unless a routine explicitly documents a
+different format.
+
+Examples:
+
+```text
+VdPutStr reads the leading u16 as payload length
+StrCopy copies the length word plus payload
+StrTrim updates the stored payload length in place
+```
+
+The payload is not NUL-terminated and must not be treated as though it were.
+
+### Kernel Initialization Order
+
+`Kernel.asm` owns the top-level initialization sequence.
+
+Current initialization order:
+
+```text
+load GDT and reload code/data segment state
+load the IDT table
+PgInit
+KcInit
+TimerInit
+UptimeInit
+FsInit
+VdInit
+FsLogInit
+KbInit
+CnInit
+CnStartupRun
+main console loop
+```
+
+Important dependency notes:
+
+```text
+PgInit      enables paging and installs page-fault/general-protection handling
+KcInit      installs the int 80h user/kernel service gate
+TimerInit   must run before timer-backed services are used
+UptimeInit  must run after timer initialization
+FsInit      must run before filesystem services are used
+VdInit      must run before normal screen output is relied on
+FsLogInit   runs after video initialization and before console startup messages
+KbInit      must run before keyboard polling is used
+CnInit      runs after timer, filesystem, video, log, and keyboard init
+CnStartupRun uses the normal console dispatcher
+```
+
+Wall time is lazily initialized on first use through `TimeNow`. The kernel does
+not perform a separate boot-time `TimeSync`. `TimerInit` is the only required
+prerequisite before wall time is used.
+
+Subsystem contracts should distinguish explicit initialization requirements from
+intentional first-use initialization.
+
+### Console Subsystem
+
+`Console.asm` is the kernel/operator interface for the current system.
+
+It is used for:
+
+```text
+startup messages
+diagnostics
+built-in kernel commands
+command logging
+command dispatch
+optional STARTUP.TXT startup command stream
+controlled shutdown
+```
+
+It is not the future userland shell or standard user session interface.
+
+Current command-dispatch rules:
+
+```text
+exact match only
+case-insensitive
+length must match after input trimming
+command name and argument text are split before dispatch
+unknown command returns to the input loop without an error message
+```
+
+The active command set is:
+
+```text
+Clear
+Date
+Delay
+FsTest
+Help
+KcTest
+Run
+Shutdown
+Time
+Uptime
+```
+
+`CnStartupRun` opens optional `STARTUP.TXT` after console initialization.
+Missing `STARTUP.TXT` is ignored. Nonblank lines are trimmed, timestamp-logged,
+and dispatched like typed input.
+
+`Clear` clears the screen and restores the input cursor to row 25, column 1.
+
+`Shutdown` is real-hardware-first: the authoritative outcome is a controlled CPU
+halt, with optional emulator-oriented power-off attempts before the final halt.
+
+Userland should not call `Console.asm` routines directly.
+
+### Keyboard Subsystem
+
+`Keyboard.asm` owns physical keyboard polling and scancode translation.
+
+Current exported routines:
+
+```text
+KbInit
+KbGetKey
+```
+
+`KbInit` clears the current keyboard state and output fields:
+
+```text
+KbModShift = 0
+KbOutHasKey = 0
+KbOutType = KEY_NONE
+KbOutChar = 0
+```
+
+`KbGetKey` polls the keyboard controller once. If a key event is available:
+
+```text
+KbOutHasKey = 1
+KbOutType   = KEY_CHAR, KEY_ENTER, KEY_BACKSPACE, or KEY_NONE
+KbOutChar   = ASCII value if KEY_CHAR, otherwise 0
+KbModShift  = updated shift state
+```
+
+Current key event type constants:
+
+```text
+KEY_NONE      = 0
+KEY_CHAR      = 1
+KEY_ENTER     = 2
+KEY_BACKSPACE = 3
+```
+
+### Video Subsystem
+
+`Video.asm` owns physical VGA text output.
+
+Row/column state is 1-based:
+
+```text
+Row 1, Col 1 maps to VGA offset 0
+```
+
+Current screen model:
+
+```text
+Rows = 25
+Cols = 80
+Output region = rows 1..24, scrolling
+Input-style row = current VdCurRow, normally row 25 for the console
+```
+
+Row,Col ordering is used everywhere.
+
+Current kernel text output path:
+
+```text
+pVdStr -> VdPutStr -> FsLogWriteStr when enabled
+pVdStr -> VdPutStr -> VdPutChar -> VGA memory
+```
+
+`LOG.TXT` is a preallocated kernel-owned console mirror file in the `ASMF`
+manifest. It is cleared on startup and receives the same `Str` payloads sent
+through `VdPutStr` after logging is initialized.
+
+Core routines:
+
+```text
+VdInit
+VdPutStr
+VdPutChar
+VdInClearLine
+VdInPutChar
+VdInBackspaceVisual
+VdSetCursor
+```
+
+`VdSetCursor` expects `VdCurRow = 1..25` and `VdCurCol = 1..80`. Invalid
+coordinates enter a halt loop.
+
+### Timer, Time, and Uptime
+
+AsmOSx86 treats time as two distinct services:
+
+```text
+monotonic time
+wall/calendar time
+```
+
+Monotonic time is for elapsed time, delays, scheduling, profiling, and uptime.
+It must not jump. It is currently sourced from polled PIT channel 0.
+
+Wall time is for human-readable date/time, logs, timestamps, and clock display.
+It may jump when resynchronized. It is sourced from CMOS RTC plus PIT
+interpolation.
+
+Ownership rules:
+
+```text
+Timer.asm   owns monotonic PIT tick tracking and busy-wait delay
+Uptime.asm  owns uptime based on monotonic time
+Time.asm    owns CMOS RTC reads, wall-time state, and wall-time formatting
+```
+
+Current timer routines:
+
+```text
+TimerInit
+TimerNowTicks
+TimerSpinDelayMs
+```
+
+Current uptime routines:
+
+```text
+UptimeInit
+UptimeNow
+UptimeFmtYdhms
+UptimePrint
+```
+
+Current wall-time public routines:
+
+```text
+TimeDtPrint
+TimeTmPrint
+```
+
+Internal wall-time routines include:
+
+```text
+TimeSync
+TimeNow
+TimeFmtHms
+TimeFmtYmd
+TimeReadCmos
+```
+
+Current policy:
+
+```text
+wall time initializes lazily on first use
+wall time resyncs every 60 seconds of monotonic time
+uptime starts when UptimeInit is called
+uptime is not affected by wall-time resync or CMOS changes
+```
+
+Usage rule:
+
+| Use Case | Correct API |
+|----------|-------------|
+| Delays | `Timer*` |
+| Scheduling | `Timer*` |
+| Profiling | `Timer*` |
+| Uptime | `Uptime*` |
+| Logs | `Time*` |
+| Clock display | `Time*` |
+
+Never mix monotonic and wall-clock domains.
+
+### Utility Module
+
+`Utility.asm` is a neutral helper module for small reusable routines that are:
+
+```text
+broadly useful across subsystems
+not owned by any single subsystem
+hardware-free
+policy-free
+safe to call from early boot and core kernel code
+```
+
+Typical examples are small string, formatting, buffer, or math helpers that do
+not belong to a more specific subsystem.
+
+The following do not belong in `Utility.asm`:
+
+```text
+hardware access
+policy decisions
+subsystem-specific logic
+dependencies on console, keyboard, timer, video, or active init state
+dependencies on KernelCtx internals unless explicitly documented
+```
+
+Current utility routines:
+
+```text
+Put2Dec
+StrCopy
+StrTrim
+StrTrimLead
+StrTrimTrail
+```
+
+Growth rule:
+
+```text
+Would I be annoyed to see this here six months from now?
+```
+
+If yes, the routine belongs somewhere else or should not exist yet.
+
+### KernelCtx
+
+`KernelCtx` is defined in `Kernel.asm`.
+
+At present, it is an early kernel-owned context/state block, not the active
+owner of all subsystem runtime state. Most active subsystem state is owned
+locally by the module that uses it.
+
+Current fields:
+
+```text
+Char
+Byte1
+KbChar
+ColorBack
+ColorFore
+ColorAttr
+Row
+Col
+Byte2
+Byte4
+TvRowOfs
+VidAdr
+```
+
+Some fields are legacy scratch/state fields and may later be repurposed,
+reduced, or replaced as the task/context model becomes more explicit.
+
+`KernelCtxSz` must be divisible by 4. This is enforced in `Kernel.asm` to
+preserve compatibility with future `rep movsd` style context copy operations.
+
+Current ownership model:
+
+```text
+Kernel.asm owns the KernelCtx definition.
+Active subsystem runtime state is mostly module-local.
+Strings, tables, and working storage are generally owned by the module that uses them.
+```
+
+`KernelCtx` should not be described as the central home for all mutable kernel
+state.
+
+---
+
+## 24. User Sessions, Sign-On, and Menu Panels
 
 AsmOSx86 should use the concept of a user session rather than centering the userland model around a shell.
 
@@ -1669,7 +2118,7 @@ User sessions receive logical input and logical video services.
 
 ---
 
-## 24. Design Principles
+## 25. Design Principles
 
 ### Keep the kernel resident
 
@@ -1707,7 +2156,7 @@ come later.
 
 ---
 
-## 25. Out of Scope For Now
+## 26. Out of Scope For Now
 
 AsmOSx86 does not need these immediately:
 
@@ -1736,7 +2185,7 @@ resident kernel + kernel call interface + logical sessions + richer filesystem
 
 ---
 
-## 26. Working Definition
+## 27. Working Definition
 
 AsmOSx86 is a resident 32-bit protected-mode kernel loaded at `00100000h`.
 
