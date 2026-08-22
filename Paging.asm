@@ -37,6 +37,7 @@ PG_FUTURE_KCBLOCK_FLAGS equ PG_PRESENT|PG_WRITABLE|PG_USER_ACCESS
 PG_KERNEL_FLAGS equ PG_CURRENT_PRESENT_WRITABLE
 PG_USER_FLAGS   equ PG_FUTURE_USER_FLAGS
 PG_KCBLOCK_FLAGS equ PG_FUTURE_KCBLOCK_FLAGS
+PG_MIXED_USER_PDE_FLAGS equ PG_PRESENT|PG_WRITABLE|PG_USER_ACCESS
 PG_PAGE_SIZE    equ 00001000h
 PG_ENTRY_COUNT  equ 1024
 PG_CR0_ENABLE   equ 80000000h
@@ -59,6 +60,8 @@ PG_USER_KC_PTE  equ PG_USER_PTE+PG_USER_MAX_PAGES
 ;   PG_KERNEL_FLAGS is supervisor-only. PG_USER_FLAGS and PG_KCBLOCK_FLAGS are
 ;   user-accessible so ring 3 tasks can reach loaded programs and their
 ;   KcBlock pages.
+;   The first page-directory entry is user-accessible because it contains a mix
+;   of supervisor-only kernel PTEs and user-accessible task PTEs.
 ; Future:
 ;   Kernel identity mappings stay supervisor-only.
 ;   Fault handlers decide whether a fault is kernel panic or user task death.
@@ -259,7 +262,7 @@ PgBuildIdentityMap:
   mov   [PgTableAddr],eax
   call  PgFillTable
   mov   eax,PgTable0
-  or    eax,PG_KERNEL_FLAGS
+  or    eax,PG_MIXED_USER_PDE_FLAGS
   mov   [PgDirectory],eax
   mov   eax,PgTable1
   or    eax,PG_KERNEL_FLAGS
