@@ -46,6 +46,7 @@ KcDispatch is the kernel-originated path and may receive kernel pointers
 KcUserDispatch is the user-originated path and requires service validation
 DPL 3 Kc interrupt gate exists at vector 80h for user service calls
 Yield, exit, sleep, and keyboard read have interrupt-aware switch paths
+KcTsGetInfo returns current task index and user-mode tag
 General-protection fault IDT vector 13 is installed
 Page-fault IDT vector 14 is installed
 General-protection faults and page faults terminate user tasks
@@ -60,6 +61,7 @@ TaskIsUserMode exposes the execution-mode tag through a helper
 Prog4 has denial probes for invalid KcVdWriteStr, KcFsOpen, and KcFsRead pointers
 Prog4 has denial probes for zero and unknown Kc call numbers
 Prog4 can report its CS selector with the cpl argument
+Prog4 can verify KcTsGetInfo with the info argument
 Prog4 can trigger a user #GP with the priv argument
 Prog4 can trigger a user #PF with the mem argument
 Prog4 can verify user KcTsLoadProgram calls are denied with the load argument

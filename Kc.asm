@@ -55,6 +55,7 @@ KcFsRead           equ 7
 KcFsClose          equ 8
 KcTmSleep          equ 9
 KcKbRead           equ 10
+KcTsGetInfo        equ 11
 
 ;--------------------------------------------------------------------------------------------------
 ; Future User Kernel-Call Interrupt Constants
@@ -110,6 +111,7 @@ KcTable:
   dd KcFsClose,     KcFsCloseHandler
   dd KcTmSleep,     KcTmSleepHandler
   dd KcKbRead,      KcKbReadHandler
+  dd KcTsGetInfo,   KcTsGetInfoHandler
 KcTableEnd:
 KcTableCount equ (KcTableEnd-KcTable)/8
 
@@ -596,6 +598,23 @@ KcTsExitHandler:
   mov   [TaskExitCode],eax
   mov   dword[KcStatus],KC_STATUS_OK
   call  TaskExit
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; KcTsGetInfoHandler
+;   Output:
+;     KcStatus  = KC_STATUS_OK.
+;     KcResult0 = current task index.
+;     KcResult1 = 1 if current task is user mode, else 0.
+;--------------------------------------------------------------------------------------------------
+KcTsGetInfoHandler:
+  mov   eax,[TaskCurrentIndex]
+  mov   [KcResult0],eax
+  call  TaskGetCurrentRecord
+  call  TaskIsUserMode
+  mov   eax,[TaskModeIsUser]
+  mov   [KcResult1],eax
+  mov   dword[KcStatus],KC_STATUS_OK
   ret
 
 ;--------------------------------------------------------------------------------------------------

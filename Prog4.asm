@@ -14,6 +14,7 @@ KC_FS_OPEN          equ 6
 KC_FS_READ          equ 7
 KC_FS_CLOSE         equ 8
 KC_KB_READ          equ 10
+KC_TS_GET_INFO      equ 11
 KC_BLOCK            equ 00210000h
 USER_ARG            equ 00210020h
 KC_BLOCK_NUMBER     equ 0
@@ -41,6 +42,7 @@ Start:
   call  PrintLine                       ; Print
   call  MaybeCplTest                    ; Optional CS selector proof
   call  MaybeInt80Test                  ; Optional int 80h proof
+  call  MaybeInfoTest                   ; Optional task-info syscall proof
   call  MaybeKeyTest                    ; Optional keyboard read proof
   call  MaybeSleepTest                  ; Optional cooperative sleep proof
   call  MaybePrivTest                   ; Optional privilege-fault proof
@@ -274,6 +276,35 @@ MaybeInt80TestFailed:
   call  PrintProg4Msg
   mov   dword[Prog4ExitCode],00000093h
 MaybeInt80TestDone:
+  ret
+
+MaybeInfoTest:
+  cmp   word[USER_ARG],4
+  jne   MaybeInfoTestDone
+  cmp   byte[USER_ARG+2],'i'
+  jne   MaybeInfoTestDone
+  cmp   byte[USER_ARG+3],'n'
+  jne   MaybeInfoTestDone
+  cmp   byte[USER_ARG+4],'f'
+  jne   MaybeInfoTestDone
+  cmp   byte[USER_ARG+5],'o'
+  jne   MaybeInfoTestDone
+  mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],KC_TS_GET_INFO
+  int   080h
+  mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
+  cmp   eax,STATUS_OK
+  jne   MaybeInfoTestFailed
+  mov   eax,[KC_BLOCK+KC_BLOCK_RESULT0]
+  cmp   eax,1
+  jne   MaybeInfoTestFailed
+  mov   eax,[KC_BLOCK+KC_BLOCK_RESULT1]
+  cmp   eax,1
+  jne   MaybeInfoTestFailed
+  mov   dword[Prog4ExitCode],00000101h
+  ret
+MaybeInfoTestFailed:
+  mov   dword[Prog4ExitCode],00000089h
+MaybeInfoTestDone:
   ret
 
 MaybePrivTest:

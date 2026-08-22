@@ -127,6 +127,11 @@ run prog4.bin -- cpl
   exits with the user code selector
   expects 001B when the task is actually running in ring 3
 
+run prog4.bin -- info
+  runs the normal DATA.TXT path
+  asks KcTsGetInfo for current task identity and mode
+  exits 0101 when task 1 reports user mode
+
 run prog4.bin -- priv
   runs the normal DATA.TXT path
   deliberately executes privileged CLI from user code
@@ -168,6 +173,7 @@ sleep             KcTmSleep blocks and wakes cooperatively  0007
 key               KcKbRead blocks until keyboard input      0047
 int80             KcVdWriteStr through int 80h              0080
 cpl               user CS selector proof                    001B
+info              KcTsGetInfo task/mode proof               0101
 priv              privileged instruction fault              0F0D
 mem               supervisor-only kernel memory fault       0F0E
 load              user KcTsLoadProgram denied               0048
@@ -191,6 +197,7 @@ Kc interrupt vector 80h handles userland service calls.
 Yield, exit, sleep, and keyboard-read calls use interrupt-aware task switching.
 KcTsLoadProgram is kernel-originated only; userland Run requests still go
 through the console.
+KcTsGetInfo returns the current task index and user-mode tag.
 ```
 
 Tasking and scheduling:
@@ -322,6 +329,7 @@ run prog4.bin -- bad-call-number
 run prog4.bin -- sleep
 run prog4.bin -- key
 run prog4.bin -- cpl
+run prog4.bin -- info
 run prog4.bin -- priv
 run prog4.bin -- mem
 run prog4.bin -- load
