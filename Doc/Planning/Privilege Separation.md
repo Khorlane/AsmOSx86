@@ -170,6 +170,7 @@ normal GetMemory denied
 trusted GetMemory allowed and returned memory is writable
 system GetMemory allowed and returned memory is writable
 normal MmInfo allowed and returns mapped/max user memory
+trusted GetMemory changes mapped memory reported by MmInfo
 normal FreeMemory denied
 trusted FreeMemory allowed after allocating a block
 system FreeMemory allowed after allocating a block

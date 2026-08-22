@@ -58,6 +58,7 @@ Start:
   call  MaybeGetMemoryTest              ; Optional trusted memory-service proof
   call  MaybeFreeMemoryTest             ; Optional trusted memory-free proof
   call  MaybeMemoryInfoTest             ; Optional memory-info proof
+  call  MaybeMemoryGrowTest             ; Optional memory-growth info proof
   call  MaybeLegacyTest                 ; Optional legacy-gateway page-fault proof
   call  MaybeBadPrintTest               ; Optional bad-print proof
   call  MaybeBadOpenTest                ; Optional bad-open proof
@@ -692,6 +693,76 @@ MaybeMemoryInfoTestFailed:
 MaybeMemoryInfoTestDone:
   ret
 
+MaybeMemoryGrowTest:
+  cmp   word[USER_ARG],7
+  jne   MaybeMemoryGrowTestDone
+  cmp   byte[USER_ARG+2],'m'
+  jne   MaybeMemoryGrowTestDone
+  cmp   byte[USER_ARG+3],'e'
+  jne   MaybeMemoryGrowTestDone
+  cmp   byte[USER_ARG+4],'m'
+  jne   MaybeMemoryGrowTestDone
+  cmp   byte[USER_ARG+5],'g'
+  jne   MaybeMemoryGrowTestDone
+  cmp   byte[USER_ARG+6],'r'
+  jne   MaybeMemoryGrowTestDone
+  cmp   byte[USER_ARG+7],'o'
+  jne   MaybeMemoryGrowTestDone
+  cmp   byte[USER_ARG+8],'w'
+  jne   MaybeMemoryGrowTestDone
+  call  MemoryInfoProbe
+  mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
+  cmp   eax,STATUS_OK
+  jne   MaybeMemoryGrowTestFailed
+  mov   eax,[KC_BLOCK+KC_BLOCK_RESULT0]
+  mov   [Prog4MemoryBefore],eax
+  call  GetMemoryProbe
+  mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
+  cmp   eax,STATUS_OK
+  jne   MaybeMemoryGrowTestFailed
+  call  CheckMemoryProbe
+  mov   eax,[Prog4Status]
+  cmp   eax,STATUS_OK
+  jne   MaybeMemoryGrowTestFailed
+  call  MemoryInfoProbe
+  mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
+  cmp   eax,STATUS_OK
+  jne   MaybeMemoryGrowTestFailed
+  mov   eax,[Prog4MemoryBefore]
+  add   eax,4096
+  cmp   eax,[KC_BLOCK+KC_BLOCK_RESULT0]
+  jne   MaybeMemoryGrowTestFailed
+  mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],KC_MM_FREE_MEMORY
+  mov   eax,[Prog4MemoryPtr]
+  mov   [KC_BLOCK+KC_BLOCK_ARG0],eax
+  mov   dword[KC_BLOCK+KC_BLOCK_ARG1],4096
+  int   080h
+  mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
+  cmp   eax,STATUS_OK
+  jne   MaybeMemoryGrowTestFailed
+  call  MemoryInfoProbe
+  mov   eax,[KC_BLOCK+KC_BLOCK_STATUS]
+  cmp   eax,STATUS_OK
+  jne   MaybeMemoryGrowTestFailed
+  mov   eax,[Prog4MemoryBefore]
+  cmp   eax,[KC_BLOCK+KC_BLOCK_RESULT0]
+  jne   MaybeMemoryGrowTestFailed
+  mov   dword[pProg4Msg],MsgMemoryGrowOk
+  call  PrintProg4Msg
+  mov   dword[Prog4ExitCode],00000055h
+  ret
+MaybeMemoryGrowTestFailed:
+  mov   dword[pProg4Msg],MsgMemoryGrowFail
+  call  PrintProg4Msg
+  mov   dword[Prog4ExitCode],00000093h
+MaybeMemoryGrowTestDone:
+  ret
+
+MemoryInfoProbe:
+  mov   dword[KC_BLOCK+KC_BLOCK_NUMBER],KC_MM_INFO
+  int   080h
+  ret
+
 MaybeLegacyTest:
   cmp   word[USER_ARG],6
   jne   MaybeLegacyTestDone
@@ -956,6 +1027,10 @@ MsgMemoryInfoOk     dw 18
                      db "Prog4: mminfo OK",13,10
 MsgMemoryInfoFail   dw 20
                      db "Prog4: mminfo FAIL",13,10
+MsgMemoryGrowOk     dw 19
+                     db "Prog4: memgrow OK",13,10
+MsgMemoryGrowFail   dw 21
+                     db "Prog4: memgrow FAIL",13,10
 MsgAuthNormalOk      dw 23
                      db "Prog4: auth normal OK",13,10
 MsgAuthTrustedOk     dw 24
@@ -965,6 +1040,7 @@ MsgAuthSystemOk      dw 23
 MsgAuthFail          dw 18
                      db "Prog4: auth FAIL",13,10
 Prog4MemoryPtr       dd 0
+Prog4MemoryBefore    dd 0
 DataBuffer           dw 0
 DataBufferText:
   times DATA_BUFFER_SIZE db 0

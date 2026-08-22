@@ -1,6 +1,7 @@
 run prog4.bin -- mminfo
 run prog4.bin -- getmem
 run /trusted prog4.bin -- getmem
+run /trusted prog4.bin -- memgrow
 run /system prog4.bin -- system
 run prog4.bin -- auth
 run /trusted prog4.bin -- auth
