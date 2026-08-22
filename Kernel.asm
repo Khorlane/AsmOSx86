@@ -68,6 +68,7 @@ GDTDescriptor:
   TSS_LIMIT             equ 0067h       ; 32-bit TSS size minus 1
   TSS_BASE              equ Tss32-$$+00100000h
   TSS_DESCRIPTOR_ATTR   equ 089h        ; Present ring 0 available 32-bit TSS
+  TSS_ESP0              equ 0004h       ; Ring 0 stack pointer field
   TSS_KERNEL_ESP0       equ 00090000h   ; Future ring transition kernel stack top
 
 ;--------------------------------------------------------------------------------------------------
@@ -133,6 +134,7 @@ FlushCS:
   lea   eax,[IDT2]                      ; Load the IDT
   lidt  [eax]                           ;  register
   call  PgInit                          ; Enable identity-mapped paging
+  call  KcInit                          ; Install future kernel-call interrupt gate
 
   ; Initialize subsystems
   call  TimerInit                       ; Initialize timer

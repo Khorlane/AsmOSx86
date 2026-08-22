@@ -16,9 +16,11 @@
 ;   - Kernel-call status constants
 ;   - Kernel-call service numbers
 ;   - Dispatch, validation, and lookup logic
+;   - Future ring 3 interrupt-gate entry scaffolding
 ;   - Small initial service handlers for testing the boundary
 ;
 ; Public API
+;   - KcInit
 ;   - KcDispatch
 ;   - KcUserDispatch
 ;
@@ -55,6 +57,12 @@ KcTmSleep          equ 9
 KcKbRead           equ 10
 
 ;--------------------------------------------------------------------------------------------------
+; Future User Kernel-Call Interrupt Constants
+;--------------------------------------------------------------------------------------------------
+KC_USER_INT_VECTOR equ 080h
+KC_USER_INT_ATTR   equ 0EE00h           ; Present DPL 3 32-bit interrupt gate
+
+;--------------------------------------------------------------------------------------------------
 ; User Kernel-Call Block Layout
 ;--------------------------------------------------------------------------------------------------
 KC_BLOCK_NUMBER    equ 0
@@ -82,6 +90,7 @@ KcCallFromUser     dd 0                 ; 1 while dispatching a user KcBlock cal
 KcHandler          dd 0                 ; work: resolved handler address
 pKcTable           dd 0                 ; work: current table entry pointer
 KcTableLeft        dd 0                 ; work: remaining table entries
+KcIdtEntry         dd 0                 ; work: selected IDT entry pointer
 
 ;--------------------------------------------------------------------------------------------------
 ; Kernel Call Dispatch Table
@@ -104,6 +113,31 @@ KcTableCount equ (KcTableEnd-KcTable)/8
 ;--------------------------------------------------------------------------------------------------
 ; External Routines
 ;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; KcInit
+;   Output:
+;     Installs the future ring 3 kernel-call interrupt gate.
+;   Notes:
+;     User programs still call the fixed 00100005h gateway. The interrupt gate
+;     points to a return-only stub until the real ring transition path exists.
+;--------------------------------------------------------------------------------------------------
+KcInit:
+  mov   eax,KC_USER_INT_VECTOR
+  mov   ebx,8
+  mul   ebx
+  lea   edi,[IDT1+eax]
+  mov   [KcIdtEntry],edi
+  mov   eax,KcUserInterruptStub
+  mov   [edi],ax
+  mov   ax,CODE_DESC
+  mov   [edi+2],ax
+  mov   ax,KC_USER_INT_ATTR
+  mov   [edi+4],ax
+  mov   eax,KcUserInterruptStub
+  shr   eax,16
+  mov   [edi+6],ax
+  ret
 
 ;--------------------------------------------------------------------------------------------------
 ; KcDispatch
@@ -205,6 +239,17 @@ KcUserDispatchSleep:
   mov   dword[esi+KC_BLOCK_RESULT1],0
   call  TaskSleep
   ret
+
+;--------------------------------------------------------------------------------------------------
+; KcUserInterruptStub
+;   Output:
+;     Returns from the future ring 3 kernel-call interrupt gate without work.
+;   Notes:
+;     Placeholder only. The real interrupt entry will eventually copy through
+;     the KcBlock and return with iretd after hardware privilege transition.
+;--------------------------------------------------------------------------------------------------
+KcUserInterruptStub:
+  iretd
 
 ;--------------------------------------------------------------------------------------------------
 ; Internal Routines

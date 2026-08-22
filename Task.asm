@@ -82,7 +82,8 @@ TASK_USER_CS         equ 80
 TASK_USER_DS         equ 84
 TASK_USER_SS         equ 88
 TASK_USER_EFLAGS     equ 92
-TASK_RECORD_SIZE     equ 96
+TASK_USER_IRET_ESP   equ 96
+TASK_RECORD_SIZE     equ 100
 
 ;--------------------------------------------------------------------------------------------------
 ; Task Table and Stack-Slot Constants
@@ -113,6 +114,13 @@ USER_PROGRAM_ARG_SIZE           equ 128
 USER_PROGRAM_ARG_OFFSET         equ USER_PROGRAM_KCBLOCK_OFFSET+USER_PROGRAM_KCBLOCK_SIZE
 USER_PROGRAM_ARG_BASE           equ USER_PROGRAM_VIRTUAL_BASE+USER_PROGRAM_ARG_OFFSET
 USER_PROGRAM_INITIAL_EFLAGS     equ 00000002h
+USER_PROGRAM_RET_SLOT_SIZE      equ 4
+USER_PROGRAM_IRET_FRAME_SIZE    equ 20
+USER_IRET_EIP                  equ 0
+USER_IRET_CS                   equ 4
+USER_IRET_EFLAGS               equ 8
+USER_IRET_ESP                  equ 12
+USER_IRET_SS                   equ 16
 
 ;--------------------------------------------------------------------------------------------------
 ; User Memory Contract
@@ -512,6 +520,7 @@ TaskProgramLoad:
   mov   dword[edi+TASK_USER_DS],USER_DATA_SEL
   mov   dword[edi+TASK_USER_SS],USER_DATA_SEL
   mov   dword[edi+TASK_USER_EFLAGS],USER_PROGRAM_INITIAL_EFLAGS
+  call  TaskPrepareUserIretFrame
   mov   dword[edi+TASK_WAKE_LO],0
   mov   dword[edi+TASK_WAKE_HI],0
   mov   dword[edi+TASK_SLEEP_ACTIVE],0
@@ -597,6 +606,7 @@ TaskProgramInit2:
   mov   dword[edi+TASK_USER_DS],0
   mov   dword[edi+TASK_USER_SS],0
   mov   dword[edi+TASK_USER_EFLAGS],0
+  mov   dword[edi+TASK_USER_IRET_ESP],0
   mov   dword[edi+TASK_WAKE_LO],0
   mov   dword[edi+TASK_WAKE_HI],0
   mov   dword[edi+TASK_SLEEP_ACTIVE],0
@@ -604,6 +614,7 @@ TaskProgramInit2:
   mov   dword[edi+TASK_KEY_TYPE],0
   mov   dword[edi+TASK_KEY_CHAR],0
   mov   dword[TaskProgramArgPtr],0
+  call  TaskLoadRing0Stack
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -833,6 +844,7 @@ TaskYield7:
   lea   edi,[TaskTable+eax]
   mov   dword[edi+TASK_STATE],TASK_STATE_RUNNING
   mov   [pTaskRecord],edi
+  call  TaskLoadRing0Stack
   call  TaskMapSelectedProgram
   mov   edi,[pTaskRecord]
   mov   esp,[edi+TASK_SAVED_ESP]
@@ -841,6 +853,56 @@ TaskYield7:
 ;--------------------------------------------------------------------------------------------------
 ; Internal Routines
 ;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; TaskLoadRing0Stack
+;   Input:
+;     pTaskRecord = selected task record.
+;   Output:
+;     TSS ESP0 tracks the selected task's kernel stack top.
+;   Notes:
+;     This is future ring-transition groundwork. User tasks still run in ring 0.
+;--------------------------------------------------------------------------------------------------
+TaskLoadRing0Stack:
+  mov   edi,[pTaskRecord]
+  test  edi,edi
+  jz    TaskLoadRing0StackDone
+  mov   eax,[edi+TASK_STACK_TOP]
+  test  eax,eax
+  jz    TaskLoadRing0StackDone
+  mov   [Tss32+TSS_ESP0],eax
+TaskLoadRing0StackDone:
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; TaskPrepareUserIretFrame
+;   Input:
+;     pTaskRecord = loaded user task record.
+;   Output:
+;     TASK_USER_IRET_ESP points to a future iretd frame on the task stack.
+;   Notes:
+;     Current scheduling still returns through TASK_SAVED_ESP. This frame sits
+;     below that return slot and is not consumed yet.
+;--------------------------------------------------------------------------------------------------
+TaskPrepareUserIretFrame:
+  mov   edi,[pTaskRecord]
+  test  edi,edi
+  jz    TaskPrepareUserIretFrameDone
+  mov   ebx,[edi+TASK_STACK_TOP]
+  sub   ebx,USER_PROGRAM_RET_SLOT_SIZE+USER_PROGRAM_IRET_FRAME_SIZE
+  mov   [edi+TASK_USER_IRET_ESP],ebx
+  mov   eax,[edi+TASK_USER_EIP]
+  mov   [ebx+USER_IRET_EIP],eax
+  mov   eax,[edi+TASK_USER_CS]
+  mov   [ebx+USER_IRET_CS],eax
+  mov   eax,[edi+TASK_USER_EFLAGS]
+  mov   [ebx+USER_IRET_EFLAGS],eax
+  mov   eax,[edi+TASK_USER_ESP]
+  mov   [ebx+USER_IRET_ESP],eax
+  mov   eax,[edi+TASK_USER_SS]
+  mov   [ebx+USER_IRET_SS],eax
+TaskPrepareUserIretFrameDone:
+  ret
 
 ;--------------------------------------------------------------------------------------------------
 ; TaskWakeSleepers

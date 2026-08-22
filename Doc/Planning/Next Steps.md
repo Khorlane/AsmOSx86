@@ -156,6 +156,7 @@ KcFsRead validates destination buffer ranges for user-originated calls.
 Prog4 has denial modes for bad print, bad open, and bad read user pointers.
 Prog4 has dispatch denial modes for zero and unknown Kc call numbers.
 KcKbRead blocks user tasks until a keyboard event is available.
+Future Kc interrupt vector 80h is installed but points to a return-only stub.
 ```
 
 Tasking and scheduling:
@@ -165,6 +166,7 @@ The scheduler is cooperative.
 Task states include Free, Ready, Running, Blocked, and Exited.
 TaskSetReady, TaskBlock, and TaskWake exist.
 Task records contain future user-mode EIP, ESP, CS, DS, SS, and EFLAGS fields.
+Loaded user tasks have prepared future iretd frames.
 KcTmSleep is the first real cooperative blocking service.
 TaskYield wakes blocked sleep tasks whose deadlines have expired.
 Timer wake checks happen only when the cooperative scheduler runs.
@@ -183,6 +185,7 @@ Future TSS selector and storage are defined:
   TSS_SEL
   Tss32
 TR is loaded during kernel startup.
+TSS ESP0 tracks the selected task's kernel stack top.
 Fault IDT gates are installed for:
   general protection fault vector 13
   page fault vector 14
@@ -240,7 +243,10 @@ possible future improvements:
 current flag bits remain unchanged until ring 3 work begins
 future ring 3 GDT selectors are named but unused
 future TSS selector/storage are named and TR is loaded
+future ring-transition stack pointer tracks the selected task
 future user-mode task frame fields are populated but unused
+future iretd frames are prepared but unused
+future Kc interrupt gate is installed but not used by user programs
 future flag names document the intended user/supervisor policy
 fault handlers are named but still halt-only
 later add the x86 user/supervisor bit to user-facing mappings
