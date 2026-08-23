@@ -200,18 +200,18 @@ KcDispatch:
   call  KcValidate
   mov   eax,[KcStatus]
   cmp   eax,KC_STATUS_OK
-  jne   KcDispatchDone
+  jne   KcDispatch1
   call  KcLookup
   mov   eax,[KcStatus]
   cmp   eax,KC_STATUS_OK
-  jne   KcDispatchDone
+  jne   KcDispatch1
   call  KcAuthorize
   mov   eax,[KcStatus]
   cmp   eax,KC_STATUS_OK
-  jne   KcDispatchDone
+  jne   KcDispatch1
   mov   eax,[KcHandler]
   call  eax
-KcDispatchDone:
+KcDispatch1:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -230,17 +230,17 @@ KcBlockDispatch:
   call  TaskGetCurrentRecord
   mov   edi,[pTaskRecord]
   test  edi,edi
-  jz    KcBlockDispatchDone
+  jz    KcBlockDispatch1
   mov   esi,[edi+TASK_KCBLOCK_PTR]
   test  esi,esi
-  jz    KcBlockDispatchDone
+  jz    KcBlockDispatch1
   mov   eax,[esi+KC_BLOCK_NUMBER]
   cmp   eax,KcTsYield
-  je    KcBlockDispatchYield
+  je    KcBlockDispatch2
   cmp   eax,KcTsExit
-  je    KcBlockDispatchExit
+  je    KcBlockDispatch3
   cmp   eax,KcTmSleep
-  je    KcBlockDispatchSleep
+  je    KcBlockDispatch4
   mov   [KcNumber],eax
   mov   eax,[esi+KC_BLOCK_ARG0]
   mov   [KcArg0],eax
@@ -256,29 +256,29 @@ KcBlockDispatch:
   call  TaskGetCurrentRecord
   mov   edi,[pTaskRecord]
   test  edi,edi
-  jz    KcBlockDispatchDone
+  jz    KcBlockDispatch1
   mov   esi,[edi+TASK_KCBLOCK_PTR]
   test  esi,esi
-  jz    KcBlockDispatchDone
+  jz    KcBlockDispatch1
   mov   eax,[KcStatus]
   mov   [esi+KC_BLOCK_STATUS],eax
   mov   eax,[KcResult0]
   mov   [esi+KC_BLOCK_RESULT0],eax
   mov   eax,[KcResult1]
   mov   [esi+KC_BLOCK_RESULT1],eax
-KcBlockDispatchDone:
+KcBlockDispatch1:
   ret
-KcBlockDispatchYield:
+KcBlockDispatch2:
   mov   dword[esi+KC_BLOCK_STATUS],KC_STATUS_OK
   call  TaskYield
   ret
-KcBlockDispatchExit:
+KcBlockDispatch3:
   mov   eax,[esi+KC_BLOCK_ARG0]
   mov   [TaskExitCode],eax
   mov   dword[esi+KC_BLOCK_STATUS],KC_STATUS_OK
   call  TaskExit
   ret
-KcBlockDispatchSleep:
+KcBlockDispatch4:
   mov   eax,[esi+KC_BLOCK_ARG0]
   mov   [TaskSleepMs],eax
   mov   dword[esi+KC_BLOCK_STATUS],KC_STATUS_OK
@@ -319,58 +319,58 @@ KcUserInterruptEntry:
   mov   [TaskInterruptFrameEsp],esp
   mov   esi,0
   cmp   dword[KcInterruptEnabled],1
-  jne   KcUserInterruptEntryDone
+  jne   KcUserInterruptEntry6
   inc   dword[KcInterruptEntered]
   call  TaskGetCurrentRecord
   mov   edi,[pTaskRecord]
   test  edi,edi
-  jz    KcUserInterruptReject
+  jz    KcUserInterruptEntry5
   mov   esi,[edi+TASK_KCBLOCK_PTR]
   test  esi,esi
-  jz    KcUserInterruptReject
+  jz    KcUserInterruptEntry5
   mov   eax,[esi+KC_BLOCK_NUMBER]
   cmp   eax,KcTsYield
-  je    KcUserInterruptYield
+  je    KcUserInterruptEntry1
   cmp   eax,KcTsExit
-  je    KcUserInterruptExit
+  je    KcUserInterruptEntry2
   cmp   eax,KcTmSleep
-  je    KcUserInterruptSleep
+  je    KcUserInterruptEntry3
   cmp   eax,KcKbRead
-  je    KcUserInterruptKeyRead
+  je    KcUserInterruptEntry4
   call  KcBlockDispatch
-  jmp   KcUserInterruptEntryDone
-KcUserInterruptYield:
+  jmp   KcUserInterruptEntry6
+KcUserInterruptEntry1:
   mov   dword[esi+KC_BLOCK_STATUS],KC_STATUS_OK
   call  TaskYieldFromInterrupt
-  jmp   KcUserInterruptEntryDone
-KcUserInterruptExit:
+  jmp   KcUserInterruptEntry6
+KcUserInterruptEntry2:
   mov   eax,[esi+KC_BLOCK_ARG0]
   mov   [TaskExitCode],eax
   mov   dword[esi+KC_BLOCK_STATUS],KC_STATUS_OK
   call  TaskExitFromInterrupt
-  jmp   KcUserInterruptEntryDone
-KcUserInterruptSleep:
+  jmp   KcUserInterruptEntry6
+KcUserInterruptEntry3:
   mov   eax,[esi+KC_BLOCK_ARG0]
   mov   [TaskSleepMs],eax
   mov   dword[esi+KC_BLOCK_STATUS],KC_STATUS_OK
   mov   dword[esi+KC_BLOCK_RESULT0],0
   mov   dword[esi+KC_BLOCK_RESULT1],0
   call  TaskSleepFromInterrupt
-  jmp   KcUserInterruptEntryDone
-KcUserInterruptKeyRead:
+  jmp   KcUserInterruptEntry6
+KcUserInterruptEntry4:
   call  TaskKeyboardReadFromInterrupt
   mov   eax,[TaskKeyType]
   mov   [esi+KC_BLOCK_RESULT0],eax
   mov   eax,[TaskKeyChar]
   mov   [esi+KC_BLOCK_RESULT1],eax
   mov   dword[esi+KC_BLOCK_STATUS],KC_STATUS_OK
-  jmp   KcUserInterruptEntryDone
-KcUserInterruptReject:
+  jmp   KcUserInterruptEntry6
+KcUserInterruptEntry5:
   inc   dword[KcInterruptRejected]
   test  esi,esi
-  jz    KcUserInterruptEntryDone
+  jz    KcUserInterruptEntry6
   mov   dword[esi+KC_BLOCK_STATUS],KC_STATUS_INVALID
-KcUserInterruptEntryDone:
+KcUserInterruptEntry6:
   iretd
 
 ;--------------------------------------------------------------------------------------------------
@@ -393,9 +393,9 @@ KcValidate:
   mov   dword[KcStatus],KC_STATUS_INVALID
   mov   eax,[KcNumber]
   test  eax,eax
-  jz    KcValidateDone
+  jz    KcValidate1
   mov   dword[KcStatus],KC_STATUS_OK
-KcValidateDone:
+KcValidate1:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -420,7 +420,7 @@ KcLookup:
 KcLookup1:
   mov   eax,[KcTableLeft]
   test  eax,eax
-  jz    KcLookupDone
+  jz    KcLookup3
   mov   edi,[pKcTable]
   mov   eax,[edi]
   cmp   eax,[KcNumber]
@@ -437,7 +437,7 @@ KcLookup2:
   mov   eax,[edi+8]
   mov   [KcRequiredAuthority],eax
   mov   dword[KcStatus],KC_STATUS_OK
-KcLookupDone:
+KcLookup3:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -454,21 +454,21 @@ KcAuthorize:
   mov   dword[KcStatus],KC_STATUS_OK
   mov   eax,[KcCallFromUser]
   test  eax,eax
-  jz    KcAuthorizeDone
+  jz    KcAuthorize2
   mov   eax,[KcRequiredAuthority]
   cmp   eax,KC_AUTH_KERNEL
-  je    KcAuthorizeDenied
+  je    KcAuthorize1
   call  TaskGetCurrentRecord
   mov   edi,[pTaskRecord]
   test  edi,edi
-  jz    KcAuthorizeDenied
+  jz    KcAuthorize1
   mov   eax,[edi+TASK_AUTHORITY]
   cmp   eax,[KcRequiredAuthority]
-  jb    KcAuthorizeDenied
+  jb    KcAuthorize1
   ret
-KcAuthorizeDenied:
+KcAuthorize1:
   mov   dword[KcStatus],KC_STATUS_DENIED
-KcAuthorizeDone:
+KcAuthorize2:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -484,14 +484,14 @@ KcValidateUserStrArg0:
   mov   dword[KcStatus],KC_STATUS_OK
   mov   eax,[KcCallFromUser]
   test  eax,eax
-  jz    KcValidateUserStrArg0Done
+  jz    KcValidateUserStrArg02
   mov   eax,[KcArg0]
   mov   [TaskUserPtr],eax
   mov   dword[TaskUserSize],2
   call  TaskValidateUserRange
   mov   eax,[TaskUserOk]
   test  eax,eax
-  jz    KcValidateUserStrArg0Bad
+  jz    KcValidateUserStrArg01
   mov   esi,[KcArg0]
   movzx eax,word[esi]
   add   eax,2
@@ -499,12 +499,12 @@ KcValidateUserStrArg0:
   call  TaskValidateUserRange
   mov   eax,[TaskUserOk]
   test  eax,eax
-  jz    KcValidateUserStrArg0Bad
+  jz    KcValidateUserStrArg01
   mov   dword[KcStatus],KC_STATUS_OK
   ret
-KcValidateUserStrArg0Bad:
+KcValidateUserStrArg01:
   mov   dword[KcStatus],KC_STATUS_BAD_ARG
-KcValidateUserStrArg0Done:
+KcValidateUserStrArg02:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -521,7 +521,7 @@ KcValidateUserReadBuffer:
   mov   dword[KcStatus],KC_STATUS_OK
   mov   eax,[KcCallFromUser]
   test  eax,eax
-  jz    KcValidateUserReadBufferDone
+  jz    KcValidateUserReadBuffer1
   mov   eax,[KcArg1]
   mov   [TaskUserPtr],eax
   mov   eax,[KcArg2]
@@ -529,9 +529,9 @@ KcValidateUserReadBuffer:
   call  TaskValidateUserRange
   mov   eax,[TaskUserOk]
   test  eax,eax
-  jnz   KcValidateUserReadBufferDone
+  jnz   KcValidateUserReadBuffer1
   mov   dword[KcStatus],KC_STATUS_BAD_ARG
-KcValidateUserReadBufferDone:
+KcValidateUserReadBuffer1:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -584,7 +584,7 @@ KcTmSleepHandler:
 KcKbReadHandler:
   mov   eax,[KcCallFromUser]
   test  eax,eax
-  jz    KcKbReadHandlerBad
+  jz    KcKbReadHandler1
   call  TaskKeyboardRead
   mov   eax,[TaskKeyType]
   mov   [KcResult0],eax
@@ -592,7 +592,7 @@ KcKbReadHandler:
   mov   [KcResult1],eax
   mov   dword[KcStatus],KC_STATUS_OK
   ret
-KcKbReadHandlerBad:
+KcKbReadHandler1:
   mov   dword[KcResult0],KEY_NONE
   mov   dword[KcResult1],0
   mov   dword[KcStatus],KC_STATUS_BAD_ARG
@@ -699,14 +699,14 @@ KcMmGetMemoryHandler:
   call  TaskMemoryGet
   mov   eax,[TaskMemoryStatus]
   cmp   eax,TASK_MEMORY_STATUS_OK
-  jne   KcMmGetMemoryFailed
+  jne   KcMmGetMemoryHandler1
   mov   eax,[TaskMemoryPointer]
   mov   [KcResult0],eax
   mov   eax,[TaskMemoryBytes]
   mov   [KcResult1],eax
   mov   dword[KcStatus],KC_STATUS_OK
   ret
-KcMmGetMemoryFailed:
+KcMmGetMemoryHandler1:
   mov   dword[KcStatus],KC_STATUS_BAD_ARG
   ret
 
@@ -730,12 +730,12 @@ KcMmFreeMemoryHandler:
   call  TaskMemoryFree
   mov   eax,[TaskMemoryStatus]
   cmp   eax,TASK_MEMORY_STATUS_OK
-  jne   KcMmFreeMemoryFailed
+  jne   KcMmFreeMemoryHandler1
   mov   eax,[TaskMemoryBytes]
   mov   [KcResult1],eax
   mov   dword[KcStatus],KC_STATUS_OK
   ret
-KcMmFreeMemoryFailed:
+KcMmFreeMemoryHandler1:
   mov   dword[KcStatus],KC_STATUS_BAD_ARG
   ret
 
@@ -752,14 +752,14 @@ KcMmInfoHandler:
   call  TaskMemoryInfo
   mov   eax,[TaskMemoryStatus]
   cmp   eax,TASK_MEMORY_STATUS_OK
-  jne   KcMmInfoHandlerFailed
+  jne   KcMmInfoHandler1
   mov   eax,[TaskMemoryMappedBytes]
   mov   [KcResult0],eax
   mov   eax,[TaskMemoryMaxBytes]
   mov   [KcResult1],eax
   mov   dword[KcStatus],KC_STATUS_OK
   ret
-KcMmInfoHandlerFailed:
+KcMmInfoHandler1:
   mov   dword[KcStatus],KC_STATUS_BAD_ARG
   ret
 
@@ -809,10 +809,10 @@ KcTsGetAuthorityHandler:
   call  TaskGetCurrentRecord
   mov   edi,[pTaskRecord]
   test  edi,edi
-  jz    KcTsGetAuthorityDone
+  jz    KcTsGetAuthorityHandler1
   mov   eax,[edi+TASK_AUTHORITY]
   mov   [KcResult0],eax
-KcTsGetAuthorityDone:
+KcTsGetAuthorityHandler1:
   mov   dword[KcStatus],KC_STATUS_OK
   ret
 
