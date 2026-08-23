@@ -20,7 +20,7 @@
 
 [bits  32]                              ; 32 bit code
   org   100000h                         ; Kernel starts at 1 MB
-  jmp   Stage3                          ; Jump to entry point
+  jmp   KernelEntry                     ; Jump to Kernel entry point
 
 ;--------------------------------------------------------------------------------------------------
 ; Denied Legacy User Kernel-Call Gateway
@@ -114,7 +114,7 @@ Tss32:
 ;--------------------------------------------------------------------------------------------------
 ; Kernel Entry Point
 ;--------------------------------------------------------------------------------------------------
-Stage3:
+KernelEntry:
   cli                                   ; Disable interrupts during setup
   ; Set up segments, stack, GDT, IDT
   lea   eax,[GDTDescriptor]             ; Load the GDT

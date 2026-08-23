@@ -44,8 +44,7 @@ Offset +20   4 bytes  File sector count
 ## Real Hardware Note
 
 `floppy.img` is intended to remain a standard 1.44MB sector image that can later
-be written sector-for-sector to a real floppy, for example with WinImage and a
-USB floppy drive.
+be written sector-for-sector to a real floppy.
 
 ## BIOS Handoff
 

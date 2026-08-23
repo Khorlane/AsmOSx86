@@ -178,7 +178,6 @@ sector count.
 Notes:
 
 - Does not mount the image.
-- Does not use ImDisk.
 - Does not copy files through FAT12.
 - Packs file bodies contiguously and pads each file to a whole sector.
 

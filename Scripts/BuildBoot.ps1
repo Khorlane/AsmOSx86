@@ -1,5 +1,5 @@
 <# BuildBoot.ps1
-PowerShell equivalent of BuildBoot.bat
+Assembles Boot.asm into the 512-byte boot sector binary.
 #>
 
 Set-StrictMode -Version Latest

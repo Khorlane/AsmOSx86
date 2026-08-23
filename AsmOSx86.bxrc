@@ -507,8 +507,7 @@ vgaromimage: file="C:\Program Files\Bochs-3.0\VGABIOS-lgpl-latest.bin"
 #  TOGGLE:
 #  The default method to toggle the mouse capture at runtime is to press the
 #  CTRL key and the middle mouse button ('ctrl+mbutton'). This option allows
-#  to change the method to 'ctrl+f10' (like DOSBox), 'ctrl+alt' (like QEMU)
-#  or 'f12'.
+#  to change the method to 'ctrl+f10', 'ctrl+alt', or 'f12'.
 #
 # Examples:
 #   mouse: enabled=1

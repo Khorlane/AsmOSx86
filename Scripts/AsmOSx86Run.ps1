@@ -1,5 +1,5 @@
 <# AsmOSx86Run.ps1
-PowerShell equivalent of AsmOSx86Run.bat
+Launches AsmOSx86 in Bochs using the prepared floppy image.
 - Clears screen
 - Prompts user
 - Launches Bochs

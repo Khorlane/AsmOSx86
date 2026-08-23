@@ -1,7 +1,7 @@
 <# BuildKernelAndRun.ps1
-PowerShell equivalent of BuildKernelAndRun.bat
+Builds the kernel, refreshes the floppy image, and launches AsmOSx86 in Bochs.
 - Calls BuildKernel.ps1
-- Calls BuildCopy.ps1 (replaces DOSBox copy step)
+- Calls BuildCopy.ps1
 - Pauses at the same points
 - Launches Bochs
 #>
@@ -28,7 +28,7 @@ try {
   Write-Host "- Assemble Kernel -"
   Write-Host "-------------------"
 
-  # call BuildKernel.bat noexit -> BuildKernel.ps1 noexit
+  # Build the kernel without an extra pause inside the child script.
   & (Join-Path $PSScriptRoot "BuildKernel.ps1") noexit
   if (-not $?) {
     throw "BuildKernel.ps1 failed."
@@ -39,7 +39,6 @@ try {
   Write-Host "- Copy Kernel to Boot Disk Image -"
   Write-Host "----------------------------------"
 
-  # Replaces DOSBox copy step
   & (Join-Path $PSScriptRoot "BuildCopy.ps1")
   if (-not $?) {
     throw "BuildCopy.ps1 failed."
