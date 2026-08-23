@@ -17,21 +17,21 @@ The boot path assumes this high-level sector layout:
 Sector 0      Boot.bin
 Sector 1      AsmOSx86 boot manifest
 Sector 2..N   Kernel.bin sectors
-Sector N+1    Filesystem manifest
+Sector N+1    System catalog
 Sector N+2..  Runtime file sectors
 ```
 
-The image is not FAT12. It is a raw sector image with an AsmOSx86 manifest in
-sector 1 identified by the `ASMF` manifest signature. Boot only needs the
+The image is a raw sector image with an AsmOSx86 boot manifest
+in sector 1 identified by the `ASMF` signature. Boot only needs the boot
 manifest entry for `KERNEL.BIN`.
 
 The boot manifest is one 512-byte sector. It contains the fields Boot needs for
 `KERNEL.BIN` plus filesystem area fields used later by the kernel:
 
-Manifest header:
+Boot manifest header:
 
 ```text
-Offset 0  4 bytes  ASMF manifest signature
+Offset 0  4 bytes  ASMF signature
 Offset 4  2 bytes  Version: 1
 Offset 6  2 bytes  Entry count
 Offset 8  4 bytes  Filesystem start sector
@@ -76,8 +76,8 @@ Boot is responsible for:
 - setting up enough real-mode state to run predictably
 - installing a small IRQ6 handler for floppy-controller interrupts
 - initializing the floppy controller directly
-- reading the AsmOSx86 manifest from sector 1
-- finding `KERNEL.BIN` in the manifest
+- reading the AsmOSx86 boot manifest from sector 1
+- finding `KERNEL.BIN` in the boot manifest
 - enabling A20
 - loading `KERNEL.BIN` directly to physical address `00100000h`
 - installing a minimal GDT
@@ -117,7 +117,7 @@ Once the controller is ready, Boot reads logical sector 1 into memory at:
 0000:0500
 ```
 
-That sector contains the `ASMF` boot manifest. Boot walks the manifest entries,
+That sector contains the boot manifest. Boot walks the manifest entries,
 looking for the uppercase 8.3 kernel name:
 
 ```text
@@ -199,7 +199,7 @@ BIOS
 
 Boot
   -> initializes enough floppy-controller hardware to read sectors directly
-  -> reads sector 1 manifest
+  -> reads sector 1 boot manifest
   -> finds KERNEL.BIN
   -> enables A20
   -> loads KERNEL.BIN directly to 00100000h

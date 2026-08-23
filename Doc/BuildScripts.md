@@ -54,15 +54,15 @@ Optional inputs:
 
 Writes:
 
-- sector `1`: the boot manifest sector with the `ASMF` manifest signature
+- sector `1`: the boot manifest sector with the `ASMF` signature
 - sector `2+`: contiguous `KERNEL.BIN` sectors
-- immediately after `KERNEL.BIN`: filesystem manifest sector
-- after the filesystem manifest: packed runtime file bodies
+- immediately after `KERNEL.BIN`: system catalog area, currently one sector
+- after the system catalog: packed runtime file bodies
 - a reserved, zero-filled `LOG.TXT` file entry
 
 Boot manifest format:
 
-- offset `0`: four-byte `ASMF` manifest signature
+- offset `0`: four-byte `ASMF` signature
 - offset `4`: version word, currently `1`
 - offset `6`: entry-count word, currently `1`
 - offset `8`: filesystem start sector
@@ -71,15 +71,15 @@ Boot manifest format:
 
 The boot manifest contains the `KERNEL.BIN` entry that `Boot.asm` needs.
 
-Filesystem manifest format:
+System catalog format:
 
-- offset `0`: four-byte `ASMF` manifest signature
+- offset `0`: four-byte `ASMF` signature
 - offset `4`: version word, currently `1`
 - offset `6`: entry-count word
 - offset `16`: first 32-byte file entry
 
 Each file entry records an uppercase 8.3 name, starting sector, byte size, and
-sector count. Runtime files live in the filesystem manifest, not the boot
+sector count. Runtime files live in the system catalog, not the boot
 manifest.
 
 Notes:
@@ -87,7 +87,7 @@ Notes:
 - Does not mount the image.
 - Does not copy files through FAT12.
 - Packs file bodies contiguously and pads each file to a whole sector.
-- Supports at most 15 manifest entries in this first version.
+- Supports at most 15 system catalog entries in this first version.
 
 ## BuildKernel.ps1
 

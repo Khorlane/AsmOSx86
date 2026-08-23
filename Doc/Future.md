@@ -12,14 +12,14 @@ AsmOSx86 currently has a deliberately simple storage path:
 ```text
 KcFsOpen / KcFsRead / KcFsClose
   -> Fs.asm
-  -> ASMF manifest logic
+  -> system catalog lookup
   -> DevReadSector
   -> floppy sector I/O
   -> floppy controller / DMA
 ```
 
 That is enough for the current floppy-based user-program loader and smoke
-tests, but `Fs.asm` should not permanently mean "raw ASMF files on floppy A:".
+tests, but `Fs.asm` should not permanently mean "system catalog files on floppy A:".
 The long-term shape separates devices, block access, filesystems, and kernel
 calls into clear layers.
 
@@ -71,7 +71,7 @@ User/kernel calls
   later KcFsWrite
 
 Filesystem layer
-  current ASMF manifest lookup
+  current system catalog lookup
   later native AsmOSx86 filesystem
 
 Block device layer
@@ -93,7 +93,7 @@ driver talks to hardware
 ```
 
 `KcFsRead` should not care whether bytes came from floppy, hard disk, RAM disk,
-the current ASMF manifest, or a future native filesystem.
+the current system catalog, or a future native filesystem.
 
 Possible future device record:
 
@@ -132,7 +132,7 @@ active control entry point use
 private driver state
 hard disk driver
 filesystem manager / mounted volumes
-native AsmOSx86 filesystem beyond ASMF
+native AsmOSx86 filesystem beyond the current system catalog
 user-facing KcFsWrite and broader filesystem services
 future KcDevCtl / mount / session services
 ```
@@ -145,14 +145,14 @@ The current disk layout is a raw 1.44MB floppy image:
 
 ```text
 Sector 0  Boot.bin
-Sector 1  ASMF boot manifest
+Sector 1  boot manifest
 Sector 2+ contiguous KERNEL.BIN
-Next      raw filesystem area
+Next      system catalog and raw filesystem area
 ```
 
 `BuildCopy.ps1` writes the boot manifest, packs `KERNEL.BIN` contiguously after
 it, then creates a raw filesystem area immediately after the kernel. The
-filesystem manifest records:
+first sector of that area is the system catalog, which records:
 
 ```text
 uppercase 8.3 file name
@@ -182,8 +182,8 @@ no allocation policy in the kernel
 floppy A: is the only active block device
 ```
 
-The current filesystem manifest is not the native filesystem described below. It
-is a useful early file table that gives the kernel and user-program loader a
+The current system catalog is not the native filesystem described below. It is a
+useful early file table that gives the kernel and user-program loader a
 shared way to locate files on the raw floppy image while `Boot.asm` only needs
 the boot manifest entry for `KERNEL.BIN`.
 
@@ -570,7 +570,7 @@ HostExit  -> KcTsExit
 Bochs remains the normal AsmOSx86 test environment throughout the transition.
 Early Asm32x86 work can happen on Windows while AsmOSx86 continues to boot and
 run in Bochs. Build scripts can copy generated userland programs and tools into
-the raw ASMF floppy image for AsmOSx86 testing.
+the raw floppy image's system catalog for AsmOSx86 testing.
 
 When updating the floppy image, Bochs should be closed first so the image file
 is not locked.

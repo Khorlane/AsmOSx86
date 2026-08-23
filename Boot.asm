@@ -6,7 +6,7 @@
 ;   1. is exactly 512 bytes long
 ;   2. uses NO BIOS interrupts
 ;   3. initializes enough floppy-controller hardware to read sectors directly
-;   4. reads the AsmOSx86 manifest from sector 1
+;   4. reads the AsmOSx86 boot manifest from sector 1
 ;   5. finds and loads KERNEL.BIN to 00100000h
 ;   6. enables A20
 ;   7. installs a minimal GDT and enters 32-bit protected mode
@@ -45,7 +45,7 @@ Booter:
 
     call  FdcInit
 
-    ; Read ASMF manifest sector to 0000:0500.
+    ; Read boot manifest sector to 0000:0500.
     mov   ax,MANIFEST_SECTOR
     mov   bx,MANIFEST_BUFFER
     call  FloppyRead

@@ -1,6 +1,6 @@
 <#
 ExtractFile.ps1
-Extracts one file from the AsmOSx86 raw filesystem area.
+Extracts one file from the AsmOSx86 system catalog.
 
 Usage:
   .\ExtractFile.ps1 LOG.TXT
@@ -54,7 +54,7 @@ $imageBytes = [System.IO.File]::ReadAllBytes($Image)
 $manifestOffset = $ManifestSector * $BytesPerSector
 $sig = [System.Text.Encoding]::ASCII.GetString($imageBytes, $manifestOffset, 4)
 if ($sig -ne "ASMF") {
-  throw "Boot ASMF manifest signature was '$sig', expected ASMF."
+  throw "Boot manifest ASMF signature was '$sig', expected ASMF."
 }
 $fsStartSector = Read-UInt32Le $imageBytes ($manifestOffset + $ManifestFsStartOffset)
 if ($fsStartSector -eq 0) {
@@ -64,7 +64,7 @@ if ($fsStartSector -eq 0) {
 $manifestOffset = [int]$fsStartSector * $BytesPerSector
 $sig = [System.Text.Encoding]::ASCII.GetString($imageBytes, $manifestOffset, 4)
 if ($sig -ne "ASMF") {
-  throw "Filesystem ASMF manifest signature was '$sig', expected ASMF."
+  throw "System catalog ASMF signature was '$sig', expected ASMF."
 }
 
 $entryCount = Read-UInt16Le $imageBytes ($manifestOffset + 6)
@@ -85,7 +85,7 @@ for ($i = 0; $i -lt $entryCount; $i++) {
 }
 
 if (-not $found) {
-  throw "File not found in filesystem manifest: $Name"
+  throw "File not found in system catalog: $Name"
 }
 
 $fileOffset = [int]$startSector * $BytesPerSector

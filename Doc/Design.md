@@ -73,7 +73,7 @@ The current kernel provides:
   - `Time`
   - `Uptime`
 
-At this stage, AsmOSx86 is still a single resident kernel with an integrated console. Early userland exists as raw flat binaries loaded from the raw `ASMF` floppy manifest and run as cooperative tasks through the kernel's task service path.
+At this stage, AsmOSx86 is still a single resident kernel with an integrated console. Early userland exists as raw flat binaries loaded from the system catalog and run as cooperative tasks through the kernel's task service path.
 
 ---
 
@@ -278,7 +278,7 @@ change into that folder before running them.
 ```text
 NASM      assembles flat binary files
 fsutil    creates the 1.44 MB floppy image
-BuildCopy writes the ASMF boot manifest, contiguous kernel image, and raw filesystem area
+BuildCopy writes the boot manifest, contiguous kernel image, and raw filesystem area
 Bochs     runs the bootable floppy image
 ```
 
@@ -443,7 +443,7 @@ The design should allow that progression.
 
 AsmOSx86 has a working ring 3 userland path for loaded user programs.
 
-User programs are raw flat binaries loaded from the `ASMF` filesystem and mapped
+User programs are raw flat binaries loaded from the system catalog and mapped
 at the fixed user virtual base:
 
 ```text
@@ -727,9 +727,9 @@ such as program loading.
 
 For AsmOSx86, `file` means a disk-backed filesystem object. It does not mean keyboard, video, console, pipe, socket, device, or memory buffer.
 
-The current user-facing implementation is read-only and filesystem-manifest
+The current user-facing implementation is read-only and system-catalog
 backed. `Fs.asm` reads the boot manifest to locate the filesystem area, opens
-files from the filesystem manifest, reads file sectors through a tiny kernel
+files from the system catalog, reads file sectors through a tiny kernel
 block-device layer, and the only current block device is floppy A:. The kernel
 also has a special internal writer for the preallocated `LOG.TXT` console
 mirror; this is not a general file-write service.
@@ -1032,7 +1032,7 @@ kernel initializes paging, Kc, timer, uptime, filesystem, video, log, keyboard, 
 wall time initializes lazily on first Time* use
 console commands work
 memory-contract ABI enforced in included kernel files
-ASMF filesystem-area file loading works
+system-catalog file loading works
 Run launches one to three loaded user programs
 loaded user programs run in ring 3
 user programs enter kernel services through int 80h
@@ -1993,8 +1993,8 @@ They are separate concepts.
 
 The OS should not care too much how a session was started.
 
-Current AsmOSx86 can already load raw userland binaries from the raw `ASMF`
-floppy image and run multiple cooperative user tasks. The console is the current
+Current AsmOSx86 can already load raw userland binaries from the raw floppy
+image's system catalog and run multiple cooperative user tasks. The console is the current
 operator interface to that capability.
 
 A session may eventually be started by:
@@ -2175,7 +2175,7 @@ Those can come later.
 The current completed foundation is:
 
 ```text
-resident kernel + console + ASMF file loading + ring 3 user tasks
+resident kernel + console + system-catalog file loading + ring 3 user tasks
 ```
 
 The next growth path is toward:

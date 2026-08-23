@@ -5,6 +5,7 @@ Writes the AsmOSx86 boot manifest, kernel image, and raw filesystem area.
 - Sector 1 is the AsmOSx86 boot manifest.
 - Sector 2 and onward contain KERNEL.BIN.
 - The filesystem area starts immediately after KERNEL.BIN.
+- The first filesystem-area sector is the system catalog.
 - LOG.TXT is a reserved, preallocated kernel-owned console log file.
 - STARTUP.TXT is optional and is run by the console after initialization.
 #>
@@ -125,7 +126,7 @@ try {
   }
 
   if ($files.Count -gt 15) {
-    Fail "Filesystem manifest supports at most 15 files in this first version."
+    Fail "System catalog supports at most 15 files in this first version."
   }
 
   Write-Host "[2/4] Planning packed file layout..."
@@ -157,7 +158,7 @@ try {
   }
   $fsSectorCount = $ImageSectors - $fsStartSector
 
-  Write-Host "[3/4] Writing boot manifest, filesystem manifest, and file bodies..."
+  Write-Host "[3/4] Writing boot manifest, system catalog, and file bodies..."
   $bootManifest = New-Object byte[] $BytesPerSector
   $sig = [System.Text.Encoding]::ASCII.GetBytes("ASMF")
   [Array]::Copy($sig, 0, $bootManifest, 0, 4)
@@ -225,15 +226,15 @@ try {
     if ($fs) { $fs.Close() }
   }
 
-  Write-Host "[4/4] Verifying ASMF manifest signature..."
+  Write-Host "[4/4] Verifying ASMF signatures..."
   $imageBytes = [System.IO.File]::ReadAllBytes($Image)
   $actualSig = [System.Text.Encoding]::ASCII.GetString($imageBytes, $ManifestSector * $BytesPerSector, 4)
   if ($actualSig -ne "ASMF") {
-    Fail "Boot ASMF manifest signature was '$actualSig', expected ASMF."
+    Fail "Boot manifest ASMF signature was '$actualSig', expected ASMF."
   }
   $actualSig = [System.Text.Encoding]::ASCII.GetString($imageBytes, $fsStartSector * $BytesPerSector, 4)
   if ($actualSig -ne "ASMF") {
-    Fail "Filesystem ASMF manifest signature was '$actualSig', expected ASMF."
+    Fail "System catalog ASMF signature was '$actualSig', expected ASMF."
   }
 
   Write-Host "SUCCESS: raw AsmOSx86 floppy image populated."

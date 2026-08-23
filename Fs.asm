@@ -8,7 +8,7 @@
 ;
 ; Contains
 ;   - File service open/read/close
-;   - Read-only AsmOSx86 filesystem manifest lookup
+;   - Read-only AsmOSx86 system catalog lookup
 ;   - Tiny block-device routing
 ;   - Bare-bones floppy sector reads/writes
 ;   - Kernel-owned console log mirror
@@ -25,7 +25,7 @@
 ;   - This is intentionally simple and optimistic.
 ;   - It assumes a 1.44MB AsmOSx86 raw floppy image in drive A:.
 ;   - It uses a low-memory DMA bounce buffer at 00008000h.
-;   - Filesystem manifest and floppy routines are internal implementation details.
+;   - System catalog and floppy routines are internal implementation details.
 ;**************************************************************************************************
 
 [bits 32]
@@ -123,7 +123,7 @@ FsHandleTable:
 ; Filesystem driver
 ;**************************************************************************************************
 FSDRV_BOOT_MANIFEST_SECTOR equ 1
-FSDRV_SIGNATURE          equ 464D5341h ; ASMF manifest signature
+FSDRV_SIGNATURE          equ 464D5341h ; ASMF signature
 FSDRV_ENTRY_COUNT        equ 6
 FSDRV_FS_START_SECTOR    equ 8
 FSDRV_FS_SECTOR_COUNT    equ 12
@@ -135,17 +135,17 @@ FSDRV_ENTRY_SECTOR_COUNT equ 20
 FSDRV_MANIFEST_BYTES     equ KERNEL_SECTOR_SIZE
 FSDRV_NAME_SIZE          equ 11
 
-FsMounted                dd 0          ; 1 once manifest is loaded
-FsDrvStartSector         dd 0          ; filesystem manifest sector
+FsMounted                dd 0          ; 1 once system catalog is loaded
+FsDrvStartSector         dd 0          ; system catalog sector
 FsDrvSectorCount         dd 0          ; filesystem area sectors
 FsNameIndex              dd 0          ; work: filename output index
 FsNameInputLeft          dd 0          ; work: chars left in input Str
 FsNameOutputLimit        dd 0          ; work: 8 before dot, 3 after dot
 FsNameOutputBase         dd 0          ; work: output base 0 or 8
 FsNamePayload            dd 0          ; work: source payload pointer
-FsEntryLeft              dd 0          ; work: manifest entries left
-pFsEntry                 dd 0          ; work/output: manifest entry pointer
-FsEntryCount             dd 0          ; manifest entry count
+FsEntryLeft              dd 0          ; work: catalog entries left
+pFsEntry                 dd 0          ; work/output: catalog entry pointer
+FsEntryCount             dd 0          ; catalog entry count
 FsName83:
   times FSDRV_NAME_SIZE db 0
 FsRootBuffer:
