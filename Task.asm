@@ -767,9 +767,7 @@ TaskProgramLoad6:
 ;     Used by console-driven user-program smoke tests before loading mock images.
 ;--------------------------------------------------------------------------------------------------
 TaskProgramInit:
-  mov   eax,KernelEnd
-  add   eax,00000FFFh
-  and   eax,0FFFFF000h
+  mov   eax,[MemoryKernelHeapEnd]
   mov   [TaskProgramNextLoadBase],eax
   mov   eax,TaskTable
   mov   [TaskInitPtr],eax
