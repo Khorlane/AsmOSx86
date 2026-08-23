@@ -122,16 +122,16 @@ FsHandleTable:
 ;**************************************************************************************************
 ; Filesystem driver
 ;**************************************************************************************************
-ASMFS_MANIFEST_SECTOR    equ 1
-ASMFS_SIGNATURE          equ 464D5341h
-ASMFS_ENTRY_COUNT        equ 6
-ASMFS_ENTRY_OFFSET       equ 16
-ASMFS_ENTRY_SIZE         equ 32
-ASMFS_ENTRY_START_SECTOR equ 12
-ASMFS_ENTRY_BYTE_SIZE    equ 16
-ASMFS_ENTRY_SECTOR_COUNT equ 20
-ASMFS_MANIFEST_BYTES     equ KERNEL_SECTOR_SIZE
-ASMFS_NAME_SIZE          equ 11
+FSDRV_MANIFEST_SECTOR    equ 1
+FSDRV_SIGNATURE          equ 464D5341h ; ASMF manifest signature
+FSDRV_ENTRY_COUNT        equ 6
+FSDRV_ENTRY_OFFSET       equ 16
+FSDRV_ENTRY_SIZE         equ 32
+FSDRV_ENTRY_START_SECTOR equ 12
+FSDRV_ENTRY_BYTE_SIZE    equ 16
+FSDRV_ENTRY_SECTOR_COUNT equ 20
+FSDRV_MANIFEST_BYTES     equ KERNEL_SECTOR_SIZE
+FSDRV_NAME_SIZE          equ 11
 
 FsMounted                dd 0          ; 1 once manifest is loaded
 FsNameIndex              dd 0          ; work: filename output index
@@ -143,9 +143,9 @@ FsEntryLeft              dd 0          ; work: manifest entries left
 pFsEntry                 dd 0          ; work/output: manifest entry pointer
 FsEntryCount             dd 0          ; manifest entry count
 FsName83:
-  times ASMFS_NAME_SIZE db 0
+  times FSDRV_NAME_SIZE db 0
 FsRootBuffer:
-  times ASMFS_MANIFEST_BYTES db 0
+  times FSDRV_MANIFEST_BYTES db 0
 
 ;**************************************************************************************************
 ; Block device layer
@@ -220,25 +220,25 @@ FsLogInit:
   mov   eax,[FsMounted]
   test  eax,eax
   jnz   FsLogInit1
-  call  AsmFsMount
+  call  FsDrvMount
   mov   eax,[FsStatus]
   cmp   eax,FS_STATUS_OK
   jne   FsLogHardFail
 FsLogInit1:
   lea   eax,[FsLogName]
   mov   [pFsOpenName],eax
-  call  AsmFsMakeName83
+  call  FsDrvMakeName83
   mov   eax,[FsStatus]
   cmp   eax,FS_STATUS_OK
   jne   FsLogHardFail
-  call  AsmFsFindEntry
+  call  FsDrvFindEntry
   mov   eax,[FsStatus]
   cmp   eax,FS_STATUS_OK
   jne   FsLogHardFail
   mov   esi,[pFsEntry]
-  mov   eax,[esi+ASMFS_ENTRY_START_SECTOR]
+  mov   eax,[esi+FSDRV_ENTRY_START_SECTOR]
   mov   [FsLogStartSector],eax
-  mov   eax,[esi+ASMFS_ENTRY_SECTOR_COUNT]
+  mov   eax,[esi+FSDRV_ENTRY_SECTOR_COUNT]
   mov   [FsLogSectorCount],eax
   shl   eax,KERNEL_SECTOR_SHIFT
   mov   [FsLogCapacityBytes],eax
@@ -247,10 +247,10 @@ FsLogInit1:
   mov   dword[FsLogClearIndex],0
   mov   eax,[FsLogSectorCount]
   mov   [FsLogClearLeft],eax
-FsLogInitClear:
+FsLogInit2:
   mov   eax,[FsLogClearLeft]
   test  eax,eax
-  jz    FsLogInitDone
+  jz    FsLogInit3
   mov   eax,[FsLogStartSector]
   add   eax,[FsLogClearIndex]
   mov   [DevSector],eax
@@ -261,8 +261,8 @@ FsLogInitClear:
   jne   FsLogHardFail
   inc   dword[FsLogClearIndex]
   dec   dword[FsLogClearLeft]
-  jmp   FsLogInitClear
-FsLogInitDone:
+  jmp   FsLogInit2
+FsLogInit3:
   call  FsLogClearBuffer
   mov   dword[FsLogEnabled],FS_LOG_ENABLED_ON
   ret
@@ -277,10 +277,10 @@ FsLogInitDone:
 FsLogWriteStr:
   mov   eax,[FsLogEnabled]
   cmp   eax,FS_LOG_ENABLED_ON
-  jne   FsLogWriteStrDone
+  jne   FsLogWriteStr3
   mov   esi,[pVdStr]
   test  esi,esi
-  jz    FsLogWriteStrDone
+  jz    FsLogWriteStr3
   movzx eax,word[esi]
   mov   [FsLogWriteLeft],eax
   add   esi,2
@@ -289,7 +289,7 @@ FsLogWriteStr:
 FsLogWriteStr1:
   mov   eax,[FsLogWriteLeft]
   test  eax,eax
-  jz    FsLogWriteStrFlush
+  jz    FsLogWriteStr2
   mov   eax,[FsLogOffset]
   cmp   eax,[FsLogCapacityBytes]
   jae   FsLogHardFail
@@ -313,12 +313,12 @@ FsLogWriteStr1:
   call  FsLogClearBuffer
   mov   dword[FsLogDirty],0
   jmp   FsLogWriteStr1
-FsLogWriteStrFlush:
+FsLogWriteStr2:
   mov   eax,[FsLogDirty]
   test  eax,eax
-  jz    FsLogWriteStrDone
+  jz    FsLogWriteStr3
   call  FsLogFlushCurrentSector
-FsLogWriteStrDone:
+FsLogWriteStr3:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -432,44 +432,44 @@ FsOpen:
   mov   dword[FsOpenSize],0
   mov   eax,[pFsOpenName]
   test  eax,eax
-  jz    FsOpenBadArg
-  call  AsmFsMakeName83
+  jz    FsOpen2
+  call  FsDrvMakeName83
   mov   eax,[FsStatus]
   cmp   eax,FS_STATUS_OK
-  jne   FsOpenDone
+  jne   FsOpen3
   mov   eax,[FsMounted]
   test  eax,eax
   jnz   FsOpen1
-  call  AsmFsMount
+  call  FsDrvMount
   mov   eax,[FsStatus]
   cmp   eax,FS_STATUS_OK
-  jne   FsOpenDone
+  jne   FsOpen3
 FsOpen1:
-  call  AsmFsFindEntry
+  call  FsDrvFindEntry
   mov   eax,[FsStatus]
   cmp   eax,FS_STATUS_OK
-  jne   FsOpenDone
+  jne   FsOpen3
   call  FsFindFreeHandle
   mov   eax,[FsStatus]
   cmp   eax,FS_STATUS_OK
-  jne   FsOpenDone
+  jne   FsOpen3
   mov   edi,[pFsHandleRecord]
   mov   dword[edi+FS_HANDLE_STATE],FS_HANDLE_OPEN
   mov   dword[edi+FS_HANDLE_POSITION],0
   mov   esi,[pFsEntry]
-  mov   eax,[esi+ASMFS_ENTRY_START_SECTOR]
+  mov   eax,[esi+FSDRV_ENTRY_START_SECTOR]
   mov   [edi+FS_HANDLE_START_SECTOR],eax
-  mov   eax,[esi+ASMFS_ENTRY_BYTE_SIZE]
+  mov   eax,[esi+FSDRV_ENTRY_BYTE_SIZE]
   mov   [edi+FS_HANDLE_SIZE],eax
   mov   [FsOpenSize],eax
   mov   eax,[FsHandleIndex]
   inc   eax
   mov   [FsOpenHandle],eax
   mov   dword[FsStatus],FS_STATUS_OK
-  jmp   FsOpenDone
-FsOpenBadArg:
+  jmp   FsOpen3
+FsOpen2:
   mov   dword[FsStatus],FS_STATUS_BAD_ARG
-FsOpenDone:
+FsOpen3:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -486,34 +486,34 @@ FsRead:
   mov   dword[FsReadBytes],0
   mov   eax,[pFsReadBuffer]
   test  eax,eax
-  jz    FsReadBadArg
+  jz    FsRead6
   mov   eax,[FsReadCount]
   test  eax,eax
-  jz    FsReadBadArg
+  jz    FsRead6
   mov   eax,[FsReadHandle]
   mov   [FsHandleIndex],eax
   dec   dword[FsHandleIndex]
   call  FsGetHandleRecord
   mov   eax,[FsStatus]
   cmp   eax,FS_STATUS_OK
-  jne   FsReadDone
+  jne   FsRead8
   mov   edi,[pFsHandleRecord]
   mov   eax,[edi+FS_HANDLE_STATE]
   cmp   eax,FS_HANDLE_OPEN
-  jne   FsReadBadHandle
+  jne   FsRead7
   mov   eax,[edi+FS_HANDLE_POSITION]
   mov   [FsFilePosition],eax
   mov   eax,[edi+FS_HANDLE_SIZE]
   mov   [FsFileSize],eax
   mov   eax,[edi+FS_HANDLE_START_SECTOR]
   mov   [FsFileStartSector],eax
-FsReadLoop:
+FsRead1:
   mov   eax,[FsReadCount]
   test  eax,eax
-  jz    FsReadOk
+  jz    FsRead4
   mov   eax,[FsFilePosition]
   cmp   eax,[FsFileSize]
-  jae   FsReadEof
+  jae   FsRead5
   mov   eax,[FsFilePosition]
   and   eax,KERNEL_SECTOR_SIZE-1
   mov   [FsSectorOffset],eax
@@ -522,15 +522,15 @@ FsReadLoop:
   mov   [FsBytesThisRead],ebx
   mov   eax,[FsReadCount]
   cmp   eax,[FsBytesThisRead]
-  jae   FsRead1
-  mov   [FsBytesThisRead],eax
-FsRead1:
-  mov   eax,[FsFileSize]
-  sub   eax,[FsFilePosition]
-  cmp   eax,[FsBytesThisRead]
   jae   FsRead2
   mov   [FsBytesThisRead],eax
 FsRead2:
+  mov   eax,[FsFileSize]
+  sub   eax,[FsFilePosition]
+  cmp   eax,[FsBytesThisRead]
+  jae   FsRead3
+  mov   [FsBytesThisRead],eax
+FsRead3:
   mov   eax,[FsFilePosition]
   shr   eax,KERNEL_SECTOR_SHIFT
   mov   [FsFileSectorIndex],eax
@@ -540,7 +540,7 @@ FsRead2:
   call  DevReadSector
   mov   eax,[FsStatus]
   cmp   eax,FS_STATUS_OK
-  jne   FsReadDone
+  jne   FsRead8
   mov   esi,FsSectorBuffer
   add   esi,[FsSectorOffset]
   mov   edi,[pFsReadBuffer]
@@ -551,28 +551,28 @@ FsRead2:
   add   [FsReadBytes],eax
   add   [FsFilePosition],eax
   sub   [FsReadCount],eax
-  jmp   FsReadLoop
-FsReadOk:
+  jmp   FsRead1
+FsRead4:
   mov   edi,[pFsHandleRecord]
   mov   eax,[FsFilePosition]
   mov   [edi+FS_HANDLE_POSITION],eax
   mov   dword[FsStatus],FS_STATUS_OK
-  jmp   FsReadDone
-FsReadEof:
+  jmp   FsRead8
+FsRead5:
   mov   edi,[pFsHandleRecord]
   mov   eax,[FsFilePosition]
   mov   [edi+FS_HANDLE_POSITION],eax
   mov   eax,[FsReadBytes]
   test  eax,eax
-  jnz   FsReadOk
+  jnz   FsRead4
   mov   dword[FsStatus],FS_STATUS_EOF
-  jmp   FsReadDone
-FsReadBadArg:
+  jmp   FsRead8
+FsRead6:
   mov   dword[FsStatus],FS_STATUS_BAD_ARG
-  jmp   FsReadDone
-FsReadBadHandle:
+  jmp   FsRead8
+FsRead7:
   mov   dword[FsStatus],FS_STATUS_BAD_HANDLE
-FsReadDone:
+FsRead8:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -589,14 +589,14 @@ FsClose:
   call  FsGetHandleRecord
   mov   eax,[FsStatus]
   cmp   eax,FS_STATUS_OK
-  jne   FsCloseDone
+  jne   FsClose1
   mov   edi,[pFsHandleRecord]
   mov   dword[edi+FS_HANDLE_STATE],FS_HANDLE_FREE
   mov   dword[edi+FS_HANDLE_POSITION],0
   mov   dword[edi+FS_HANDLE_SIZE],0
   mov   dword[edi+FS_HANDLE_START_SECTOR],0
   mov   dword[FsStatus],FS_STATUS_OK
-FsCloseDone:
+FsClose1:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -655,106 +655,106 @@ FsFindFreeHandle3:
 ;**************************************************************************************************
 ; Filesystem driver
 ;**************************************************************************************************
-AsmFsMount:
-  mov   dword[DevSector],ASMFS_MANIFEST_SECTOR
+FsDrvMount:
+  mov   dword[DevSector],FSDRV_MANIFEST_SECTOR
   mov   dword[DevBuffer],FsRootBuffer
   call  DevReadSector
   mov   eax,[FsStatus]
   cmp   eax,FS_STATUS_OK
-  jne   AsmFsMountDone
+  jne   FsDrvMount2
   mov   eax,[FsRootBuffer]
-  cmp   eax,ASMFS_SIGNATURE
-  jne   AsmFsMountBad
-  movzx eax,word[FsRootBuffer+ASMFS_ENTRY_COUNT]
+  cmp   eax,FSDRV_SIGNATURE
+  jne   FsDrvMount1
+  movzx eax,word[FsRootBuffer+FSDRV_ENTRY_COUNT]
   mov   [FsEntryCount],eax
   mov   dword[FsMounted],1
   mov   dword[FsStatus],FS_STATUS_OK
-  jmp   AsmFsMountDone
-AsmFsMountBad:
+  jmp   FsDrvMount2
+FsDrvMount1:
   mov   dword[FsStatus],FS_STATUS_NOT_READY
-AsmFsMountDone:
+FsDrvMount2:
   ret
 
-AsmFsMakeName83:
+FsDrvMakeName83:
   mov   edi,FsName83
-  mov   ecx,ASMFS_NAME_SIZE
-AsmFsMakeName831:
+  mov   ecx,FSDRV_NAME_SIZE
+FsDrvMakeName831:
   mov   byte[edi],' '
   inc   edi
   dec   ecx
-  jnz   AsmFsMakeName831
+  jnz   FsDrvMakeName831
   mov   esi,[pFsOpenName]
   movzx ecx,word[esi]
   test  ecx,ecx
-  jz    AsmFsMakeName83Bad
+  jz    FsDrvMakeName836
   add   esi,2
   mov   [FsNamePayload],esi
   mov   [FsNameInputLeft],ecx
   mov   dword[FsNameOutputBase],0
   mov   dword[FsNameIndex],0
   mov   dword[FsNameOutputLimit],8
-AsmFsMakeName832:
+FsDrvMakeName832:
   mov   eax,[FsNameInputLeft]
   test  eax,eax
-  jz    AsmFsMakeName83Ok
+  jz    FsDrvMakeName835
   mov   esi,[FsNamePayload]
   mov   al,[esi]
   inc   esi
   mov   [FsNamePayload],esi
   dec   dword[FsNameInputLeft]
   cmp   al,'.'
-  je    AsmFsMakeName83Dot
+  je    FsDrvMakeName834
   cmp   al,'a'
-  jb    AsmFsMakeName833
+  jb    FsDrvMakeName833
   cmp   al,'z'
-  ja    AsmFsMakeName833
+  ja    FsDrvMakeName833
   sub   al,32
-AsmFsMakeName833:
+FsDrvMakeName833:
   mov   ebx,[FsNameIndex]
   cmp   ebx,[FsNameOutputLimit]
-  jae   AsmFsMakeName832
+  jae   FsDrvMakeName832
   add   ebx,[FsNameOutputBase]
   mov   [FsName83+ebx],al
   inc   dword[FsNameIndex]
-  jmp   AsmFsMakeName832
-AsmFsMakeName83Dot:
+  jmp   FsDrvMakeName832
+FsDrvMakeName834:
   mov   dword[FsNameOutputBase],8
   mov   dword[FsNameIndex],0
   mov   dword[FsNameOutputLimit],3
-  jmp   AsmFsMakeName832
-AsmFsMakeName83Ok:
+  jmp   FsDrvMakeName832
+FsDrvMakeName835:
   mov   dword[FsStatus],FS_STATUS_OK
   ret
-AsmFsMakeName83Bad:
+FsDrvMakeName836:
   mov   dword[FsStatus],FS_STATUS_BAD_ARG
   ret
 
-AsmFsFindEntry:
-  mov   dword[pFsEntry],FsRootBuffer+ASMFS_ENTRY_OFFSET
+FsDrvFindEntry:
+  mov   dword[pFsEntry],FsRootBuffer+FSDRV_ENTRY_OFFSET
   mov   eax,[FsEntryCount]
   mov   [FsEntryLeft],eax
-AsmFsFindEntry1:
+FsDrvFindEntry1:
   mov   eax,[FsEntryLeft]
   test  eax,eax
-  jz    AsmFsFindEntryNotFound
+  jz    FsDrvFindEntryNotFound
   mov   edi,[pFsEntry]
   mov   esi,FsName83
-  mov   ecx,ASMFS_NAME_SIZE
-AsmFsFindEntryCmp:
+  mov   ecx,FSDRV_NAME_SIZE
+FsDrvFindEntryCmp:
   mov   al,[esi]
   cmp   al,[edi]
-  jne   AsmFsFindEntryNext
+  jne   FsDrvFindEntryNext
   inc   esi
   inc   edi
   dec   ecx
-  jnz   AsmFsFindEntryCmp
+  jnz   FsDrvFindEntryCmp
   mov   dword[FsStatus],FS_STATUS_OK
   ret
-AsmFsFindEntryNext:
-  add   dword[pFsEntry],ASMFS_ENTRY_SIZE
+FsDrvFindEntryNext:
+  add   dword[pFsEntry],FSDRV_ENTRY_SIZE
   dec   dword[FsEntryLeft]
-  jmp   AsmFsFindEntry1
-AsmFsFindEntryNotFound:
+  jmp   FsDrvFindEntry1
+FsDrvFindEntryNotFound:
   mov   dword[pFsEntry],0
   mov   dword[FsStatus],FS_STATUS_NOT_FOUND
   ret
@@ -789,22 +789,22 @@ DevReadSector:
   call  DevFindById
   mov   eax,[DevStatus]
   cmp   eax,DEV_STATUS_OK
-  jne   DevReadSectorBadDevice
+  jne   DevReadSector1
   mov   esi,[pDevBlockDeviceRecord]
   test  esi,esi
-  jz    DevReadSectorBadDevice
+  jz    DevReadSector1
   mov   eax,[esi+DEV_RECORD_TYPE]
   cmp   eax,DEV_TYPE_BLOCK
-  jne   DevReadSectorBadDevice
+  jne   DevReadSector1
   mov   eax,[esi+DEV_RECORD_STATUS]
   cmp   eax,DEV_STATUS_OK
-  jne   DevReadSectorBadDevice
+  jne   DevReadSector1
   mov   eax,[DevSector]
   cmp   eax,[esi+DEV_RECORD_SECTOR_COUNT]
-  jae   DevReadSectorIoError
+  jae   DevReadSector2
   mov   eax,[esi+DEV_RECORD_READ]
   test  eax,eax
-  jz    DevReadSectorBadDevice
+  jz    DevReadSector1
   mov   [DevReadHandler],eax
   mov   eax,[DevSector]
   mov   [FsCurrentLba],eax
@@ -814,15 +814,15 @@ DevReadSector:
   call  eax
   mov   eax,[FsStatus]
   cmp   eax,FS_STATUS_OK
-  jne   DevReadSectorIoError
+  jne   DevReadSector2
   mov   dword[DevStatus],DEV_STATUS_OK
   mov   dword[FsStatus],FS_STATUS_OK
   ret
-DevReadSectorBadDevice:
+DevReadSector1:
   mov   dword[DevStatus],DEV_STATUS_BAD_DEVICE
   mov   dword[FsStatus],FS_STATUS_NOT_READY
   ret
-DevReadSectorIoError:
+DevReadSector2:
   mov   dword[DevStatus],DEV_STATUS_IO_ERROR
   mov   dword[FsStatus],FS_STATUS_IO_ERROR
   ret
@@ -841,22 +841,22 @@ DevWriteSector:
   call  DevFindById
   mov   eax,[DevStatus]
   cmp   eax,DEV_STATUS_OK
-  jne   DevWriteSectorBadDevice
+  jne   DevWriteSector1
   mov   esi,[pDevBlockDeviceRecord]
   test  esi,esi
-  jz    DevWriteSectorBadDevice
+  jz    DevWriteSector1
   mov   eax,[esi+DEV_RECORD_TYPE]
   cmp   eax,DEV_TYPE_BLOCK
-  jne   DevWriteSectorBadDevice
+  jne   DevWriteSector1
   mov   eax,[esi+DEV_RECORD_STATUS]
   cmp   eax,DEV_STATUS_OK
-  jne   DevWriteSectorBadDevice
+  jne   DevWriteSector1
   mov   eax,[DevSector]
   cmp   eax,[esi+DEV_RECORD_SECTOR_COUNT]
-  jae   DevWriteSectorIoError
+  jae   DevWriteSector2
   mov   eax,[esi+DEV_RECORD_WRITE]
   test  eax,eax
-  jz    DevWriteSectorBadDevice
+  jz    DevWriteSector1
   mov   [DevWriteHandler],eax
   mov   eax,[DevSector]
   mov   [FsCurrentLba],eax
@@ -866,15 +866,15 @@ DevWriteSector:
   call  eax
   mov   eax,[FsStatus]
   cmp   eax,FS_STATUS_OK
-  jne   DevWriteSectorIoError
+  jne   DevWriteSector2
   mov   dword[DevStatus],DEV_STATUS_OK
   mov   dword[FsStatus],FS_STATUS_OK
   ret
-DevWriteSectorBadDevice:
+DevWriteSector1:
   mov   dword[DevStatus],DEV_STATUS_BAD_DEVICE
   mov   dword[FsStatus],FS_STATUS_NOT_READY
   ret
-DevWriteSectorIoError:
+DevWriteSector2:
   mov   dword[DevStatus],DEV_STATUS_IO_ERROR
   mov   dword[FsStatus],FS_STATUS_IO_ERROR
   ret
@@ -894,18 +894,18 @@ DevFindById:
 DevFindById1:
   mov   eax,[DevRegistryLeft]
   test  eax,eax
-  jz    DevFindByIdBad
+  jz    DevFindById3
   mov   eax,[DevBlockDevice]
   cmp   eax,[esi+DEV_RECORD_ID]
-  je    DevFindByIdOk
+  je    DevFindById2
   add   esi,DEV_RECORD_SIZE
   dec   dword[DevRegistryLeft]
   jmp   DevFindById1
-DevFindByIdOk:
+DevFindById2:
   mov   [pDevBlockDeviceRecord],esi
   mov   dword[DevStatus],DEV_STATUS_OK
   ret
-DevFindByIdBad:
+DevFindById3:
   mov   dword[DevStatus],DEV_STATUS_BAD_DEVICE
   ret
 
@@ -931,13 +931,13 @@ FloppyReadSectorTo:
   call  FloppyCommandRead
   mov   eax,[FsStatus]
   cmp   eax,FS_STATUS_OK
-  jne   FloppyReadSectorToDone
+  jne   FloppyReadSectorTo1
   mov   esi,FDC_DMA_BUFFER
   mov   edi,[FsWorkPtr]
   mov   ecx,KERNEL_SECTOR_SIZE
   rep   movsb
   mov   dword[FsStatus],FS_STATUS_OK
-FloppyReadSectorToDone:
+FloppyReadSectorTo1:
   ret
 
 FloppyWriteSectorFrom:
@@ -1038,9 +1038,9 @@ FloppyCommandRead:
   call  FloppyReadResult
   mov   al,[FlpResult0]
   test  al,0C0h
-  jnz   FloppyCommandReadDone
+  jnz   FloppyCommandRead1
   mov   dword[FsStatus],FS_STATUS_OK
-FloppyCommandReadDone:
+FloppyCommandRead1:
   ret
 
 FloppyCommandWrite:
@@ -1067,9 +1067,9 @@ FloppyCommandWrite:
   call  FloppyReadResult
   mov   al,[FlpResult0]
   test  al,0C0h
-  jnz   FloppyCommandWriteDone
+  jnz   FloppyCommandWrite1
   mov   dword[FsStatus],FS_STATUS_OK
-FloppyCommandWriteDone:
+FloppyCommandWrite1:
   ret
 
 FloppyReadResult:

@@ -1,3 +1,4 @@
+run prog4.bin
 run prog4.bin -- mminfo
 run prog4.bin -- getmem
 run /trusted prog4.bin -- getmem

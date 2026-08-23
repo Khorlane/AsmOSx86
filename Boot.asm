@@ -45,7 +45,7 @@ Booter:
 
     call  FdcInit
 
-    ; Read ASMFS manifest sector to 0000:0500.
+    ; Read ASMF manifest sector to 0000:0500.
     mov   ax,MANIFEST_SECTOR
     mov   bx,MANIFEST_BUFFER
     call  FloppyRead

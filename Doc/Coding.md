@@ -112,13 +112,13 @@ This standard prevents naming collisions, improves code navigation, and makes co
 
 ### Subsystem Prefixes
 Used when ownership is clear:
-- `Cn*` → Console
-- `Kb*` → Keyboard
-- `Flp*` → Floppy
-- `Timer*` → Timer
-- `Time*` → Wall time
+- `Cn*`     → Console
+- `Kb*`     → Keyboard
+- `Floppy*` → Floppy
+- `Timer*`  → Timer
+- `Time*`   → Wall time
 - `Uptime*` → Uptime
-- `Vd*` → Video
+- `Vd*`     → Video
 
 ### Kernel-Wide Primitives
 - May be unprefixed if globally applicable
