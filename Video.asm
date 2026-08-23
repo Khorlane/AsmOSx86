@@ -133,10 +133,10 @@ VdPutStr:
   mov   [VdWorkLen],ax
   add   esi,2
   mov   [pVdWorkStr],esi
-VdPutStrNext:
+VdPutStr1:
   mov   ax,[VdWorkLen]
   test  ax,ax
-  jz    VdPutStrDone
+  jz    VdPutStr2
   dec   ax
   mov   [VdWorkLen],ax
   mov   esi,[pVdWorkStr]
@@ -145,8 +145,8 @@ VdPutStrNext:
   mov   [pVdWorkStr],esi
   mov   [VdInCh],al
   call  VdPutChar
-  jmp   VdPutStrNext
-VdPutStrDone:
+  jmp   VdPutStr1
+VdPutStr2:
   ret
 
 ;------------------------------------------------------------------------------
@@ -164,7 +164,7 @@ VdInPutChar:
   mov   ax,[VdInCurCol]
   movzx eax,ax
   cmp   eax,VD_COLS
-  ja    VdInPutCharDone
+  ja    VdInPutChar1
   call  VdWriteInCharAtCursor
   mov   ax,[VdInCurCol]
   movzx eax,ax
@@ -173,7 +173,7 @@ VdInPutChar:
   mov   ax,[VdInCurCol]
   mov   [VdCurCol],ax
   call  VdSetCursor
-VdInPutCharDone:
+VdInPutChar1:
   ret
 
 ;------------------------------------------------------------------------------
@@ -189,7 +189,7 @@ VdInBackspaceVisual:
   mov   ax,[VdInCurCol]
   movzx eax,ax
   cmp   eax,1
-  jbe   VdInBackspaceVisualDone
+  jbe   VdInBackspaceVisual1
   dec   eax
   mov   [VdInCurCol],ax
   mov   al,' '
@@ -198,7 +198,7 @@ VdInBackspaceVisual:
   mov   ax,[VdInCurCol]
   mov   [VdCurCol],ax
   call  VdSetCursor
-VdInBackspaceVisualDone:
+VdInBackspaceVisual1:
   ret
 
 ;------------------------------------------------------------------------------
@@ -214,11 +214,11 @@ VdInClearLine:
   mov   ax,1
   mov   [VdInCurCol],ax
   mov   [VdWorkCol],ax
-VdInClearLineLoop:
+VdInClearLine1:
   mov   ax,[VdWorkCol]
   movzx eax,ax
   cmp   eax,(VD_COLS + 1)
-  jae   VdInClearLineDone
+  jae   VdInClearLine2
   mov   [VdInCurCol],ax
   mov   al,' '
   mov   [VdInCh],al
@@ -226,8 +226,8 @@ VdInClearLineLoop:
   mov   ax,[VdWorkCol]
   inc   ax
   mov   [VdWorkCol],ax
-  jmp   VdInClearLineLoop
-VdInClearLineDone:
+  jmp   VdInClearLine1
+VdInClearLine2:
   mov   ax,1
   mov   [VdInCurCol],ax
   mov   ax,[VdInCurCol]
@@ -247,12 +247,12 @@ VdInClearLineDone:
 VdClear:
   mov   edi,VGA_TEXT_BASE
   mov   ecx,VD_COLS * VD_ROWS
-VdClearLoop:
+VdClear1:
   mov   al,' '
   mov   ah,[VdColorAttr]
   mov   [edi],ax
   add   edi,2
-  loop  VdClearLoop
+  loop  VdClear1
   mov   ax,1
   mov   [VdCurRow],ax
   mov   [VdCurCol],ax
@@ -280,15 +280,15 @@ VdSetCursor:
   mov   ax,[VdCurRow]                   ; Load desired row
   movzx eax,ax
   cmp   eax,1
-  jb    VdSetCursorPanic
+  jb    VdSetCursor1
   cmp   eax,VD_ROWS
-  ja    VdSetCursorPanic
+  ja    VdSetCursor1
   mov   dx,[VdCurCol]                   ; Load desired col
   movzx edx,dx
   cmp   edx,1
-  jb    VdSetCursorPanic
+  jb    VdSetCursor1
   cmp   edx,VD_COLS
-  ja    VdSetCursorPanic
+  ja    VdSetCursor1
   ; Compute linear position (0-based): pos0 = (row-1)*80 + (col-1)
   mov   ax,[VdCurRow]
   movzx eax,ax
@@ -317,11 +317,11 @@ VdSetCursor:
   mov   ax,[VdCurCol]
   mov   [VdInCurCol],ax
   ret
-VdSetCursorPanic:
+VdSetCursor1:
   cli
-VdSetCursorPanicHang:
+VdSetCursor2:
   hlt
-  jmp   VdSetCursorPanicHang
+  jmp   VdSetCursor2
 
 ;------------------------------------------------------------------------------
 ; VdSetColorAttr
@@ -361,52 +361,52 @@ VdSetColorAttr:
 VdPutChar:
   mov   al,[VdInCh]
   cmp   al,0x0D
-  je    VdPutCharCR
+  je    VdPutChar3
   cmp   al,0x0A
-  je    VdPutCharLF
+  je    VdPutChar4
   cmp   al,0x08
-  je    VdPutCharBS
+  je    VdPutChar6
   mov   ax,[VdOutCurRow]
   movzx eax,ax
   cmp   eax,VD_OUT_MAX_ROW
-  jbe   VdPutCharRowOk
+  jbe   VdPutChar1
   mov   ax,VD_OUT_MAX_ROW
   mov   [VdOutCurRow],ax
-VdPutCharRowOk:
+VdPutChar1:
   call  VdWriteOutCharAtCursor
   mov   ax,[VdOutCurCol]
   movzx eax,ax
   inc   eax
   cmp   eax,(VD_COLS + 1)               ; past col 80?
-  jb    VdPutCharSetCol
+  jb    VdPutChar2
   mov   ax,1
   mov   [VdOutCurCol],ax
-  jmp   VdPutCharLF
-VdPutCharSetCol:
+  jmp   VdPutChar4
+VdPutChar2:
   mov   [VdOutCurCol],ax
   ret
-VdPutCharCR:
+VdPutChar3:
   mov   ax,1
   mov   [VdOutCurCol],ax
   ret
-VdPutCharLF:
+VdPutChar4:
   mov   ax,[VdOutCurRow]
   movzx eax,ax
   inc   eax
   cmp   eax,VD_OUT_MAX_ROW
-  jbe   VdPutCharSetRow
+  jbe   VdPutChar5
   call  VdScrollOutputRegion
   mov   ax,VD_OUT_MAX_ROW
   mov   [VdOutCurRow],ax
   ret
-VdPutCharSetRow:
+VdPutChar5:
   mov   [VdOutCurRow],ax
   ret
-VdPutCharBS:
+VdPutChar6:
   mov   ax,[VdOutCurCol]
   movzx eax,ax
   cmp   eax,1
-  jbe   VdPutCharBSDone
+  jbe   VdPutChar7
   dec   eax
   mov   [VdOutCurCol],ax
   mov   al,' '
@@ -415,10 +415,10 @@ VdPutCharBS:
   mov   ax,[VdOutCurCol]
   movzx eax,ax
   cmp   eax,1
-  jbe   VdPutCharBSDone
+  jbe   VdPutChar7
   dec   eax
   mov   [VdOutCurCol],ax
-VdPutCharBSDone:
+VdPutChar7:
   ret
 
 ;------------------------------------------------------------------------------
@@ -496,10 +496,10 @@ VdScrollOutputRegion:
   mov   esi,VGA_TEXT_BASE
   mov   edi,VGA_TEXT_BASE
   add   esi,160                           ; start at row2 (row0=1)
-VdScrollCopyLoop:
+VdScroll1:
   mov   eax,[VdWorkCount]
   test  eax,eax
-  jz    VdScrollClearRow
+  jz    VdScroll2
   mov   eax,[esi]
   mov   [edi],eax
   add   esi,4
@@ -507,17 +507,17 @@ VdScrollCopyLoop:
   mov   eax,[VdWorkCount]
   sub   eax,4
   mov   [VdWorkCount],eax
-  jmp   VdScrollCopyLoop
-VdScrollClearRow:
+  jmp   VdScroll1
+VdScroll2:
   mov   edi,VGA_TEXT_BASE
   add   edi,(VD_OUT_MAX_ROW - 1) * 160    ; row24 start (row0=23)
   mov   ax,1
   mov   [VdWorkCol],ax
-VdScrollClearLoop:
+VdScroll3:
   mov   ax,[VdWorkCol]
   movzx eax,ax
   cmp   eax,(VD_COLS + 1)
-  jae   VdScrollDone
+  jae   VdScroll4
   mov   al,' '
   mov   ah,[VdColorAttr]
   mov   [edi],ax
@@ -525,6 +525,6 @@ VdScrollClearLoop:
   mov   ax,[VdWorkCol]
   inc   ax
   mov   [VdWorkCol],ax
-  jmp   VdScrollClearLoop
-VdScrollDone:
+  jmp   VdScroll3
+VdScroll4:
   ret
