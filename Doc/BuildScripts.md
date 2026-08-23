@@ -35,7 +35,7 @@ Notes:
 
 ## BuildCopy.ps1
 
-Writes the AsmOSx86 raw floppy manifest and packed boot/runtime files into an
+Writes the AsmOSx86 boot manifest, kernel image, and raw filesystem area into an
 existing `floppy.img`.
 
 Required inputs:
@@ -54,11 +54,24 @@ Optional inputs:
 
 Writes:
 
-- sector `1`: the manifest sector with the `ASMF` manifest signature
-- sector `2+`: packed file bodies
+- sector `1`: the boot manifest sector with the `ASMF` manifest signature
+- sector `2+`: contiguous `KERNEL.BIN` sectors
+- immediately after `KERNEL.BIN`: filesystem manifest sector
+- after the filesystem manifest: packed runtime file bodies
 - a reserved, zero-filled `LOG.TXT` file entry
 
-Manifest format:
+Boot manifest format:
+
+- offset `0`: four-byte `ASMF` manifest signature
+- offset `4`: version word, currently `1`
+- offset `6`: entry-count word, currently `1`
+- offset `8`: filesystem start sector
+- offset `12`: filesystem sector count
+- offset `16`: first 32-byte file entry
+
+The boot manifest contains the `KERNEL.BIN` entry that `Boot.asm` needs.
+
+Filesystem manifest format:
 
 - offset `0`: four-byte `ASMF` manifest signature
 - offset `4`: version word, currently `1`
@@ -66,7 +79,8 @@ Manifest format:
 - offset `16`: first 32-byte file entry
 
 Each file entry records an uppercase 8.3 name, starting sector, byte size, and
-sector count.
+sector count. Runtime files live in the filesystem manifest, not the boot
+manifest.
 
 Notes:
 

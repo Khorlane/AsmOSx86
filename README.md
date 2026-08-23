@@ -11,7 +11,7 @@ AsmOSx86 is a 32-bit x86 operating system written entirely in NASM assembly and 
 - Memory-backed service contracts
 - Cooperative multitasking
 - Ring 3 user/kernel boundary through `int 80h`
-- Raw ASMF floppy manifest for boot/runtime files
+- ASMF boot manifest plus a raw filesystem area for runtime files
 - Automated startup smoke tests through `STARTUP.TXT` and `LOG.TXT`
 
 ## 🛠️ Development Environment

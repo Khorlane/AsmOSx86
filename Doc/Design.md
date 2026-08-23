@@ -278,7 +278,7 @@ change into that folder before running them.
 ```text
 NASM      assembles flat binary files
 fsutil    creates the 1.44 MB floppy image
-BuildCopy writes the raw ASMF manifest and packed file data
+BuildCopy writes the ASMF boot manifest, contiguous kernel image, and raw filesystem area
 Bochs     runs the bootable floppy image
 ```
 
@@ -727,11 +727,12 @@ such as program loading.
 
 For AsmOSx86, `file` means a disk-backed filesystem object. It does not mean keyboard, video, console, pipe, socket, device, or memory buffer.
 
-The current user-facing implementation is read-only and manifest-backed.
-`Fs.asm` opens files from the raw `ASMF` floppy manifest, reads file sectors
-through a tiny kernel block-device layer, and the only current block device is
-floppy A:. The kernel also has a special internal writer for the preallocated
-`LOG.TXT` console mirror; this is not a general file-write service.
+The current user-facing implementation is read-only and filesystem-manifest
+backed. `Fs.asm` reads the boot manifest to locate the filesystem area, opens
+files from the filesystem manifest, reads file sectors through a tiny kernel
+block-device layer, and the only current block device is floppy A:. The kernel
+also has a special internal writer for the preallocated `LOG.TXT` console
+mirror; this is not a general file-write service.
 Shared device type IDs, device IDs, and the static device registry are defined
 in `Config.asm`.
 
@@ -1031,7 +1032,7 @@ kernel initializes paging, Kc, timer, uptime, filesystem, video, log, keyboard, 
 wall time initializes lazily on first Time* use
 console commands work
 memory-contract ABI enforced in included kernel files
-ASMF manifest file loading works
+ASMF filesystem-area file loading works
 Run launches one to three loaded user programs
 loaded user programs run in ring 3
 user programs enter kernel services through int 80h
@@ -1758,9 +1759,9 @@ pVdStr -> VdPutStr -> FsLogWriteStr when enabled
 pVdStr -> VdPutStr -> VdPutChar -> VGA memory
 ```
 
-`LOG.TXT` is a preallocated kernel-owned console mirror file in the `ASMF`
-manifest. It is cleared on startup and receives the same `Str` payloads sent
-through `VdPutStr` after logging is initialized.
+`LOG.TXT` is a preallocated kernel-owned console mirror file in the raw
+filesystem area. It is cleared on startup and receives the same `Str` payloads
+sent through `VdPutStr` after logging is initialized.
 
 Core routines:
 

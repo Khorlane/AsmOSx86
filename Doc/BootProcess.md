@@ -1,7 +1,8 @@
 # Boot Process
 
 This document describes the AsmOSx86 boot path from BIOS handoff through
-`Boot.asm` and into the protected-mode kernel.
+`Boot.asm` and into the protected-mode kernel. AsmOSx86 uses its own custom
+raw floppy layout.
 
 For build-script details, including how `floppy.img` is created, populated, and
 run under Bochs, see `Doc/BuildScripts.md`.
@@ -14,15 +15,18 @@ The boot path assumes this high-level sector layout:
 
 ```text
 Sector 0      Boot.bin
-Sector 1      AsmOSx86 file manifest
-Sector 2+     Kernel.bin sectors
+Sector 1      AsmOSx86 boot manifest
+Sector 2..N   Kernel.bin sectors
+Sector N+1    Filesystem manifest
+Sector N+2..  Runtime file sectors
 ```
 
 The image is not FAT12. It is a raw sector image with an AsmOSx86 manifest in
 sector 1 identified by the `ASMF` manifest signature. Boot only needs the
 manifest entry for `KERNEL.BIN`.
 
-The manifest is one 512-byte sector. The fields Boot depends on are:
+The boot manifest is one 512-byte sector. It contains the fields Boot needs for
+`KERNEL.BIN` plus filesystem area fields used later by the kernel:
 
 Manifest header:
 
@@ -30,6 +34,8 @@ Manifest header:
 Offset 0  4 bytes  ASMF manifest signature
 Offset 4  2 bytes  Version: 1
 Offset 6  2 bytes  Entry count
+Offset 8  4 bytes  Filesystem start sector
+Offset 12 4 bytes  Filesystem sector count
 Offset 16          First file entry
 ```
 
@@ -111,8 +117,8 @@ Once the controller is ready, Boot reads logical sector 1 into memory at:
 0000:0500
 ```
 
-That sector contains the `ASMF` manifest. Boot walks the manifest entries,
-looking for the uppercase 8.3 name:
+That sector contains the `ASMF` boot manifest. Boot walks the manifest entries,
+looking for the uppercase 8.3 kernel name:
 
 ```text
 KERNEL  BIN

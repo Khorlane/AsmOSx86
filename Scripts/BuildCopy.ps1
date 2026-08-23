@@ -1,9 +1,10 @@
 <#
 BuildCopy.ps1
-Writes the AsmOSx86 raw floppy manifest and packed boot/runtime files.
+Writes the AsmOSx86 boot manifest, kernel image, and raw filesystem area.
 - Sector 0 is Boot.bin and is written by BuildWriteBoot.ps1.
-- Sector 1 is the AsmOSx86 file manifest.
-- Sector 2 and onward contain KERNEL.BIN and optional runtime files.
+- Sector 1 is the AsmOSx86 boot manifest.
+- Sector 2 and onward contain KERNEL.BIN.
+- The filesystem area starts immediately after KERNEL.BIN.
 - LOG.TXT is a reserved, preallocated kernel-owned console log file.
 - STARTUP.TXT is optional and is run by the console after initialization.
 #>
@@ -77,6 +78,8 @@ try {
   $ImageSectors = 2880
   $ManifestEntryOffset = 16
   $ManifestEntrySize = 32
+  $ManifestFsStartOffset = 8
+  $ManifestFsSectorCountOffset = 12
   $LogSectors = 128
 
   Write-Host "Running: $PSCommandPath"
@@ -87,9 +90,21 @@ try {
     }
   }
 
-  $files = @(
-    @{ Name = "KERNEL.BIN"; Path = $Kernel }
-  )
+  $kernelInfo = Get-Item -LiteralPath $Kernel
+  $kernelSectorCount = [int][Math]::Ceiling($kernelInfo.Length / $BytesPerSector)
+  if ($kernelSectorCount -lt 1) {
+    Fail "KERNEL.BIN is empty."
+  }
+  $kernelFile = @{
+    Name = "KERNEL.BIN"
+    Path = $Kernel
+    Size = [UInt32]$kernelInfo.Length
+    StartSector = [UInt32]$FirstFileSector
+    SectorCount = [UInt32]$kernelSectorCount
+  }
+  $fsStartSector = $FirstFileSector + $kernelSectorCount
+  $fsDataStartSector = $fsStartSector + 1
+  $files = @()
 
   foreach ($prog in @($Prog1, $Prog2, $Prog3, $Prog4)) {
     if (Test-Path -LiteralPath $prog -PathType Leaf) {
@@ -110,11 +125,13 @@ try {
   }
 
   if ($files.Count -gt 15) {
-    Fail "Manifest supports at most 15 files in this first version."
+    Fail "Filesystem manifest supports at most 15 files in this first version."
   }
 
   Write-Host "[2/4] Planning packed file layout..."
-  $nextSector = $FirstFileSector
+  Write-Host ("  {0,-10} sector {1,4} count {2,4} bytes {3}" -f $kernelFile.Name, $kernelFile.StartSector, $kernelFile.SectorCount, $kernelFile.Size)
+  Write-Host ("  {0,-10} sector {1,4}" -f "FS.AREA", $fsStartSector)
+  $nextSector = $fsDataStartSector
   foreach ($file in $files) {
     if ($file.ContainsKey("Reserved") -and $file.Reserved) {
       $sectorCount = [int]$file.ReservedSectors
@@ -138,21 +155,34 @@ try {
   if ($nextSector -gt $ImageSectors) {
     Fail "Packed files require sector $($nextSector - 1), beyond the 1.44MB image."
   }
+  $fsSectorCount = $ImageSectors - $fsStartSector
 
-  Write-Host "[3/4] Writing manifest and file bodies..."
-  $manifest = New-Object byte[] $BytesPerSector
+  Write-Host "[3/4] Writing boot manifest, filesystem manifest, and file bodies..."
+  $bootManifest = New-Object byte[] $BytesPerSector
   $sig = [System.Text.Encoding]::ASCII.GetBytes("ASMF")
-  [Array]::Copy($sig, 0, $manifest, 0, 4)
-  Write-UInt16Le $manifest 4 1
-  Write-UInt16Le $manifest 6 $files.Count
+  [Array]::Copy($sig, 0, $bootManifest, 0, 4)
+  Write-UInt16Le $bootManifest 4 1
+  Write-UInt16Le $bootManifest 6 1
+  Write-UInt32Le $bootManifest $ManifestFsStartOffset ([UInt32]$fsStartSector)
+  Write-UInt32Le $bootManifest $ManifestFsSectorCountOffset ([UInt32]$fsSectorCount)
+  $kernelName = [System.Text.Encoding]::ASCII.GetBytes((ConvertTo-ManifestName $kernelFile.Name))
+  [Array]::Copy($kernelName, 0, $bootManifest, $ManifestEntryOffset, 11)
+  Write-UInt32Le $bootManifest ($ManifestEntryOffset + 12) $kernelFile.StartSector
+  Write-UInt32Le $bootManifest ($ManifestEntryOffset + 16) $kernelFile.Size
+  Write-UInt32Le $bootManifest ($ManifestEntryOffset + 20) $kernelFile.SectorCount
+
+  $fsManifest = New-Object byte[] $BytesPerSector
+  [Array]::Copy($sig, 0, $fsManifest, 0, 4)
+  Write-UInt16Le $fsManifest 4 1
+  Write-UInt16Le $fsManifest 6 $files.Count
 
   for ($i = 0; $i -lt $files.Count; $i++) {
     $entryOffset = $ManifestEntryOffset + ($i * $ManifestEntrySize)
     $manifestName = [System.Text.Encoding]::ASCII.GetBytes((ConvertTo-ManifestName $files[$i].Name))
-    [Array]::Copy($manifestName, 0, $manifest, $entryOffset, 11)
-    Write-UInt32Le $manifest ($entryOffset + 12) $files[$i].StartSector
-    Write-UInt32Le $manifest ($entryOffset + 16) $files[$i].Size
-    Write-UInt32Le $manifest ($entryOffset + 20) $files[$i].SectorCount
+    [Array]::Copy($manifestName, 0, $fsManifest, $entryOffset, 11)
+    Write-UInt32Le $fsManifest ($entryOffset + 12) $files[$i].StartSector
+    Write-UInt32Le $fsManifest ($entryOffset + 16) $files[$i].Size
+    Write-UInt32Le $fsManifest ($entryOffset + 20) $files[$i].SectorCount
   }
 
   $fs = $null
@@ -165,7 +195,16 @@ try {
     )
 
     $null = $fs.Seek($ManifestSector * $BytesPerSector, [System.IO.SeekOrigin]::Begin)
-    $fs.Write($manifest, 0, $manifest.Length)
+    $fs.Write($bootManifest, 0, $bootManifest.Length)
+
+    $bytes = [System.IO.File]::ReadAllBytes($kernelFile.Path)
+    $writtenSectors = Write-ImageBytes $fs $kernelFile.StartSector $bytes
+    if ($writtenSectors -ne $kernelFile.SectorCount) {
+      Fail "Internal write mismatch for $($kernelFile.Name)."
+    }
+
+    $null = $fs.Seek($fsStartSector * $BytesPerSector, [System.IO.SeekOrigin]::Begin)
+    $fs.Write($fsManifest, 0, $fsManifest.Length)
 
     foreach ($file in $files) {
       if ($file.ContainsKey("Reserved") -and $file.Reserved) {
@@ -190,7 +229,11 @@ try {
   $imageBytes = [System.IO.File]::ReadAllBytes($Image)
   $actualSig = [System.Text.Encoding]::ASCII.GetString($imageBytes, $ManifestSector * $BytesPerSector, 4)
   if ($actualSig -ne "ASMF") {
-    Fail "ASMF manifest signature was '$actualSig', expected ASMF."
+    Fail "Boot ASMF manifest signature was '$actualSig', expected ASMF."
+  }
+  $actualSig = [System.Text.Encoding]::ASCII.GetString($imageBytes, $fsStartSector * $BytesPerSector, 4)
+  if ($actualSig -ne "ASMF") {
+    Fail "Filesystem ASMF manifest signature was '$actualSig', expected ASMF."
   }
 
   Write-Host "SUCCESS: raw AsmOSx86 floppy image populated."

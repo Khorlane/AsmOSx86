@@ -8,7 +8,7 @@
 ;
 ; Contains
 ;   - File service open/read/close
-;   - Read-only AsmOSx86 manifest lookup
+;   - Read-only AsmOSx86 filesystem manifest lookup
 ;   - Tiny block-device routing
 ;   - Bare-bones floppy sector reads/writes
 ;   - Kernel-owned console log mirror
@@ -25,7 +25,7 @@
 ;   - This is intentionally simple and optimistic.
 ;   - It assumes a 1.44MB AsmOSx86 raw floppy image in drive A:.
 ;   - It uses a low-memory DMA bounce buffer at 00008000h.
-;   - Manifest and floppy routines are internal implementation details.
+;   - Filesystem manifest and floppy routines are internal implementation details.
 ;**************************************************************************************************
 
 [bits 32]
@@ -122,9 +122,11 @@ FsHandleTable:
 ;**************************************************************************************************
 ; Filesystem driver
 ;**************************************************************************************************
-FSDRV_MANIFEST_SECTOR    equ 1
+FSDRV_BOOT_MANIFEST_SECTOR equ 1
 FSDRV_SIGNATURE          equ 464D5341h ; ASMF manifest signature
 FSDRV_ENTRY_COUNT        equ 6
+FSDRV_FS_START_SECTOR    equ 8
+FSDRV_FS_SECTOR_COUNT    equ 12
 FSDRV_ENTRY_OFFSET       equ 16
 FSDRV_ENTRY_SIZE         equ 32
 FSDRV_ENTRY_START_SECTOR equ 12
@@ -134,6 +136,8 @@ FSDRV_MANIFEST_BYTES     equ KERNEL_SECTOR_SIZE
 FSDRV_NAME_SIZE          equ 11
 
 FsMounted                dd 0          ; 1 once manifest is loaded
+FsDrvStartSector         dd 0          ; filesystem manifest sector
+FsDrvSectorCount         dd 0          ; filesystem area sectors
 FsNameIndex              dd 0          ; work: filename output index
 FsNameInputLeft          dd 0          ; work: chars left in input Str
 FsNameOutputLimit        dd 0          ; work: 8 before dot, 3 after dot
@@ -213,7 +217,7 @@ FlpResult6               db 0
 ;   Output:
 ;     Clears LOG.TXT and enables console mirroring.
 ;   Notes:
-;     LOG.TXT is a kernel-owned preallocated manifest file.
+;     LOG.TXT is a kernel-owned preallocated filesystem file.
 ;--------------------------------------------------------------------------------------------------
 FsLogInit:
   mov   dword[FsLogEnabled],FS_LOG_ENABLED_OFF
@@ -398,6 +402,8 @@ FsLogHardFail1:
 ;--------------------------------------------------------------------------------------------------
 FsInit:
   mov   dword[FsMounted],0
+  mov   dword[FsDrvStartSector],0
+  mov   dword[FsDrvSectorCount],0
   mov   dword[FsSectorsPerTrack],FLOPPY_SECTORS_PER_TRACK
   mov   dword[FsHeads],FLOPPY_HEADS
   mov   eax,FsHandleTable
@@ -656,7 +662,25 @@ FsFindFreeHandle3:
 ; Filesystem driver
 ;**************************************************************************************************
 FsDrvMount:
-  mov   dword[DevSector],FSDRV_MANIFEST_SECTOR
+  mov   dword[DevSector],FSDRV_BOOT_MANIFEST_SECTOR
+  mov   dword[DevBuffer],FsRootBuffer
+  call  DevReadSector
+  mov   eax,[FsStatus]
+  cmp   eax,FS_STATUS_OK
+  jne   FsDrvMount2
+  mov   eax,[FsRootBuffer]
+  cmp   eax,FSDRV_SIGNATURE
+  jne   FsDrvMount1
+  mov   eax,[FsRootBuffer+FSDRV_FS_START_SECTOR]
+  test  eax,eax
+  jz    FsDrvMount1
+  mov   [FsDrvStartSector],eax
+  mov   eax,[FsRootBuffer+FSDRV_FS_SECTOR_COUNT]
+  test  eax,eax
+  jz    FsDrvMount1
+  mov   [FsDrvSectorCount],eax
+  mov   eax,[FsDrvStartSector]
+  mov   [DevSector],eax
   mov   dword[DevBuffer],FsRootBuffer
   call  DevReadSector
   mov   eax,[FsStatus]

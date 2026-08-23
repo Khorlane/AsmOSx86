@@ -145,12 +145,14 @@ The current disk layout is a raw 1.44MB floppy image:
 
 ```text
 Sector 0  Boot.bin
-Sector 1  ASMF manifest
-Sector 2+ packed file bodies
+Sector 1  ASMF boot manifest
+Sector 2+ contiguous KERNEL.BIN
+Next      raw filesystem area
 ```
 
-`BuildCopy.ps1` writes the manifest and packs file bodies contiguously after it.
-The manifest records:
+`BuildCopy.ps1` writes the boot manifest, packs `KERNEL.BIN` contiguously after
+it, then creates a raw filesystem area immediately after the kernel. The
+filesystem manifest records:
 
 ```text
 uppercase 8.3 file name
@@ -180,9 +182,10 @@ no allocation policy in the kernel
 floppy A: is the only active block device
 ```
 
-The current ASMF manifest is not the native filesystem described below. It is a
-useful early file table that gives the boot loader, kernel, and user-program
-loader a shared way to locate files on the raw floppy image.
+The current filesystem manifest is not the native filesystem described below. It
+is a useful early file table that gives the kernel and user-program loader a
+shared way to locate files on the raw floppy image while `Boot.asm` only needs
+the boot manifest entry for `KERNEL.BIN`.
 
 Future native filesystem layering:
 

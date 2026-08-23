@@ -1,6 +1,6 @@
 <#
 ExtractFile.ps1
-Extracts one file from the AsmOSx86 raw ASMF floppy image.
+Extracts one file from the AsmOSx86 raw filesystem area.
 
 Usage:
   .\ExtractFile.ps1 LOG.TXT
@@ -36,6 +36,7 @@ function Read-UInt32Le([byte[]]$Buffer, [int]$Offset) {
 $Image = Join-Path $RepoRoot "floppy.img"
 $BytesPerSector = 512
 $ManifestSector = 1
+$ManifestFsStartOffset = 8
 $ManifestEntryOffset = 16
 $ManifestEntrySize = 32
 
@@ -53,7 +54,17 @@ $imageBytes = [System.IO.File]::ReadAllBytes($Image)
 $manifestOffset = $ManifestSector * $BytesPerSector
 $sig = [System.Text.Encoding]::ASCII.GetString($imageBytes, $manifestOffset, 4)
 if ($sig -ne "ASMF") {
-  throw "ASMF manifest signature was '$sig', expected ASMF."
+  throw "Boot ASMF manifest signature was '$sig', expected ASMF."
+}
+$fsStartSector = Read-UInt32Le $imageBytes ($manifestOffset + $ManifestFsStartOffset)
+if ($fsStartSector -eq 0) {
+  throw "Boot manifest does not point to a filesystem area."
+}
+
+$manifestOffset = [int]$fsStartSector * $BytesPerSector
+$sig = [System.Text.Encoding]::ASCII.GetString($imageBytes, $manifestOffset, 4)
+if ($sig -ne "ASMF") {
+  throw "Filesystem ASMF manifest signature was '$sig', expected ASMF."
 }
 
 $entryCount = Read-UInt16Le $imageBytes ($manifestOffset + 6)
@@ -74,7 +85,7 @@ for ($i = 0; $i -lt $entryCount; $i++) {
 }
 
 if (-not $found) {
-  throw "File not found in ASMF manifest: $Name"
+  throw "File not found in filesystem manifest: $Name"
 }
 
 $fileOffset = [int]$startSector * $BytesPerSector
