@@ -278,7 +278,7 @@ change into that folder before running them.
 ```text
 NASM      assembles flat binary files
 fsutil    creates the 1.44 MB floppy image
-BuildCopy writes the boot manifest, contiguous kernel image, and raw filesystem area
+BuildCopy writes the boot manifest, contiguous kernel image, and system catalog
 Bochs     runs the bootable floppy image
 ```
 
@@ -733,6 +733,10 @@ files from the system catalog, reads file sectors through a tiny kernel
 block-device layer, and the only current block device is floppy A:. The kernel
 also has a special internal writer for the preallocated `LOG.TXT` console
 mirror; this is not a general file-write service.
+The system catalog is self-describing: its header records the catalog byte size,
+file table offset, file entry size, and file entry count. Current kernel code
+loads catalogs up to its fixed in-memory buffer limit, but the on-disk catalog
+format is not fixed to one sector.
 Shared device type IDs, device IDs, and the static device registry are defined
 in `Config.asm`.
 

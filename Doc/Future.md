@@ -152,9 +152,13 @@ Next      system catalog and raw filesystem area
 
 `BuildCopy.ps1` writes the boot manifest, packs `KERNEL.BIN` contiguously after
 it, then creates a raw filesystem area immediately after the kernel. The
-first sector of that area is the system catalog, which records:
+first part of that area is the self-describing system catalog, which records:
 
 ```text
+catalog byte size
+file table offset
+file entry size
+file entry count
 uppercase 8.3 file name
 starting sector
 file byte size

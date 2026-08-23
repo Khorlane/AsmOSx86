@@ -37,8 +37,10 @@ $Image = Join-Path $RepoRoot "floppy.img"
 $BytesPerSector = 512
 $ManifestSector = 1
 $ManifestFsStartOffset = 8
-$ManifestEntryOffset = 16
-$ManifestEntrySize = 32
+$CatalogByteSizeOffset = 8
+$CatalogFileTableOffset = 12
+$CatalogFileEntrySizeOffset = 16
+$CatalogFileEntryCountOffset = 18
 
 if (-not (Test-Path -LiteralPath $Image -PathType Leaf)) {
   throw "Missing floppy image: $Image"
@@ -61,20 +63,33 @@ if ($fsStartSector -eq 0) {
   throw "Boot manifest does not point to a filesystem area."
 }
 
-$manifestOffset = [int]$fsStartSector * $BytesPerSector
-$sig = [System.Text.Encoding]::ASCII.GetString($imageBytes, $manifestOffset, 4)
+$catalogOffset = [int]$fsStartSector * $BytesPerSector
+$sig = [System.Text.Encoding]::ASCII.GetString($imageBytes, $catalogOffset, 4)
 if ($sig -ne "ASMF") {
   throw "System catalog ASMF signature was '$sig', expected ASMF."
 }
 
-$entryCount = Read-UInt16Le $imageBytes ($manifestOffset + 6)
+$catalogByteSize = Read-UInt32Le $imageBytes ($catalogOffset + $CatalogByteSizeOffset)
+$fileTableOffset = Read-UInt32Le $imageBytes ($catalogOffset + $CatalogFileTableOffset)
+$fileEntrySize = Read-UInt16Le $imageBytes ($catalogOffset + $CatalogFileEntrySizeOffset)
+$entryCount = Read-UInt16Le $imageBytes ($catalogOffset + $CatalogFileEntryCountOffset)
+if ($catalogByteSize -lt 32) {
+  throw "System catalog byte size is invalid."
+}
+if ($fileEntrySize -lt 32) {
+  throw "System catalog file entry size is invalid."
+}
+
 $targetName = ConvertTo-ManifestName $Name
 $found = $false
 $startSector = 0
 $byteSize = 0
 
 for ($i = 0; $i -lt $entryCount; $i++) {
-  $entryOffset = $manifestOffset + $ManifestEntryOffset + ($i * $ManifestEntrySize)
+  $entryOffset = $catalogOffset + $fileTableOffset + ($i * $fileEntrySize)
+  if (($entryOffset + 32) -gt ($catalogOffset + $catalogByteSize)) {
+    throw "System catalog file table extends beyond catalog byte size."
+  }
   $entryName = [System.Text.Encoding]::ASCII.GetString($imageBytes, $entryOffset, 11)
   if ($entryName -eq $targetName) {
     $startSector = Read-UInt32Le $imageBytes ($entryOffset + 12)

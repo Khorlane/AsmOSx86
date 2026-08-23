@@ -81,6 +81,13 @@ try {
   $ManifestEntrySize = 32
   $ManifestFsStartOffset = 8
   $ManifestFsSectorCountOffset = 12
+  $CatalogHeaderSize = 32
+  $CatalogByteSizeOffset = 8
+  $CatalogFileTableOffset = 12
+  $CatalogFileEntrySizeOffset = 16
+  $CatalogFileEntryCountOffset = 18
+  $CatalogDataStartSectorOffset = 20
+  $CatalogFlagsOffset = 24
   $LogSectors = 128
 
   Write-Host "Running: $PSCommandPath"
@@ -104,7 +111,6 @@ try {
     SectorCount = [UInt32]$kernelSectorCount
   }
   $fsStartSector = $FirstFileSector + $kernelSectorCount
-  $fsDataStartSector = $fsStartSector + 1
   $files = @()
 
   foreach ($prog in @($Prog1, $Prog2, $Prog3, $Prog4)) {
@@ -125,13 +131,16 @@ try {
     ReservedSectors = [UInt32]$LogSectors
   }
 
-  if ($files.Count -gt 15) {
-    Fail "System catalog supports at most 15 files in this first version."
+  $catalogByteSize = $CatalogHeaderSize + ($files.Count * $ManifestEntrySize)
+  $catalogSectorCount = [int][Math]::Ceiling($catalogByteSize / $BytesPerSector)
+  if ($catalogSectorCount -lt 1) {
+    $catalogSectorCount = 1
   }
+  $fsDataStartSector = $fsStartSector + $catalogSectorCount
 
   Write-Host "[2/4] Planning packed file layout..."
   Write-Host ("  {0,-10} sector {1,4} count {2,4} bytes {3}" -f $kernelFile.Name, $kernelFile.StartSector, $kernelFile.SectorCount, $kernelFile.Size)
-  Write-Host ("  {0,-10} sector {1,4}" -f "FS.AREA", $fsStartSector)
+  Write-Host ("  {0,-10} sector {1,4} count {2,4} bytes {3}" -f "CATALOG", $fsStartSector, $catalogSectorCount, $catalogByteSize)
   $nextSector = $fsDataStartSector
   foreach ($file in $files) {
     if ($file.ContainsKey("Reserved") -and $file.Reserved) {
@@ -172,13 +181,19 @@ try {
   Write-UInt32Le $bootManifest ($ManifestEntryOffset + 16) $kernelFile.Size
   Write-UInt32Le $bootManifest ($ManifestEntryOffset + 20) $kernelFile.SectorCount
 
-  $fsManifest = New-Object byte[] $BytesPerSector
+  $fsManifest = New-Object byte[] ($catalogSectorCount * $BytesPerSector)
   [Array]::Copy($sig, 0, $fsManifest, 0, 4)
   Write-UInt16Le $fsManifest 4 1
-  Write-UInt16Le $fsManifest 6 $files.Count
+  Write-UInt16Le $fsManifest 6 $CatalogHeaderSize
+  Write-UInt32Le $fsManifest $CatalogByteSizeOffset ([UInt32]$catalogByteSize)
+  Write-UInt32Le $fsManifest $CatalogFileTableOffset ([UInt32]$CatalogHeaderSize)
+  Write-UInt16Le $fsManifest $CatalogFileEntrySizeOffset $ManifestEntrySize
+  Write-UInt16Le $fsManifest $CatalogFileEntryCountOffset $files.Count
+  Write-UInt32Le $fsManifest $CatalogDataStartSectorOffset ([UInt32]$fsDataStartSector)
+  Write-UInt32Le $fsManifest $CatalogFlagsOffset 0
 
   for ($i = 0; $i -lt $files.Count; $i++) {
-    $entryOffset = $ManifestEntryOffset + ($i * $ManifestEntrySize)
+    $entryOffset = $CatalogHeaderSize + ($i * $ManifestEntrySize)
     $manifestName = [System.Text.Encoding]::ASCII.GetBytes((ConvertTo-ManifestName $files[$i].Name))
     [Array]::Copy($manifestName, 0, $fsManifest, $entryOffset, 11)
     Write-UInt32Le $fsManifest ($entryOffset + 12) $files[$i].StartSector

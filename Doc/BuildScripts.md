@@ -56,7 +56,7 @@ Writes:
 
 - sector `1`: the boot manifest sector with the `ASMF` signature
 - sector `2+`: contiguous `KERNEL.BIN` sectors
-- immediately after `KERNEL.BIN`: system catalog area, currently one sector
+- immediately after `KERNEL.BIN`: self-describing system catalog area
 - after the system catalog: packed runtime file bodies
 - a reserved, zero-filled `LOG.TXT` file entry
 
@@ -65,18 +65,24 @@ Boot manifest format:
 - offset `0`: four-byte `ASMF` signature
 - offset `4`: version word, currently `1`
 - offset `6`: entry-count word, currently `1`
-- offset `8`: filesystem start sector
-- offset `12`: filesystem sector count
+- offset `8`: filesystem area start sector
+- offset `12`: filesystem area sector count
 - offset `16`: first 32-byte file entry
 
 The boot manifest contains the `KERNEL.BIN` entry that `Boot.asm` needs.
+The filesystem area start sector points to the system catalog.
 
 System catalog format:
 
 - offset `0`: four-byte `ASMF` signature
 - offset `4`: version word, currently `1`
-- offset `6`: entry-count word
-- offset `16`: first 32-byte file entry
+- offset `6`: catalog header byte size
+- offset `8`: catalog byte size
+- offset `12`: file table offset
+- offset `16`: file entry byte size
+- offset `18`: file entry count
+- offset `20`: file data start sector
+- offset `24`: flags, currently `0`
 
 Each file entry records an uppercase 8.3 name, starting sector, byte size, and
 sector count. Runtime files live in the system catalog, not the boot
@@ -87,7 +93,8 @@ Notes:
 - Does not mount the image.
 - Does not copy files through FAT12.
 - Packs file bodies contiguously and pads each file to a whole sector.
-- Supports at most 15 system catalog entries in this first version.
+- The system catalog describes its own byte size, so it can grow beyond one
+  sector without changing the boot path.
 
 ## BuildKernel.ps1
 

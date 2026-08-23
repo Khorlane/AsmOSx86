@@ -17,8 +17,8 @@ The boot path assumes this high-level sector layout:
 Sector 0      Boot.bin
 Sector 1      AsmOSx86 boot manifest
 Sector 2..N   Kernel.bin sectors
-Sector N+1    System catalog
-Sector N+2..  Runtime file sectors
+Next          System catalog area
+After catalog Runtime file sectors
 ```
 
 The image is a raw sector image with an AsmOSx86 boot manifest
@@ -26,7 +26,7 @@ in sector 1 identified by the `ASMF` signature. Boot only needs the boot
 manifest entry for `KERNEL.BIN`.
 
 The boot manifest is one 512-byte sector. It contains the fields Boot needs for
-`KERNEL.BIN` plus filesystem area fields used later by the kernel:
+`KERNEL.BIN` plus the filesystem area start/count used later by the kernel:
 
 Boot manifest header:
 
@@ -34,8 +34,8 @@ Boot manifest header:
 Offset 0  4 bytes  ASMF signature
 Offset 4  2 bytes  Version: 1
 Offset 6  2 bytes  Entry count
-Offset 8  4 bytes  Filesystem start sector
-Offset 12 4 bytes  Filesystem sector count
+Offset 8  4 bytes  Filesystem area start sector
+Offset 12 4 bytes  Filesystem area sector count
 Offset 16          First file entry
 ```
 
@@ -47,6 +47,11 @@ Offset +12   4 bytes  Starting sector
 Offset +16   4 bytes  File byte size
 Offset +20   4 bytes  File sector count
 ```
+
+Boot does not parse the system catalog. After the kernel is running, `Fs.asm`
+uses the filesystem area start sector to read the system catalog header. The
+catalog header describes the catalog byte size, file table offset, file entry
+size, and file entry count.
 
 ## Real Hardware Note
 

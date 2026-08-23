@@ -124,20 +124,31 @@ FsHandleTable:
 ;**************************************************************************************************
 FSDRV_BOOT_MANIFEST_SECTOR equ 1
 FSDRV_SIGNATURE          equ 464D5341h ; ASMF signature
-FSDRV_ENTRY_COUNT        equ 6
 FSDRV_FS_START_SECTOR    equ 8
 FSDRV_FS_SECTOR_COUNT    equ 12
-FSDRV_ENTRY_OFFSET       equ 16
+FSDRV_CATALOG_HEADER_SIZE equ 6
+FSDRV_CATALOG_BYTE_SIZE  equ 8
+FSDRV_FILE_TABLE_OFFSET  equ 12
+FSDRV_FILE_ENTRY_SIZE    equ 16
+FSDRV_FILE_ENTRY_COUNT   equ 18
+FSDRV_CATALOG_MIN_HEADER equ 32
+FSDRV_CATALOG_MAX_SECTORS equ 8
+FSDRV_CATALOG_MAX_BYTES  equ FSDRV_CATALOG_MAX_SECTORS*KERNEL_SECTOR_SIZE
 FSDRV_ENTRY_SIZE         equ 32
 FSDRV_ENTRY_START_SECTOR equ 12
 FSDRV_ENTRY_BYTE_SIZE    equ 16
 FSDRV_ENTRY_SECTOR_COUNT equ 20
-FSDRV_MANIFEST_BYTES     equ KERNEL_SECTOR_SIZE
 FSDRV_NAME_SIZE          equ 11
 
 FsMounted                dd 0          ; 1 once system catalog is loaded
-FsDrvStartSector         dd 0          ; system catalog sector
+FsDrvStartSector         dd 0          ; catalog start sector
 FsDrvSectorCount         dd 0          ; filesystem area sectors
+FsCatalogByteSize        dd 0          ; catalog-declared byte size
+FsCatalogSectorCount     dd 0          ; sectors needed for catalog bytes
+FsCatalogTableOffset     dd 0          ; file table offset inside catalog
+FsCatalogEntrySize       dd 0          ; catalog file entry size
+FsCatalogReadIndex       dd 0          ; catalog sector read index
+FsCatalogReadLeft        dd 0          ; catalog sectors left to read
 FsNameIndex              dd 0          ; work: filename output index
 FsNameInputLeft          dd 0          ; work: chars left in input Str
 FsNameOutputLimit        dd 0          ; work: 8 before dot, 3 after dot
@@ -149,7 +160,7 @@ FsEntryCount             dd 0          ; catalog entry count
 FsName83:
   times FSDRV_NAME_SIZE db 0
 FsRootBuffer:
-  times FSDRV_MANIFEST_BYTES db 0
+  times FSDRV_CATALOG_MAX_BYTES db 0
 
 ;**************************************************************************************************
 ; Block device layer
@@ -404,6 +415,11 @@ FsInit:
   mov   dword[FsMounted],0
   mov   dword[FsDrvStartSector],0
   mov   dword[FsDrvSectorCount],0
+  mov   dword[FsCatalogByteSize],0
+  mov   dword[FsCatalogSectorCount],0
+  mov   dword[FsCatalogTableOffset],0
+  mov   dword[FsCatalogEntrySize],0
+  mov   dword[FsEntryCount],0
   mov   dword[FsSectorsPerTrack],FLOPPY_SECTORS_PER_TRACK
   mov   dword[FsHeads],FLOPPY_HEADS
   mov   eax,FsHandleTable
@@ -689,8 +705,60 @@ FsDrvMount:
   mov   eax,[FsRootBuffer]
   cmp   eax,FSDRV_SIGNATURE
   jne   FsDrvMount1
-  movzx eax,word[FsRootBuffer+FSDRV_ENTRY_COUNT]
+  movzx eax,word[FsRootBuffer+FSDRV_CATALOG_HEADER_SIZE]
+  cmp   eax,FSDRV_CATALOG_MIN_HEADER
+  jb    FsDrvMount1
+  mov   eax,[FsRootBuffer+FSDRV_CATALOG_BYTE_SIZE]
+  test  eax,eax
+  jz    FsDrvMount1
+  cmp   eax,FSDRV_CATALOG_MAX_BYTES
+  ja    FsDrvMount1
+  mov   [FsCatalogByteSize],eax
+  add   eax,KERNEL_SECTOR_SIZE-1
+  shr   eax,KERNEL_SECTOR_SHIFT
+  cmp   eax,[FsDrvSectorCount]
+  ja    FsDrvMount1
+  mov   [FsCatalogSectorCount],eax
+  mov   eax,[FsRootBuffer+FSDRV_FILE_TABLE_OFFSET]
+  test  eax,eax
+  jz    FsDrvMount1
+  cmp   eax,[FsCatalogByteSize]
+  jae   FsDrvMount1
+  mov   [FsCatalogTableOffset],eax
+  movzx eax,word[FsRootBuffer+FSDRV_FILE_ENTRY_SIZE]
+  cmp   eax,FSDRV_ENTRY_SIZE
+  jb    FsDrvMount1
+  mov   [FsCatalogEntrySize],eax
+  movzx eax,word[FsRootBuffer+FSDRV_FILE_ENTRY_COUNT]
   mov   [FsEntryCount],eax
+  mov   eax,[FsCatalogEntrySize]
+  mov   ecx,[FsEntryCount]
+  mul   ecx
+  add   eax,[FsCatalogTableOffset]
+  cmp   eax,[FsCatalogByteSize]
+  ja    FsDrvMount1
+  mov   dword[FsCatalogReadIndex],0
+  mov   eax,[FsCatalogSectorCount]
+  mov   [FsCatalogReadLeft],eax
+FsDrvMount3:
+  mov   eax,[FsCatalogReadLeft]
+  test  eax,eax
+  jz    FsDrvMount4
+  mov   eax,[FsDrvStartSector]
+  add   eax,[FsCatalogReadIndex]
+  mov   [DevSector],eax
+  mov   eax,[FsCatalogReadIndex]
+  shl   eax,KERNEL_SECTOR_SHIFT
+  add   eax,FsRootBuffer
+  mov   [DevBuffer],eax
+  call  DevReadSector
+  mov   eax,[FsStatus]
+  cmp   eax,FS_STATUS_OK
+  jne   FsDrvMount2
+  inc   dword[FsCatalogReadIndex]
+  dec   dword[FsCatalogReadLeft]
+  jmp   FsDrvMount3
+FsDrvMount4:
   mov   dword[FsMounted],1
   mov   dword[FsStatus],FS_STATUS_OK
   jmp   FsDrvMount2
@@ -754,7 +822,9 @@ FsDrvMakeName836:
   ret
 
 FsDrvFindEntry:
-  mov   dword[pFsEntry],FsRootBuffer+FSDRV_ENTRY_OFFSET
+  mov   eax,FsRootBuffer
+  add   eax,[FsCatalogTableOffset]
+  mov   [pFsEntry],eax
   mov   eax,[FsEntryCount]
   mov   [FsEntryLeft],eax
 FsDrvFindEntry1:
@@ -775,7 +845,8 @@ FsDrvFindEntry2:
   mov   dword[FsStatus],FS_STATUS_OK
   ret
 FsDrvFindEntry3:
-  add   dword[pFsEntry],FSDRV_ENTRY_SIZE
+  mov   eax,[FsCatalogEntrySize]
+  add   [pFsEntry],eax
   dec   dword[FsEntryLeft]
   jmp   FsDrvFindEntry1
 FsDrvFindEntry4:
