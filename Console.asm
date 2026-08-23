@@ -146,7 +146,7 @@ Console:
   call  CnReadLine                      ; non-blocking line editor
   mov   al,[CnOutHasLine]
   test  al,al
-  jz    ConsoleDone
+  jz    Console1
   lea   eax,[CnCmdLine]
   mov   [pCnLogMsg],eax
   call  CnLogIt
@@ -154,7 +154,7 @@ Console:
   mov   [pStr1],eax
   call  StrTrim
   call  CnCmdDispatch
-ConsoleDone:
+Console1:
   ret
 
 ;------------------------------------------------------------------------------
@@ -224,14 +224,14 @@ CnStartupRun:
   call  FsOpen
   mov   eax,[FsStatus]
   cmp   eax,FS_STATUS_OK
-  jne   CnStartupRunDone
+  jne   CnStartupRun2
   mov   eax,[FsOpenHandle]
   mov   [CnStartupHandle],eax
   mov   eax,[FsOpenSize]
   cmp   eax,CN_STARTUP_BUF_LEN
-  jbe   CnStartupRunRead
+  jbe   CnStartupRun1
   mov   eax,CN_STARTUP_BUF_LEN
-CnStartupRunRead:
+CnStartupRun1:
   mov   [CnStartupReadLen],eax
   mov   eax,[CnStartupHandle]
   mov   [FsReadHandle],eax
@@ -246,12 +246,12 @@ CnStartupRunRead:
   call  FsClose
   mov   eax,[CnStartupStatus]
   cmp   eax,FS_STATUS_OK
-  jne   CnStartupRunDone
+  jne   CnStartupRun2
   mov   eax,[FsReadBytes]
   mov   [CnStartupLeft],eax
   mov   dword[pCnStartupInput],CnStartupBuffer
   call  CnStartupDispatchLines
-CnStartupRunDone:
+CnStartupRun2:
   ret
 
 ;------------------------------------------------------------------------------
@@ -270,7 +270,7 @@ CnStartupDispatchLines:
   call  CnStartupSkipBreaks
   mov   eax,[CnStartupLeft]
   test  eax,eax
-  jz    CnStartupDispatchLinesDone
+  jz    CnStartupDispatchLines1
   call  CnStartupCopyLine
   mov   ax,[CnStartupLineLen]
   test  ax,ax
@@ -286,7 +286,7 @@ CnStartupDispatchLines:
   call  CnLogIt
   call  CnCmdDispatch
   jmp   CnStartupDispatchLines
-CnStartupDispatchLinesDone:
+CnStartupDispatchLines1:
   ret
 
 ;------------------------------------------------------------------------------
@@ -297,19 +297,19 @@ CnStartupDispatchLinesDone:
 CnStartupSkipBreaks:
   mov   eax,[CnStartupLeft]
   test  eax,eax
-  jz    CnStartupSkipBreaksDone
+  jz    CnStartupSkipBreaks2
   mov   esi,[pCnStartupInput]
   mov   al,[esi]
   cmp   al,0Dh
   je    CnStartupSkipBreaks1
   cmp   al,0Ah
-  jne   CnStartupSkipBreaksDone
+  jne   CnStartupSkipBreaks2
 CnStartupSkipBreaks1:
   inc   esi
   mov   [pCnStartupInput],esi
   dec   dword[CnStartupLeft]
   jmp   CnStartupSkipBreaks
-CnStartupSkipBreaksDone:
+CnStartupSkipBreaks2:
   ret
 
 ;------------------------------------------------------------------------------
@@ -325,13 +325,13 @@ CnStartupCopyLine:
 CnStartupCopyLine1:
   mov   eax,[CnStartupLeft]
   test  eax,eax
-  jz    CnStartupCopyLineDone
+  jz    CnStartupCopyLine2
   mov   esi,[pCnStartupInput]
   mov   al,[esi]
   cmp   al,0Dh
-  je    CnStartupCopyLineDone
+  je    CnStartupCopyLine2
   cmp   al,0Ah
-  je    CnStartupCopyLineDone
+  je    CnStartupCopyLine2
   inc   esi
   mov   [pCnStartupInput],esi
   dec   dword[CnStartupLeft]
@@ -344,7 +344,7 @@ CnStartupCopyLine1:
   mov   [pCnStartupDst],edi
   inc   word[CnStartupLineLen]
   jmp   CnStartupCopyLine1
-CnStartupCopyLineDone:
+CnStartupCopyLine2:
   mov   ax,[CnStartupLineLen]
   mov   [CnCmdLine],ax
   ret
@@ -380,32 +380,32 @@ CnSpace:
 CnReadLine:
   mov   byte[CnOutHasLine],0            ; default: no completed line
   cmp   byte[CnRlActive],1              ; already editing a line?
-  je    CnReadLinePoll
+  je    CnReadLine1
   mov   byte[CnRlActive],1              ; begin new line
   xor   ax,ax
   mov   [CnCmdLineLen],ax               ; reset input length
   call  VdInClearLine                   ; clear input row,InCurCol=1
-CnReadLinePoll:
+CnReadLine1:
   call  TimerNowTicks                   ; keep accumulator updated
   call  KbGetKey                        ; poll keyboard once
   mov   al,[KbOutHasKey]
   test  al,al
-  jz    CnReadLineDone                  ; no key -> return immediately
+  jz    CnReadLine5                     ; no key -> return immediately
   mov   al,[KbOutType]
   cmp   al,KEY_CHAR
-  je    CnReadLineOnChar
+  je    CnReadLine2
   cmp   al,KEY_BACKSPACE
-  je    CnReadLineOnBackspace
+  je    CnReadLine3
   cmp   al,KEY_ENTER
-  je    CnReadLineOnEnter
-  jmp   CnReadLineDone
-CnReadLineOnChar:
+  je    CnReadLine4
+  jmp   CnReadLine5
+CnReadLine2:
   mov   ax,[CnCmdLineLen]
   movzx ecx,ax
   mov   ax,[CnCmdMaxLen]
   movzx edx,ax
   cmp   ecx,edx
-  jae   CnReadLineDone
+  jae   CnReadLine5
   mov   esi,[pCnCmdLine]
   mov   al,[KbOutChar]
   mov   [esi+2+ecx],al
@@ -413,24 +413,24 @@ CnReadLineOnChar:
   mov   [CnCmdLineLen],cx
   mov   [VdInCh],al                     ; visual char input
   call  VdInPutChar
-  jmp   CnReadLineDone
-CnReadLineOnBackspace:
+  jmp   CnReadLine5
+CnReadLine3:
   mov   ax,[CnCmdLineLen]
   movzx ecx,ax
   test  ecx,ecx
-  jz    CnReadLineDone
+  jz    CnReadLine5
   dec   cx
   mov   [CnCmdLineLen],cx
   call  VdInBackspaceVisual
-  jmp   CnReadLineDone
-CnReadLineOnEnter:
+  jmp   CnReadLine5
+CnReadLine4:
   mov   esi,[pCnCmdLine]
   mov   ax,[CnCmdLineLen]
   mov   [esi],ax                        ; commit Str length
   mov   byte[CnOutHasLine],1            ; signal: line ready
   mov   byte[CnRlActive],0              ; go idle (next call starts new line)
   call  VdInClearLine                   ; clear the input row after submit
-CnReadLineDone:
+CnReadLine5:
   ret
 
 ;------------------------------------------------------------------------------
@@ -479,55 +479,55 @@ CnCmdDispatch:
   mov   [pCnTmpTable],eax               ; save table ptr
   mov   eax,CnCmdTableCount             ; EAX = entry count
   mov   [CnTmpCount],eax                ; save count
-CnCmdDispatchNext:
+CnCmdDispatch1:
   mov   eax,[CnTmpCount]                ; remaining entries
   test  eax,eax
-  jz    CnCmdDispatchDone
+  jz    CnCmdDispatch7
   mov   edi,[pCnTmpTable]               ; EDI = entry ptr
   mov   ebx,[edi]                       ; EBX = ptr to command Str
   mov   dx,[ebx]                        ; DX  = cmd length
   cmp   dx,[CnTmpLen]                   ; length match?
-  jne   CnCmdDispatchSkip
+  jne   CnCmdDispatch6
   ; compare payloads, case-insensitive
   movzx ecx,word[CnTmpLen]              ; ECX = compare count
   mov   esi,[pCnTmpInput]               ; ESI = input payload
   lea   ebx,[ebx+2]                     ; EBX = cmd payload
-CnCmdDispatchCmp:
+CnCmdDispatch2:
   test  ecx,ecx
-  jz    CnCmdDispatchMatch
+  jz    CnCmdDispatch5
   mov   al,[esi]                        ; input char
   mov   ah,[ebx]                        ; table char
   cmp   al,'A'
-  jb    CnCmdCi1
+  jb    CnCmdDispatch3
   cmp   al,'Z'
-  ja    CnCmdCi1
+  ja    CnCmdDispatch3
   add   al,32                           ; input -> lowercase
-CnCmdCi1:
+CnCmdDispatch3:
   cmp   ah,'A'
-  jb    CnCmdCi2
+  jb    CnCmdDispatch4
   cmp   ah,'Z'
-  ja    CnCmdCi2
+  ja    CnCmdDispatch4
   add   ah,32                           ; table -> lowercase
-CnCmdCi2:
+CnCmdDispatch4:
   cmp   al,ah
-  jne   CnCmdDispatchSkip
+  jne   CnCmdDispatch6
   inc   esi
   inc   ebx
   dec   ecx
-  jmp   CnCmdDispatchCmp
-CnCmdDispatchMatch:
+  jmp   CnCmdDispatch2
+CnCmdDispatch5:
   mov   eax,[edi+4]                     ; EAX = handler address
   call  eax
   ret
-CnCmdDispatchSkip:
+CnCmdDispatch6:
   mov   eax,[pCnTmpTable]               ; advance to next entry
   add   eax,8
   mov   [pCnTmpTable],eax
   mov   eax,[CnTmpCount]
   dec   eax
   mov   [CnTmpCount],eax
-  jmp   CnCmdDispatchNext
-CnCmdDispatchDone:
+  jmp   CnCmdDispatch1
+CnCmdDispatch7:
   ret
 
 ;------------------------------------------------------------------------------
@@ -544,34 +544,34 @@ CnCmdSplitArg:
   mov   esi,[pCnTmpInput]
   movzx ecx,word[CnTmpLen]
   xor   edx,edx
-CnCmdSplitArgScan:
+CnCmdSplitArg1:
   test  ecx,ecx
-  jz    CnCmdSplitArgDone
+  jz    CnCmdSplitArg6
   cmp   byte[esi+edx],' '
-  je    CnCmdSplitArgFound
+  je    CnCmdSplitArg2
   inc   edx
   dec   ecx
-  jmp   CnCmdSplitArgScan
-CnCmdSplitArgFound:
+  jmp   CnCmdSplitArg1
+CnCmdSplitArg2:
   mov   [CnTmpLen],dx
   mov   edi,esi
   add   edi,edx
-CnCmdSplitArgSkip:
+CnCmdSplitArg3:
   test  ecx,ecx
-  jz    CnCmdSplitArgNoArg
+  jz    CnCmdSplitArg5
   cmp   byte[edi],' '
-  jne   CnCmdSplitArgSave
+  jne   CnCmdSplitArg4
   inc   edi
   dec   ecx
-  jmp   CnCmdSplitArgSkip
-CnCmdSplitArgSave:
+  jmp   CnCmdSplitArg3
+CnCmdSplitArg4:
   mov   [pCnCmdArg],edi
   mov   [CnCmdArgLen],cx
   ret
-CnCmdSplitArgNoArg:
+CnCmdSplitArg5:
   mov   dword[pCnCmdArg],0
   mov   word[CnCmdArgLen],0
-CnCmdSplitArgDone:
+CnCmdSplitArg6:
   ret
 
 ;------------------------------------------------------------------------------
@@ -640,10 +640,10 @@ CnDoCmdHelp:
   mov   [pCnCmdTable],eax
   mov   eax,CnCmdTableCount
   mov   [CnHelpCnt],eax
-CnDoCmdHelpLoop:
+CnDoCmdHelp1:
   mov   eax,[CnHelpCnt]
   test  eax,eax
-  jz    CnDoCmdHelpDone
+  jz    CnDoCmdHelp2
   mov   eax,[pCnCmdTable]               ; EAX = entry ptr (safe)
   mov   ebx,[eax]                       ; EBX = ptr to command Str
   mov   [pVdStr],ebx
@@ -655,8 +655,8 @@ CnDoCmdHelpLoop:
   mov   eax,[CnHelpCnt]
   dec   eax
   mov   [CnHelpCnt],eax
-  jmp   CnDoCmdHelpLoop
-CnDoCmdHelpDone:
+  jmp   CnDoCmdHelp1
+CnDoCmdHelp2:
   ret
 
 ;------------------------------------------------------------------------------
@@ -735,7 +735,7 @@ CnDoCmdFsTest:
   call  CnCrLf
   mov   eax,[CnFsTestHandle]
   test  eax,eax
-  jz    CnDoCmdFsTestDone
+  jz    CnDoCmdFsTest1
   mov   dword[KcNumber],KcFsRead
   mov   [KcArg0],eax
   lea   eax,[CnFsTestBuffer]
@@ -773,7 +773,7 @@ CnDoCmdFsTest:
   mov   [pVdStr],eax
   call  VdPutStr
   call  CnCrLf
-CnDoCmdFsTestDone:
+CnDoCmdFsTest1:
   ret
 
 ;------------------------------------------------------------------------------
@@ -828,11 +828,11 @@ CnDoCmdRun:
 CnDoCmdRunCommon:
   mov   ax,[CnCmdArgLen]
   test  ax,ax
-  jz    CnDoCmdRunUsage
+  jz    CnDoCmdRunCommon4
   call  CnRunParseSpecs
   mov   eax,[CnRunParseOk]
   test  eax,eax
-  jz    CnDoCmdRunUsage
+  jz    CnDoCmdRunCommon4
   lea   eax,[CnRunMsg1]
   mov   [pVdStr],eax
   call  VdPutStr
@@ -849,10 +849,10 @@ CnDoCmdRunCommon:
   call  CnRunLoadTask
   mov   eax,[KcStatus]
   cmp   eax,KC_STATUS_OK
-  jne   CnDoCmdRunFail
+  jne   CnDoCmdRunCommon5
   mov   eax,[CnRunCount]
   cmp   eax,2
-  jb    CnDoCmdRunStart
+  jb    CnDoCmdRunCommon1
   lea   eax,[CnRunFile2]
   mov   [KcArg0],eax
   mov   dword[KcArg1],2
@@ -862,10 +862,10 @@ CnDoCmdRunCommon:
   call  CnRunLoadTask
   mov   eax,[KcStatus]
   cmp   eax,KC_STATUS_OK
-  jne   CnDoCmdRunFail
+  jne   CnDoCmdRunCommon5
   mov   eax,[CnRunCount]
   cmp   eax,3
-  jb    CnDoCmdRunStart
+  jb    CnDoCmdRunCommon1
   lea   eax,[CnRunFile3]
   mov   [KcArg0],eax
   mov   dword[KcArg1],3
@@ -875,8 +875,8 @@ CnDoCmdRunCommon:
   call  CnRunLoadTask
   mov   eax,[KcStatus]
   cmp   eax,KC_STATUS_OK
-  jne   CnDoCmdRunFail
-CnDoCmdRunStart:
+  jne   CnDoCmdRunCommon5
+CnDoCmdRunCommon1:
   lea   eax,[CnRunMsg2]
   mov   [pVdStr],eax
   call  VdPutStr
@@ -885,7 +885,7 @@ CnDoCmdRunStart:
   call  CnCrLf
   mov   eax,[CnRunCount]
   cmp   eax,1
-  jne   CnDoCmdRunPrintMany
+  jne   CnDoCmdRunCommon2
   mov   dword[TaskProgramTaskIndex],1
   call  TaskProgramGetExitCode
   mov   eax,[TaskProgramExitCode]
@@ -897,22 +897,22 @@ CnDoCmdRunStart:
   mov   [pVdStr],eax
   call  VdPutStr
   call  CnCrLf
-  jmp   CnDoCmdRunComplete
-CnDoCmdRunPrintMany:
+  jmp   CnDoCmdRunCommon3
+CnDoCmdRunCommon2:
   call  TaskProgramPrintExitCodesN
-CnDoCmdRunComplete:
+CnDoCmdRunCommon3:
   lea   eax,[CnRunMsg3]
   mov   [pVdStr],eax
   call  VdPutStr
   call  CnCrLf
   ret
-CnDoCmdRunUsage:
+CnDoCmdRunCommon4:
   lea   eax,[CnRunUsage]
   mov   [pVdStr],eax
   call  VdPutStr
   call  CnCrLf
   ret
-CnDoCmdRunFail:
+CnDoCmdRunCommon5:
   mov   eax,[CnRunFailTask]
   add   al,'0'
   mov   [CnRunFail+24],al
@@ -957,29 +957,29 @@ CnRunParseSpecs:
   call  CnRunSkipSpaces
   mov   ax,[CnRunInputLeft]
   test  ax,ax
-  jz    CnRunParseSpecsDone
-CnRunParseSpecsLoop:
+  jz    CnRunParseSpecs4
+CnRunParseSpecs1:
   mov   eax,[CnRunCount]
   cmp   eax,3
-  jae   CnRunParseSpecsDone
+  jae   CnRunParseSpecs4
   call  CnRunSelectDsts
   call  CnRunCopyAuthority
   call  CnRunCopyFile
   mov   ax,[CnRunFileLen]
   test  ax,ax
-  jz    CnRunParseSpecsDone
+  jz    CnRunParseSpecs4
   inc   dword[CnRunCount]
   call  CnRunSkipSpaces
   mov   ax,[CnRunInputLeft]
   test  ax,ax
-  jz    CnRunParseSpecsOk
+  jz    CnRunParseSpecs3
   mov   esi,[pCnRunInput]
   cmp   ax,2
-  jb    CnRunParseSpecsPipe
+  jb    CnRunParseSpecs2
   cmp   byte[esi],'-'
-  jne   CnRunParseSpecsPipe
+  jne   CnRunParseSpecs2
   cmp   byte[esi+1],'-'
-  jne   CnRunParseSpecsPipe
+  jne   CnRunParseSpecs2
   add   esi,2
   mov   [pCnRunInput],esi
   sub   ax,2
@@ -989,22 +989,22 @@ CnRunParseSpecsLoop:
   call  CnRunSkipSpaces
   mov   ax,[CnRunInputLeft]
   test  ax,ax
-  jz    CnRunParseSpecsOk
-CnRunParseSpecsPipe:
+  jz    CnRunParseSpecs3
+CnRunParseSpecs2:
   mov   esi,[pCnRunInput]
   cmp   byte[esi],'|'
-  jne   CnRunParseSpecsDone
+  jne   CnRunParseSpecs4
   inc   esi
   mov   [pCnRunInput],esi
   dec   word[CnRunInputLeft]
   call  CnRunSkipSpaces
   mov   ax,[CnRunInputLeft]
   test  ax,ax
-  jz    CnRunParseSpecsDone
-  jmp   CnRunParseSpecsLoop
-CnRunParseSpecsOk:
+  jz    CnRunParseSpecs4
+  jmp   CnRunParseSpecs1
+CnRunParseSpecs3:
   mov   dword[CnRunParseOk],1
-CnRunParseSpecsDone:
+CnRunParseSpecs4:
   ret
 
 ;------------------------------------------------------------------------------
@@ -1016,15 +1016,15 @@ CnRunSkipSpaces:
   mov   ax,[CnRunInputLeft]
 CnRunSkipSpaces1:
   test  ax,ax
-  jz    CnRunSkipSpacesDone
+  jz    CnRunSkipSpaces2
   mov   esi,[pCnRunInput]
   cmp   byte[esi],' '
-  jne   CnRunSkipSpacesDone
+  jne   CnRunSkipSpaces2
   inc   esi
   mov   [pCnRunInput],esi
   dec   ax
   jmp   CnRunSkipSpaces1
-CnRunSkipSpacesDone:
+CnRunSkipSpaces2:
   mov   [CnRunInputLeft],ax
   ret
 
@@ -1036,9 +1036,9 @@ CnRunSkipSpacesDone:
 CnRunSelectDsts:
   mov   eax,[CnRunCount]
   cmp   eax,1
-  je    CnRunSelectDsts2
+  je    CnRunSelectDsts1
   cmp   eax,2
-  je    CnRunSelectDsts3
+  je    CnRunSelectDsts2
   lea   eax,[CnRunFile1]
   mov   [pCnRunFileDst],eax
   lea   eax,[CnRunArg1]
@@ -1046,7 +1046,7 @@ CnRunSelectDsts:
   lea   eax,[CnRunAuth1]
   mov   [pCnRunAuthDst],eax
   ret
-CnRunSelectDsts2:
+CnRunSelectDsts1:
   lea   eax,[CnRunFile2]
   mov   [pCnRunFileDst],eax
   lea   eax,[CnRunArg2]
@@ -1054,7 +1054,7 @@ CnRunSelectDsts2:
   lea   eax,[CnRunAuth2]
   mov   [pCnRunAuthDst],eax
   ret
-CnRunSelectDsts3:
+CnRunSelectDsts2:
   lea   eax,[CnRunFile3]
   mov   [pCnRunFileDst],eax
   lea   eax,[CnRunArg3]
@@ -1071,27 +1071,27 @@ CnRunSelectDsts3:
 CnRunCopyAuthority:
   mov   ax,[CnRunInputLeft]
   cmp   ax,7
-  jb    CnRunCopyAuthorityDone
+  jb    CnRunCopyAuthority4
   mov   esi,[pCnRunInput]
   cmp   byte[esi],'/'
-  jne   CnRunCopyAuthorityDone
+  jne   CnRunCopyAuthority4
   cmp   byte[esi+1],'s'
-  jne   CnRunCopyAuthorityTrusted
+  jne   CnRunCopyAuthority2
   cmp   byte[esi+2],'y'
-  jne   CnRunCopyAuthorityTrusted
+  jne   CnRunCopyAuthority2
   cmp   byte[esi+3],'s'
-  jne   CnRunCopyAuthorityTrusted
+  jne   CnRunCopyAuthority2
   cmp   byte[esi+4],'t'
-  jne   CnRunCopyAuthorityTrusted
+  jne   CnRunCopyAuthority2
   cmp   byte[esi+5],'e'
-  jne   CnRunCopyAuthorityTrusted
+  jne   CnRunCopyAuthority2
   cmp   byte[esi+6],'m'
-  jne   CnRunCopyAuthorityTrusted
+  jne   CnRunCopyAuthority2
   cmp   ax,7
-  je    CnRunCopyAuthoritySystem
+  je    CnRunCopyAuthority1
   cmp   byte[esi+7],' '
-  jne   CnRunCopyAuthorityTrusted
-CnRunCopyAuthoritySystem:
+  jne   CnRunCopyAuthority2
+CnRunCopyAuthority1:
   mov   edi,[pCnRunAuthDst]
   mov   dword[edi],TASK_AUTH_SYSTEM
   add   esi,7
@@ -1099,35 +1099,35 @@ CnRunCopyAuthoritySystem:
   sub   word[CnRunInputLeft],7
   call  CnRunSkipSpaces
   ret
-CnRunCopyAuthorityTrusted:
+CnRunCopyAuthority2:
   cmp   ax,8
-  jb    CnRunCopyAuthorityDone
+  jb    CnRunCopyAuthority4
   cmp   byte[esi+1],'t'
-  jne   CnRunCopyAuthorityDone
+  jne   CnRunCopyAuthority4
   cmp   byte[esi+2],'r'
-  jne   CnRunCopyAuthorityDone
+  jne   CnRunCopyAuthority4
   cmp   byte[esi+3],'u'
-  jne   CnRunCopyAuthorityDone
+  jne   CnRunCopyAuthority4
   cmp   byte[esi+4],'s'
-  jne   CnRunCopyAuthorityDone
+  jne   CnRunCopyAuthority4
   cmp   byte[esi+5],'t'
-  jne   CnRunCopyAuthorityDone
+  jne   CnRunCopyAuthority4
   cmp   byte[esi+6],'e'
-  jne   CnRunCopyAuthorityDone
+  jne   CnRunCopyAuthority4
   cmp   byte[esi+7],'d'
-  jne   CnRunCopyAuthorityDone
+  jne   CnRunCopyAuthority4
   cmp   ax,8
-  je    CnRunCopyAuthorityTrustedOk
+  je    CnRunCopyAuthority3
   cmp   byte[esi+8],' '
-  jne   CnRunCopyAuthorityDone
-CnRunCopyAuthorityTrustedOk:
+  jne   CnRunCopyAuthority4
+CnRunCopyAuthority3:
   mov   edi,[pCnRunAuthDst]
   mov   dword[edi],TASK_AUTH_TRUSTED
   add   esi,8
   mov   [pCnRunInput],esi
   sub   word[CnRunInputLeft],8
   call  CnRunSkipSpaces
-CnRunCopyAuthorityDone:
+CnRunCopyAuthority4:
   ret
 
 ;------------------------------------------------------------------------------
@@ -1142,25 +1142,25 @@ CnRunCopyFile:
 CnRunCopyFile1:
   mov   ax,[CnRunInputLeft]
   test  ax,ax
-  jz    CnRunCopyFileDone
+  jz    CnRunCopyFile3
   mov   esi,[pCnRunInput]
   cmp   byte[esi],' '
-  je    CnRunCopyFileDone
+  je    CnRunCopyFile3
   cmp   byte[esi],'|'
-  je    CnRunCopyFileDone
+  je    CnRunCopyFile3
   movzx ebx,word[CnRunFileLen]
   cmp   ebx,CN_CMD_MAX_LEN
-  jae   CnRunCopyFileAdvance
+  jae   CnRunCopyFile2
   mov   edi,[pCnRunFileDst]
   mov   al,[esi]
   mov   [edi+ebx+2],al
   inc   word[CnRunFileLen]
-CnRunCopyFileAdvance:
+CnRunCopyFile2:
   inc   esi
   mov   [pCnRunInput],esi
   dec   word[CnRunInputLeft]
   jmp   CnRunCopyFile1
-CnRunCopyFileDone:
+CnRunCopyFile3:
   mov   edi,[pCnRunFileDst]
   mov   ax,[CnRunFileLen]
   mov   [edi],ax
@@ -1178,32 +1178,32 @@ CnRunCopyArg:
 CnRunCopyArg1:
   mov   ax,[CnRunInputLeft]
   test  ax,ax
-  jz    CnRunCopyArgTrim
+  jz    CnRunCopyArg3
   mov   esi,[pCnRunInput]
   cmp   byte[esi],'|'
-  je    CnRunCopyArgTrim
+  je    CnRunCopyArg3
   movzx ebx,word[CnRunArgLen]
   cmp   ebx,CN_CMD_MAX_LEN
-  jae   CnRunCopyArgAdvance
+  jae   CnRunCopyArg2
   mov   edi,[pCnRunArgDst]
   mov   al,[esi]
   mov   [edi+ebx+2],al
   inc   word[CnRunArgLen]
-CnRunCopyArgAdvance:
+CnRunCopyArg2:
   inc   esi
   mov   [pCnRunInput],esi
   dec   word[CnRunInputLeft]
   jmp   CnRunCopyArg1
-CnRunCopyArgTrim:
+CnRunCopyArg3:
   movzx ebx,word[CnRunArgLen]
   test  ebx,ebx
-  jz    CnRunCopyArgDone
+  jz    CnRunCopyArg4
   mov   edi,[pCnRunArgDst]
   cmp   byte[edi+ebx+1],' '
-  jne   CnRunCopyArgDone
+  jne   CnRunCopyArg4
   dec   word[CnRunArgLen]
-  jmp   CnRunCopyArgTrim
-CnRunCopyArgDone:
+  jmp   CnRunCopyArg3
+CnRunCopyArg4:
   mov   edi,[pCnRunArgDst]
   mov   ax,[CnRunArgLen]
   mov   [edi],ax
@@ -1228,9 +1228,9 @@ CnRunLoadTask:
   call  KcDispatch
   mov   eax,[KcStatus]
   cmp   eax,KC_STATUS_OK
-  jne   CnRunLoadTaskDone
+  jne   CnRunLoadTask1
   call  TaskProgramSetArg
-CnRunLoadTaskDone:
+CnRunLoadTask1:
   ret
 
 ;------------------------------------------------------------------------------
@@ -1243,17 +1243,17 @@ CnRunLoadTaskDone:
 CnRunSelectTaskAuthority:
   mov   eax,[KcArg1]
   cmp   eax,2
-  je    CnRunSelectTaskAuthority2
+  je    CnRunSelectTaskAuthority1
   cmp   eax,3
-  je    CnRunSelectTaskAuthority3
+  je    CnRunSelectTaskAuthority2
   mov   eax,[CnRunAuth1]
   mov   [KcArg3],eax
   ret
-CnRunSelectTaskAuthority2:
+CnRunSelectTaskAuthority1:
   mov   eax,[CnRunAuth2]
   mov   [KcArg3],eax
   ret
-CnRunSelectTaskAuthority3:
+CnRunSelectTaskAuthority2:
   mov   eax,[CnRunAuth3]
   mov   [KcArg3],eax
   ret
