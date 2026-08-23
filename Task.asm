@@ -312,11 +312,11 @@ TaskPut4Hex3:
   inc   edi
   mov   eax,[TaskPut4HexShift]
   test  eax,eax
-  jz    TaskPut4HexDone
+  jz    TaskPut4Hex4
   sub   eax,4
   mov   [TaskPut4HexShift],eax
   jmp   TaskPut4Hex1
-TaskPut4HexDone:
+TaskPut4Hex4:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -334,25 +334,25 @@ TaskValidateUserRange:
   mov   dword[TaskUserOk],0
   mov   eax,[TaskUserSize]
   test  eax,eax
-  jz    TaskValidateUserRangeDone
+  jz    TaskValidateUserRange3
   mov   ebx,[TaskUserPtr]
   test  ebx,ebx
-  jz    TaskValidateUserRangeDone
+  jz    TaskValidateUserRange3
   add   eax,ebx
-  jc    TaskValidateUserRangeDone
+  jc    TaskValidateUserRange3
   mov   [TaskUserLimit],eax
   cmp   ebx,USER_PROGRAM_VIRTUAL_BASE
-  jb    TaskValidateUserRangeKcBlock
+  jb    TaskValidateUserRange1
   cmp   eax,USER_PROGRAM_VIRTUAL_BASE+USER_PROGRAM_MAX_SIZE
-  jbe   TaskValidateUserRangeOk
-TaskValidateUserRangeKcBlock:
+  jbe   TaskValidateUserRange2
+TaskValidateUserRange1:
   cmp   ebx,USER_PROGRAM_KCBLOCK_BASE
-  jb    TaskValidateUserRangeDone
+  jb    TaskValidateUserRange3
   cmp   eax,USER_PROGRAM_KCBLOCK_BASE+USER_PROGRAM_KCBLOCK_SIZE
-  ja    TaskValidateUserRangeDone
-TaskValidateUserRangeOk:
+  ja    TaskValidateUserRange3
+TaskValidateUserRange2:
   mov   dword[TaskUserOk],1
-TaskValidateUserRangeDone:
+TaskValidateUserRange3:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -366,10 +366,10 @@ TaskSetReady:
   call  TaskGetStateRecord
   mov   eax,[TaskStateStatus]
   cmp   eax,TASK_STATUS_OK
-  jne   TaskSetReadyDone
+  jne   TaskSetReady1
   mov   edi,[pTaskRecord]
   mov   dword[edi+TASK_STATE],TASK_STATE_READY
-TaskSetReadyDone:
+TaskSetReady1:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -383,10 +383,10 @@ TaskBlock:
   call  TaskGetStateRecord
   mov   eax,[TaskStateStatus]
   cmp   eax,TASK_STATUS_OK
-  jne   TaskBlockDone
+  jne   TaskBlock1
   mov   edi,[pTaskRecord]
   mov   dword[edi+TASK_STATE],TASK_STATE_BLOCKED
-TaskBlockDone:
+TaskBlock1:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -400,12 +400,12 @@ TaskWake:
   call  TaskGetStateRecord
   mov   eax,[TaskStateStatus]
   cmp   eax,TASK_STATUS_OK
-  jne   TaskWakeDone
+  jne   TaskWake1
   mov   edi,[pTaskRecord]
   cmp   dword[edi+TASK_STATE],TASK_STATE_BLOCKED
-  jne   TaskWakeDone
+  jne   TaskWake1
   mov   dword[edi+TASK_STATE],TASK_STATE_READY
-TaskWakeDone:
+TaskWake1:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -436,7 +436,7 @@ TaskSleep1:
   call  TaskGetRecord
   mov   edi,[pTaskRecord]
   test  edi,edi
-  jz    TaskSleepDone
+  jz    TaskSleep2
   mov   eax,[TimerOutTicksLo]
   mov   edx,[TimerOutTicksHi]
   add   eax,[TaskSleepTicks]
@@ -448,7 +448,7 @@ TaskSleep1:
   mov   [TaskStateIndex],eax
   call  TaskBlock
   call  TaskYield
-TaskSleepDone:
+TaskSleep2:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -466,19 +466,19 @@ TaskKeyboardRead:
   call  KbGetKey
   movzx eax,byte[KbOutHasKey]
   test  eax,eax
-  jz    TaskKeyboardReadBlock
+  jz    TaskKeyboardRead1
   movzx eax,byte[KbOutType]
   mov   [TaskKeyType],eax
   movzx eax,byte[KbOutChar]
   mov   [TaskKeyChar],eax
   ret
-TaskKeyboardReadBlock:
+TaskKeyboardRead1:
   mov   eax,[TaskCurrentIndex]
   mov   [TaskIndex],eax
   call  TaskGetRecord
   mov   edi,[pTaskRecord]
   test  edi,edi
-  jz    TaskKeyboardReadDone
+  jz    TaskKeyboardRead2
   mov   dword[edi+TASK_KEY_WAIT_ACTIVE],1
   mov   dword[edi+TASK_KEY_TYPE],KEY_NONE
   mov   dword[edi+TASK_KEY_CHAR],0
@@ -489,13 +489,13 @@ TaskKeyboardReadBlock:
   call  TaskGetCurrentRecord
   mov   edi,[pTaskRecord]
   test  edi,edi
-  jz    TaskKeyboardReadDone
+  jz    TaskKeyboardRead2
   mov   eax,[edi+TASK_KEY_TYPE]
   mov   [TaskKeyType],eax
   mov   eax,[edi+TASK_KEY_CHAR]
   mov   [TaskKeyChar],eax
   mov   dword[edi+TASK_KEY_WAIT_ACTIVE],0
-TaskKeyboardReadDone:
+TaskKeyboardRead2:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -534,7 +534,7 @@ TaskExitFromInterrupt:
   call  TaskGetCurrentRecord
   mov   edi,[pTaskRecord]
   test  edi,edi
-  jz    TaskExitFromInterruptDone
+  jz    TaskExitFromInterrupt1
   mov   eax,[TaskInterruptFrameEsp]
   mov   [edi+TASK_USER_IRET_ESP],eax
   mov   eax,[TaskExitCode]
@@ -545,7 +545,7 @@ TaskExitFromInterrupt:
   mov   dword[edi+TASK_SLEEP_ACTIVE],0
   mov   dword[edi+TASK_KEY_WAIT_ACTIVE],0
   mov   dword[edi+TASK_STATE],TASK_STATE_EXITED
-TaskExitFromInterruptDone:
+TaskExitFromInterrupt1:
   call  TaskSelectNext
   call  TaskResumeSelected
   ret
@@ -575,7 +575,7 @@ TaskSleepFromInterrupt1:
   call  TaskGetCurrentRecord
   mov   edi,[pTaskRecord]
   test  edi,edi
-  jz    TaskSleepFromInterruptDone
+  jz    TaskSleepFromInterrupt2
   mov   eax,[TaskInterruptFrameEsp]
   mov   [edi+TASK_USER_IRET_ESP],eax
   mov   eax,[TimerOutTicksLo]
@@ -586,7 +586,7 @@ TaskSleepFromInterrupt1:
   mov   [edi+TASK_WAKE_HI],edx
   mov   dword[edi+TASK_SLEEP_ACTIVE],1
   mov   dword[edi+TASK_STATE],TASK_STATE_BLOCKED
-TaskSleepFromInterruptDone:
+TaskSleepFromInterrupt2:
   call  TaskSelectNext
   call  TaskResumeSelected
   ret
@@ -603,17 +603,17 @@ TaskKeyboardReadFromInterrupt:
   call  KbGetKey
   movzx eax,byte[KbOutHasKey]
   test  eax,eax
-  jz    TaskKeyboardReadFromInterruptBlock
+  jz    TaskKeyboardReadFromInterrupt1
   movzx eax,byte[KbOutType]
   mov   [TaskKeyType],eax
   movzx eax,byte[KbOutChar]
   mov   [TaskKeyChar],eax
   ret
-TaskKeyboardReadFromInterruptBlock:
+TaskKeyboardReadFromInterrupt1:
   call  TaskGetCurrentRecord
   mov   edi,[pTaskRecord]
   test  edi,edi
-  jz    TaskKeyboardReadFromInterruptDone
+  jz    TaskKeyboardReadFromInterrupt3
   mov   eax,[TaskInterruptFrameEsp]
   mov   [edi+TASK_USER_IRET_ESP],eax
   mov   dword[edi+TASK_KEY_WAIT_ACTIVE],1
@@ -622,14 +622,14 @@ TaskKeyboardReadFromInterruptBlock:
   mov   dword[edi+TASK_STATE],TASK_STATE_BLOCKED
   mov   ebx,[edi+TASK_KCBLOCK_PTR]
   test  ebx,ebx
-  jz    TaskKeyboardReadFromInterruptSwitch
+  jz    TaskKeyboardReadFromInterrupt2
   mov   dword[ebx+KC_BLOCK_STATUS],KC_STATUS_OK
   mov   dword[ebx+KC_BLOCK_RESULT0],KEY_NONE
   mov   dword[ebx+KC_BLOCK_RESULT1],0
-TaskKeyboardReadFromInterruptSwitch:
+TaskKeyboardReadFromInterrupt2:
   call  TaskSelectNext
   call  TaskResumeSelected
-TaskKeyboardReadFromInterruptDone:
+TaskKeyboardReadFromInterrupt3:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -658,7 +658,7 @@ TaskProgramLoad:
   mov   dword[TaskProgramHandle],0
   mov   eax,[pTaskProgramName]
   test  eax,eax
-  jz    TaskProgramLoad4
+  jz    TaskProgramLoad3
   mov   eax,[TaskProgramTaskIndex]
   mov   [TaskIndex],eax
   call  TaskGetRecord
@@ -676,7 +676,7 @@ TaskProgramLoad:
   call  FsOpen
   mov   eax,[FsStatus]
   cmp   eax,FS_STATUS_OK
-  jne   TaskProgramLoad5
+  jne   TaskProgramLoad4
   mov   eax,[FsOpenHandle]
   mov   [TaskProgramHandle],eax
   mov   eax,[FsOpenSize]
@@ -684,7 +684,7 @@ TaskProgramLoad:
   call  TaskProgramValidateImage
   mov   eax,[TaskProgramStatus]
   test  eax,eax
-  jnz   TaskProgramLoad6
+  jnz   TaskProgramLoad5
   call  TaskProgramAlloc
   call  TaskProgramClearSlot
   mov   eax,[TaskProgramHandle]
@@ -696,7 +696,7 @@ TaskProgramLoad:
   call  FsRead
   mov   eax,[FsStatus]
   cmp   eax,FS_STATUS_OK
-  jne   TaskProgramLoad6
+  jne   TaskProgramLoad5
   mov   edi,[pTaskRecord]
   mov   dword[edi+TASK_STATE],TASK_STATE_READY
   mov   eax,[TaskProgramStackSlot]
@@ -743,23 +743,23 @@ TaskProgramLoad:
   mov   dword[edi+TASK_RUN_COUNT],0
   mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_OK
   call  TaskProgramCloseFile
-  jmp   TaskProgramLoad3
+  jmp   TaskProgramLoad6
 TaskProgramLoad1:
   mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_BAD_TASK
-  jmp   TaskProgramLoad3
+  jmp   TaskProgramLoad6
 TaskProgramLoad2:
   mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_BAD_STACK
-  jmp   TaskProgramLoad3
-TaskProgramLoad4:
+  jmp   TaskProgramLoad6
+TaskProgramLoad3:
   mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_BAD_IMAGE
-  jmp   TaskProgramLoad3
-TaskProgramLoad5:
+  jmp   TaskProgramLoad6
+TaskProgramLoad4:
   mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_NOT_FOUND
-  jmp   TaskProgramLoad3
-TaskProgramLoad6:
+  jmp   TaskProgramLoad6
+TaskProgramLoad5:
   call  TaskProgramCloseFile
   mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_FS_ERROR
-TaskProgramLoad3:
+TaskProgramLoad6:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -847,10 +847,10 @@ TaskProgramGetExitCode:
   call  TaskGetRecord
   mov   edi,[pTaskRecord]
   test  edi,edi
-  jz    TaskProgramGetExitCodeDone
+  jz    TaskProgramGetExitCode1
   mov   eax,[edi+TASK_EXIT_CODE]
   mov   [TaskProgramExitCode],eax
-TaskProgramGetExitCodeDone:
+TaskProgramGetExitCode1:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -867,17 +867,17 @@ TaskProgramSetArg:
   call  TaskGetRecord
   mov   edi,[pTaskRecord]
   test  edi,edi
-  jz    TaskProgramSetArgDone
+  jz    TaskProgramSetArg3
   mov   eax,[edi+TASK_KCBLOCK_PHYS]
   test  eax,eax
-  jz    TaskProgramSetArgDone
+  jz    TaskProgramSetArg3
   add   eax,USER_PROGRAM_KCBLOCK_SIZE
   mov   [TaskProgramArgCopyPtr],eax
   mov   edi,eax
   mov   word[edi],0
   mov   esi,[TaskProgramArgPtr]
   test  esi,esi
-  jz    TaskProgramSetArgDone
+  jz    TaskProgramSetArg3
   movzx eax,word[esi]
   cmp   eax,USER_PROGRAM_ARG_SIZE-2
   jbe   TaskProgramSetArg1
@@ -893,7 +893,7 @@ TaskProgramSetArg1:
 TaskProgramSetArg2:
   mov   eax,[TaskProgramArgCopyLeft]
   test  eax,eax
-  jz    TaskProgramSetArgDone
+  jz    TaskProgramSetArg3
   mov   esi,[TaskProgramArgCopySrc]
   mov   edi,[TaskProgramArgCopyPtr]
   mov   al,[esi]
@@ -904,7 +904,7 @@ TaskProgramSetArg2:
   mov   [TaskProgramArgCopyPtr],edi
   dec   dword[TaskProgramArgCopyLeft]
   jmp   TaskProgramSetArg2
-TaskProgramSetArgDone:
+TaskProgramSetArg3:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -936,12 +936,12 @@ TaskProgramPrintExitCodesN:
 TaskProgramPrintExitCodesN1:
   mov   eax,[TaskProgramPrintIndex]
   cmp   eax,[TaskProgramRunCount]
-  ja    TaskProgramPrintExitCodesNDone
+  ja    TaskProgramPrintExitCodesN5
   mov   [TaskIndex],eax
   call  TaskGetRecord
   mov   edi,[pTaskRecord]
   test  edi,edi
-  jz    TaskProgramPrintExitCodesNNext
+  jz    TaskProgramPrintExitCodesN4
   mov   eax,[TaskProgramPrintIndex]
   add   al,'0'
   mov   [TaskProgramExitStr+7],al
@@ -950,18 +950,18 @@ TaskProgramPrintExitCodesN1:
   mov   eax,[TaskExitCodeSum]
   mov   ebx,[TaskExitCodeYield]
   test  ebx,ebx
-  jz    TaskProgramPrintExitCodesNHex
+  jz    TaskProgramPrintExitCodesN2
   mov   [TaskPut4DecVal],eax
   lea   eax,[TaskProgramExitStr+14]
   mov   [pTaskPut4DecDst],eax
   call  TaskPut4Dec
-  jmp   TaskProgramPrintExitCodesNHigh
-TaskProgramPrintExitCodesNHex:
+  jmp   TaskProgramPrintExitCodesN3
+TaskProgramPrintExitCodesN2:
   mov   [TaskPut4HexVal],eax
   lea   eax,[TaskProgramExitStr+14]
   mov   [pTaskPut4HexDst],eax
   call  TaskPut4Hex
-TaskProgramPrintExitCodesNHigh:
+TaskProgramPrintExitCodesN3:
   mov   eax,[TaskExitCodeYield]
   mov   [TaskPut4DecVal],eax
   lea   eax,[TaskProgramExitStr+19]
@@ -971,10 +971,10 @@ TaskProgramPrintExitCodesNHigh:
   mov   [pVdStr],eax
   call  VdPutStr
   call  CnCrLf
-TaskProgramPrintExitCodesNNext:
+TaskProgramPrintExitCodesN4:
   inc   dword[TaskProgramPrintIndex]
   jmp   TaskProgramPrintExitCodesN1
-TaskProgramPrintExitCodesNDone:
+TaskProgramPrintExitCodesN5:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -991,14 +991,14 @@ TaskEnterUserMode:
   mov   dword[TaskEnterStatus],TASK_ENTER_STATUS_NO_TASK
   mov   edi,[pTaskRecord]
   test  edi,edi
-  jz    TaskEnterUserModeDone
+  jz    TaskEnterUserMode1
   mov   dword[TaskEnterStatus],TASK_ENTER_STATUS_NO_FRAME
   mov   eax,[edi+TASK_USER_IRET_ESP]
   test  eax,eax
-  jz    TaskEnterUserModeDone
+  jz    TaskEnterUserMode1
   mov   dword[TaskEnterStatus],TASK_ENTER_STATUS_DISABLED
   cmp   dword[TaskEnterEnabled],1
-  jne   TaskEnterUserModeDone
+  jne   TaskEnterUserMode1
   mov   dword[TaskEnterStatus],TASK_ENTER_STATUS_OK
   mov   ebx,eax
   mov   ax,USER_DATA_SEL
@@ -1008,7 +1008,7 @@ TaskEnterUserMode:
   mov   gs,ax
   mov   esp,ebx
   iretd
-TaskEnterUserModeDone:
+TaskEnterUserMode1:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -1022,11 +1022,11 @@ TaskIsUserMode:
   mov   dword[TaskModeIsUser],0
   mov   edi,[pTaskRecord]
   test  edi,edi
-  jz    TaskIsUserModeDone
+  jz    TaskIsUserMode1
   cmp   dword[edi+TASK_MODE],TASK_MODE_USER
-  jne   TaskIsUserModeDone
+  jne   TaskIsUserMode1
   mov   dword[TaskModeIsUser],1
-TaskIsUserModeDone:
+TaskIsUserMode1:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -1045,16 +1045,16 @@ TaskMemoryInfo:
   mul   ebx
   lea   edi,[TaskTable+eax]
   cmp   dword[edi+TASK_MODE],TASK_MODE_USER
-  jne   TaskMemoryInfoDone
+  jne   TaskMemoryInfo1
   mov   eax,[edi+TASK_PROGRAM_PHYS]
   test  eax,eax
-  jz    TaskMemoryInfoDone
+  jz    TaskMemoryInfo1
   mov   eax,[edi+TASK_PROGRAM_PAGES]
   mov   ebx,USER_PROGRAM_SLOT_SIZE
   mul   ebx
   mov   [TaskMemoryMappedBytes],eax
   mov   dword[TaskMemoryStatus],TASK_MEMORY_STATUS_OK
-TaskMemoryInfoDone:
+TaskMemoryInfo1:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -1075,7 +1075,7 @@ TaskMemoryGet:
   mov   dword[TaskMemoryBytes],0
   mov   eax,[TaskMemoryRequestBytes]
   test  eax,eax
-  jz    TaskMemoryGetDone
+  jz    TaskMemoryGet2
   add   eax,00000FFFh
   and   eax,0FFFFF000h
   mov   [TaskMemoryBytes],eax
@@ -1088,14 +1088,14 @@ TaskMemoryGet:
   mul   ebx
   lea   edi,[TaskTable+eax]
   cmp   dword[edi+TASK_MODE],TASK_MODE_USER
-  jne   TaskMemoryGetDone
+  jne   TaskMemoryGet2
   mov   eax,[edi+TASK_PROGRAM_PHYS]
   test  eax,eax
-  jz    TaskMemoryGetDone
+  jz    TaskMemoryGet2
   mov   eax,[edi+TASK_PROGRAM_PAGES]
   add   eax,[TaskMemoryPageCount]
   cmp   eax,USER_PROGRAM_MAX_PAGES
-  ja    TaskMemoryGetNoMemory
+  ja    TaskMemoryGet1
   mov   [TaskMemoryNewPages],eax
   mov   eax,[edi+TASK_PROGRAM_PAGES]
   mov   ebx,USER_PROGRAM_SLOT_SIZE
@@ -1108,9 +1108,9 @@ TaskMemoryGet:
   call  TaskMapSelectedProgram
   mov   dword[TaskMemoryStatus],TASK_MEMORY_STATUS_OK
   ret
-TaskMemoryGetNoMemory:
+TaskMemoryGet1:
   mov   dword[TaskMemoryStatus],TASK_MEMORY_STATUS_NO_MEMORY
-TaskMemoryGetDone:
+TaskMemoryGet2:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -1130,7 +1130,7 @@ TaskMemoryFree:
   mov   dword[TaskMemoryBytes],0
   mov   eax,[TaskMemoryRequestBytes]
   test  eax,eax
-  jz    TaskMemoryFreeDone
+  jz    TaskMemoryFree1
   add   eax,00000FFFh
   and   eax,0FFFFF000h
   mov   [TaskMemoryBytes],eax
@@ -1140,12 +1140,12 @@ TaskMemoryFree:
   mov   [TaskMemoryPageCount],eax
   mov   eax,[TaskMemoryPointer]
   cmp   eax,USER_PROGRAM_VIRTUAL_BASE
-  jb    TaskMemoryFreeDone
+  jb    TaskMemoryFree1
   sub   eax,USER_PROGRAM_VIRTUAL_BASE
   cmp   eax,USER_PROGRAM_MAX_SIZE
-  jae   TaskMemoryFreeDone
+  jae   TaskMemoryFree1
   test  eax,00000FFFh
-  jnz   TaskMemoryFreeDone
+  jnz   TaskMemoryFree1
   mov   ebx,USER_PROGRAM_SLOT_SIZE
   xor   edx,edx
   div   ebx
@@ -1155,23 +1155,23 @@ TaskMemoryFree:
   mul   ebx
   lea   edi,[TaskTable+eax]
   cmp   dword[edi+TASK_MODE],TASK_MODE_USER
-  jne   TaskMemoryFreeDone
+  jne   TaskMemoryFree1
   mov   eax,[edi+TASK_PROGRAM_PHYS]
   test  eax,eax
-  jz    TaskMemoryFreeDone
+  jz    TaskMemoryFree1
   mov   eax,[edi+TASK_PROGRAM_PAGES]
   sub   eax,[edi+TASK_IMAGE_PAGES]
   cmp   eax,[TaskMemoryPageCount]
-  jb    TaskMemoryFreeDone
+  jb    TaskMemoryFree1
   mov   eax,[edi+TASK_PROGRAM_PAGES]
   sub   eax,[TaskMemoryPageCount]
   cmp   eax,[TaskMemoryPageIndex]
-  jne   TaskMemoryFreeDone
+  jne   TaskMemoryFree1
   mov   [edi+TASK_PROGRAM_PAGES],eax
   mov   [pTaskRecord],edi
   call  TaskMapSelectedProgram
   mov   dword[TaskMemoryStatus],TASK_MEMORY_STATUS_OK
-TaskMemoryFreeDone:
+TaskMemoryFree1:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -1289,13 +1289,13 @@ TaskSelectNext6:
 TaskResumeSelected:
   mov   edi,[pTaskRecord]
   test  edi,edi
-  jz    TaskResumeSelectedDone
+  jz    TaskResumeSelected2
   cmp   dword[edi+TASK_MODE],TASK_MODE_USER
-  jne   TaskResumeSelectedRing0
+  jne   TaskResumeSelected1
   cmp   dword[TaskEnterEnabled],1
-  jne   TaskResumeSelectedRing0
+  jne   TaskResumeSelected1
   call  TaskEnterUserMode
-TaskResumeSelectedRing0:
+TaskResumeSelected1:
   mov   ax,DATA_DESC
   mov   ds,ax
   mov   es,ax
@@ -1303,7 +1303,7 @@ TaskResumeSelectedRing0:
   mov   gs,ax
   mov   edi,[pTaskRecord]
   mov   esp,[edi+TASK_SAVED_ESP]
-TaskResumeSelectedDone:
+TaskResumeSelected2:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -1316,12 +1316,12 @@ TaskResumeSelectedDone:
 TaskLoadRing0Stack:
   mov   edi,[pTaskRecord]
   test  edi,edi
-  jz    TaskLoadRing0StackDone
+  jz    TaskLoadRing0Stack1
   mov   eax,[edi+TASK_STACK_TOP]
   test  eax,eax
-  jz    TaskLoadRing0StackDone
+  jz    TaskLoadRing0Stack1
   mov   [Tss32+TSS_ESP0],eax
-TaskLoadRing0StackDone:
+TaskLoadRing0Stack1:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -1334,7 +1334,7 @@ TaskLoadRing0StackDone:
 TaskPrepareUserIretFrame:
   mov   edi,[pTaskRecord]
   test  edi,edi
-  jz    TaskPrepareUserIretFrameDone
+  jz    TaskPrepareUserIretFrame1
   mov   ebx,[edi+TASK_STACK_TOP]
   sub   ebx,USER_PROGRAM_RET_SLOT_SIZE+USER_PROGRAM_IRET_FRAME_SIZE
   mov   [edi+TASK_USER_IRET_ESP],ebx
@@ -1348,7 +1348,7 @@ TaskPrepareUserIretFrame:
   mov   [ebx+USER_IRET_ESP],eax
   mov   eax,[edi+TASK_USER_SS]
   mov   [ebx+USER_IRET_SS],eax
-TaskPrepareUserIretFrameDone:
+TaskPrepareUserIretFrame1:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -1367,34 +1367,34 @@ TaskWakeSleepers:
 TaskWakeSleepers1:
   mov   eax,[TaskWakeScanLeft]
   test  eax,eax
-  jz    TaskWakeSleepersDone
+  jz    TaskWakeSleepers4
   mov   eax,[TaskWakeScanIndex]
   mov   [TaskIndex],eax
   call  TaskGetRecord
   mov   edi,[pTaskRecord]
   test  edi,edi
-  jz    TaskWakeSleepersNext
+  jz    TaskWakeSleepers3
   cmp   dword[edi+TASK_STATE],TASK_STATE_BLOCKED
-  jne   TaskWakeSleepersNext
+  jne   TaskWakeSleepers3
   cmp   dword[edi+TASK_SLEEP_ACTIVE],1
-  jne   TaskWakeSleepersNext
+  jne   TaskWakeSleepers3
   mov   eax,[TaskWakeNowHi]
   cmp   eax,[edi+TASK_WAKE_HI]
-  jb    TaskWakeSleepersNext
-  ja    TaskWakeSleepersWake
+  jb    TaskWakeSleepers3
+  ja    TaskWakeSleepers2
   mov   eax,[TaskWakeNowLo]
   cmp   eax,[edi+TASK_WAKE_LO]
-  jb    TaskWakeSleepersNext
-TaskWakeSleepersWake:
+  jb    TaskWakeSleepers3
+TaskWakeSleepers2:
   mov   dword[edi+TASK_SLEEP_ACTIVE],0
   mov   eax,[TaskWakeScanIndex]
   mov   [TaskStateIndex],eax
   call  TaskWake
-TaskWakeSleepersNext:
+TaskWakeSleepers3:
   inc   dword[TaskWakeScanIndex]
   dec   dword[TaskWakeScanLeft]
   jmp   TaskWakeSleepers1
-TaskWakeSleepersDone:
+TaskWakeSleepers4:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -1410,33 +1410,33 @@ TaskWakeKeyboardWaiters:
   mov   dword[TaskKeyFoundPtr],0
   mov   dword[TaskKeyScanIndex],0
   mov   dword[TaskKeyScanLeft],MAX_TASKS
-TaskWakeKeyboardWaitersFind:
+TaskWakeKeyboardWaiters1:
   mov   eax,[TaskKeyScanLeft]
   test  eax,eax
-  jz    TaskWakeKeyboardWaitersDone
+  jz    TaskWakeKeyboardWaiters5
   mov   eax,[TaskKeyScanIndex]
   mov   [TaskIndex],eax
   call  TaskGetRecord
   mov   edi,[pTaskRecord]
   test  edi,edi
-  jz    TaskWakeKeyboardWaitersNext
+  jz    TaskWakeKeyboardWaiters2
   cmp   dword[edi+TASK_STATE],TASK_STATE_BLOCKED
-  jne   TaskWakeKeyboardWaitersNext
+  jne   TaskWakeKeyboardWaiters2
   cmp   dword[edi+TASK_KEY_WAIT_ACTIVE],1
-  jne   TaskWakeKeyboardWaitersNext
+  jne   TaskWakeKeyboardWaiters2
   mov   eax,[TaskKeyScanIndex]
   mov   [TaskKeyFoundIndex],eax
   mov   [TaskKeyFoundPtr],edi
-  jmp   TaskWakeKeyboardWaitersPoll
-TaskWakeKeyboardWaitersNext:
+  jmp   TaskWakeKeyboardWaiters3
+TaskWakeKeyboardWaiters2:
   inc   dword[TaskKeyScanIndex]
   dec   dword[TaskKeyScanLeft]
-  jmp   TaskWakeKeyboardWaitersFind
-TaskWakeKeyboardWaitersPoll:
+  jmp   TaskWakeKeyboardWaiters1
+TaskWakeKeyboardWaiters3:
   call  KbGetKey
   movzx eax,byte[KbOutHasKey]
   test  eax,eax
-  jz    TaskWakeKeyboardWaitersDone
+  jz    TaskWakeKeyboardWaiters5
   mov   edi,[TaskKeyFoundPtr]
   movzx eax,byte[KbOutType]
   mov   [edi+TASK_KEY_TYPE],eax
@@ -1445,17 +1445,17 @@ TaskWakeKeyboardWaitersPoll:
   mov   dword[edi+TASK_KEY_WAIT_ACTIVE],0
   mov   ebx,[edi+TASK_KCBLOCK_PTR]
   test  ebx,ebx
-  jz    TaskWakeKeyboardWaitersWake
+  jz    TaskWakeKeyboardWaiters4
   mov   dword[ebx+KC_BLOCK_STATUS],KC_STATUS_OK
   mov   eax,[edi+TASK_KEY_TYPE]
   mov   [ebx+KC_BLOCK_RESULT0],eax
   mov   eax,[edi+TASK_KEY_CHAR]
   mov   [ebx+KC_BLOCK_RESULT1],eax
-TaskWakeKeyboardWaitersWake:
+TaskWakeKeyboardWaiters4:
   mov   eax,[TaskKeyFoundIndex]
   mov   [TaskStateIndex],eax
   call  TaskWake
-TaskWakeKeyboardWaitersDone:
+TaskWakeKeyboardWaiters5:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -1472,10 +1472,10 @@ TaskGetStateRecord:
   call  TaskGetRecord
   mov   edi,[pTaskRecord]
   test  edi,edi
-  jz    TaskGetStateRecordBad
+  jz    TaskGetStateRecord1
   mov   dword[TaskStateStatus],TASK_STATUS_OK
   ret
-TaskGetStateRecordBad:
+TaskGetStateRecord1:
   mov   dword[TaskStateStatus],TASK_STATUS_BAD_TASK
   ret
 
@@ -1538,12 +1538,12 @@ TaskMapSelectedStack1:
 TaskMapSelectedStack2:
   mov   edi,[pTaskRecord]
   test  edi,edi
-  jz    TaskMapSelectedStackDone
+  jz    TaskMapSelectedStack3
   cmp   dword[edi+TASK_MODE],TASK_MODE_USER
-  jne   TaskMapSelectedStackDone
+  jne   TaskMapSelectedStack3
   mov   eax,[edi+TASK_STACK_BOTTOM]
   test  eax,eax
-  jz    TaskMapSelectedStackDone
+  jz    TaskMapSelectedStack3
   and   eax,0FFFFF000h
   mov   ebx,eax
   shr   ebx,12
@@ -1551,7 +1551,7 @@ TaskMapSelectedStack2:
   add   ebx,PgTable0
   or    eax,PG_USER_FLAGS
   mov   [ebx],eax
-TaskMapSelectedStackDone:
+TaskMapSelectedStack3:
   mov   eax,PgDirectory
   mov   cr3,eax
   ret
@@ -1567,12 +1567,12 @@ TaskGetRecord:
   mov   dword[pTaskRecord],0
   mov   eax,[TaskIndex]
   cmp   eax,MAX_TASKS
-  jae   TaskGetRecordDone
+  jae   TaskGetRecord1
   mov   ebx,TASK_RECORD_SIZE
   mul   ebx
   lea   edi,[TaskTable+eax]
   mov   [pTaskRecord],edi
-TaskGetRecordDone:
+TaskGetRecord1:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -1590,7 +1590,7 @@ TaskGetStackBounds:
   mov   dword[TaskStackBottom],0
   mov   eax,[TaskStackSlot]
   cmp   eax,STACK_SLOT_COUNT
-  jae   TaskGetStackBoundsDone
+  jae   TaskGetStackBounds1
   mov   ebx,STACK_SLOT_SIZE
   mul   ebx
   mov   ebx,STACK_ARENA_TOP
@@ -1598,7 +1598,7 @@ TaskGetStackBounds:
   mov   [TaskStackTop],ebx
   sub   ebx,STACK_SLOT_SIZE
   mov   [TaskStackBottom],ebx
-TaskGetStackBoundsDone:
+TaskGetStackBounds1:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -1610,11 +1610,11 @@ TaskProgramValidateImage:
   mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_BAD_IMAGE
   mov   eax,[TaskProgramImageSize]
   test  eax,eax
-  jz    TaskProgramValidateImageDone
+  jz    TaskProgramValidateImage1
   cmp   eax,USER_PROGRAM_MAX_SIZE
-  ja    TaskProgramValidateImageDone
+  ja    TaskProgramValidateImage1
   mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_OK
-TaskProgramValidateImageDone:
+TaskProgramValidateImage1:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -1659,11 +1659,11 @@ TaskProgramAlloc:
 TaskProgramCloseFile:
   mov   eax,[TaskProgramHandle]
   test  eax,eax
-  jz    TaskProgramCloseFileDone
+  jz    TaskProgramCloseFile1
   mov   [FsCloseHandle],eax
   call  FsClose
   mov   dword[TaskProgramHandle],0
-TaskProgramCloseFileDone:
+TaskProgramCloseFile1:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -1681,7 +1681,7 @@ TaskProgramClearSlot:
 TaskProgramClearSlot1:
   mov   eax,[TaskProgramClearLeft]
   test  eax,eax
-  jz    TaskProgramClearSlotDone
+  jz    TaskProgramClearSlot2
   mov   edi,[TaskProgramClearPtr]
   mov   byte[edi],0
   inc   edi
@@ -1689,7 +1689,7 @@ TaskProgramClearSlot1:
   dec   eax
   mov   [TaskProgramClearLeft],eax
   jmp   TaskProgramClearSlot1
-TaskProgramClearSlotDone:
+TaskProgramClearSlot2:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -1705,19 +1705,19 @@ TaskProgramCheckDoneN:
 TaskProgramCheckDoneN1:
   mov   eax,[TaskProgramCheckIndex]
   cmp   eax,[TaskProgramRunCount]
-  ja    TaskProgramCheckDoneNOk
+  ja    TaskProgramCheckDoneN2
   mov   [TaskIndex],eax
   call  TaskGetRecord
   mov   edi,[pTaskRecord]
   test  edi,edi
-  jz    TaskProgramCheckDoneNDone
+  jz    TaskProgramCheckDoneN3
   cmp   dword[edi+TASK_STATE],TASK_STATE_EXITED
-  jne   TaskProgramCheckDoneNDone
+  jne   TaskProgramCheckDoneN3
   inc   dword[TaskProgramCheckIndex]
   jmp   TaskProgramCheckDoneN1
-TaskProgramCheckDoneNOk:
+TaskProgramCheckDoneN2:
   mov   dword[TaskProgramDone],1
-TaskProgramCheckDoneNDone:
+TaskProgramCheckDoneN3:
   ret
 
 ;--------------------------------------------------------------------------------------------------
