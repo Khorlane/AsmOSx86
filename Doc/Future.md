@@ -467,6 +467,7 @@ KcMmGetMemory and KcMmFreeMemory are real trusted-only page services
 KcMmInfo is a normal-user memory introspection service
 Memory.asm is now the memory-management boundary
 current Memory.asm routes task-owned user memory to Task.asm
+Memory.asm owns a small kernel heap used by Fs.asm for the system catalog
 legacy gateway address 00100005h is denied
 STARTUP.TXT exercises privilege smoke tests through ordinary console commands
 ```

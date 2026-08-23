@@ -735,9 +735,9 @@ block-device layer, and the only current block device is floppy A:. The kernel
 also has a special internal writer for the preallocated `LOG.TXT` console
 mirror; this is not a general file-write service.
 The system catalog is self-describing: its header records the catalog byte size,
-file table offset, file entry size, and file entry count. Current kernel code
-loads catalogs up to its fixed in-memory buffer limit, but the on-disk catalog
-format is not fixed to one sector.
+file table offset, file entry size, and file entry count. `Fs.asm` reads the
+catalog size from that header, allocates kernel-owned memory through
+`MemoryKernelGet`, and then loads the full catalog there.
 Shared device type IDs, device IDs, and the static device registry are defined
 in `Config.asm`.
 
@@ -811,9 +811,9 @@ KcMmFreeMemory  - Release user memory
 KcMmInfo        - Get memory limits/available memory for task/session
 ```
 
-`Memory.asm` is the kernel memory-management boundary. The current
-`KcMmGetMemory` / `KcMmFreeMemory` path routes through `Memory.asm` to the
-task-owned user-memory allocator in `Task.asm`.
+`Memory.asm` is the kernel memory-management boundary. It currently owns a small
+page-rounded kernel heap after `KernelEnd` and routes the `KcMmGetMemory` /
+`KcMmFreeMemory` path to the task-owned user-memory allocator in `Task.asm`.
 
 The current implementation is intentionally small. Trusted/system tasks can grow
 their own user mapping by whole pages from the task's reserved user-program slot.
@@ -821,6 +821,10 @@ their own user mapping by whole pages from the task's reserved user-program slot
 first allocator stack-like instead of a full heap. `KcMmInfo` is normal-user
 accessible and returns the calling task's current mapped user bytes plus the
 fixed maximum user-program byte count.
+
+Kernel-owned allocations use `MemoryKernelGet` / `MemoryKernelFree`. The first
+kernel heap is also stack-like and page-rounded. `Fs.asm` uses it to load the
+self-describing system catalog.
 
 The broader memory-service list should remain small until real user programs
 need more.
@@ -1013,6 +1017,8 @@ Example conceptual layout:
            kernel stacks
            kernel buffers
 KernelEnd
+           small kernel heap
+KernelHeapEnd
 
 UserPoolBase
            user task memory blocks
