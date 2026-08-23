@@ -18,15 +18,16 @@ Sector 1      AsmOSx86 file manifest
 Sector 2+     Kernel.bin sectors
 ```
 
-The image is not FAT12. It is a raw sector image with an AsmOSx86 `ASMF`
-manifest in sector 1. Boot only needs the manifest entry for `KERNEL.BIN`.
+The image is not FAT12. It is a raw sector image with an AsmOSx86 manifest in
+sector 1 identified by the `ASMF` manifest signature. Boot only needs the
+manifest entry for `KERNEL.BIN`.
 
 The manifest is one 512-byte sector. The fields Boot depends on are:
 
 Manifest header:
 
 ```text
-Offset 0  4 bytes  Signature: ASMF
+Offset 0  4 bytes  ASMF manifest signature
 Offset 4  2 bytes  Version: 1
 Offset 6  2 bytes  Entry count
 Offset 16          First file entry

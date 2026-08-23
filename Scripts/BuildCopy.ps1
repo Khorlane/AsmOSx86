@@ -186,11 +186,11 @@ try {
     if ($fs) { $fs.Close() }
   }
 
-  Write-Host "[4/4] Verifying manifest signature..."
+  Write-Host "[4/4] Verifying ASMF manifest signature..."
   $imageBytes = [System.IO.File]::ReadAllBytes($Image)
   $actualSig = [System.Text.Encoding]::ASCII.GetString($imageBytes, $ManifestSector * $BytesPerSector, 4)
   if ($actualSig -ne "ASMF") {
-    Fail "Manifest signature was '$actualSig', expected ASMF."
+    Fail "ASMF manifest signature was '$actualSig', expected ASMF."
   }
 
   Write-Host "SUCCESS: raw AsmOSx86 floppy image populated."

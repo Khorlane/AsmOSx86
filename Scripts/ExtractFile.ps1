@@ -53,7 +53,7 @@ $imageBytes = [System.IO.File]::ReadAllBytes($Image)
 $manifestOffset = $ManifestSector * $BytesPerSector
 $sig = [System.Text.Encoding]::ASCII.GetString($imageBytes, $manifestOffset, 4)
 if ($sig -ne "ASMF") {
-  throw "Manifest signature was '$sig', expected ASMF."
+  throw "ASMF manifest signature was '$sig', expected ASMF."
 }
 
 $entryCount = Read-UInt16Le $imageBytes ($manifestOffset + 6)

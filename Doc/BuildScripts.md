@@ -162,12 +162,12 @@ Required inputs:
 
 Writes:
 
-- sector `1`: the `ASMF` manifest
+- sector `1`: the manifest sector with the `ASMF` manifest signature
 - sector `2+`: `KERNEL.BIN`
 
 Manifest format:
 
-- offset `0`: four-byte signature `ASMF`
+- offset `0`: four-byte `ASMF` manifest signature
 - offset `4`: version word, currently `1`
 - offset `6`: entry-count word
 - offset `16`: first 32-byte file entry
