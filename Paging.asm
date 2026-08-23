@@ -318,16 +318,16 @@ PgGeneralProtectionFault:
   mov   dword[PgLastFaultVector],PG_GP_FAULT_VECTOR
   call  PgClassifyFault
   cmp   dword[PgLastFaultIsUser],1
-  jne   PgGeneralProtectionFaultHalt
+  jne   PgGeneralProtectionFault1
   call  PgPrintUserFault
   mov   [TaskInterruptFrameEsp],esp
   mov   dword[TaskExitCode],PG_USER_GP_EXIT_CODE
   call  TaskExitFromInterrupt
-PgGeneralProtectionFaultHalt:
-  cli
 PgGeneralProtectionFault1:
+  cli
+PgGeneralProtectionFault2:
   hlt
-  jmp   PgGeneralProtectionFault1
+  jmp   PgGeneralProtectionFault2
 
 ;--------------------------------------------------------------------------------------------------
 ; PgPageFault
@@ -341,16 +341,16 @@ PgPageFault:
   mov   dword[PgLastFaultVector],PG_PAGE_FAULT_VECTOR
   call  PgClassifyFault
   cmp   dword[PgLastFaultIsUser],1
-  jne   PgPageFaultHalt
+  jne   PgPageFault1
   call  PgPrintUserFault
   mov   [TaskInterruptFrameEsp],esp
   mov   dword[TaskExitCode],PG_USER_PF_EXIT_CODE
   call  TaskExitFromInterrupt
-PgPageFaultHalt:
-  cli
 PgPageFault1:
+  cli
+PgPageFault2:
   hlt
-  jmp   PgPageFault1
+  jmp   PgPageFault2
 
 ;--------------------------------------------------------------------------------------------------
 ; PgClassifyFault
@@ -364,7 +364,7 @@ PgClassifyFault:
   mov   dword[PgFaultCs],0
   mov   ebx,[PgFaultFrameEsp]
   test  ebx,ebx
-  jz    PgClassifyFaultDone
+  jz    PgClassifyFault1
   mov   eax,[ebx]
   mov   [PgFaultError],eax
   mov   eax,[ebx+4]
@@ -373,9 +373,9 @@ PgClassifyFault:
   mov   [PgFaultCs],eax
   and   eax,00000003h
   cmp   eax,3
-  jne   PgClassifyFaultDone
+  jne   PgClassifyFault1
   mov   dword[PgLastFaultIsUser],1
-PgClassifyFaultDone:
+PgClassifyFault1:
   ret
 
 ;--------------------------------------------------------------------------------------------------
