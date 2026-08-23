@@ -69,67 +69,67 @@ KbGetKey:
   mov   [KbOutChar],al                  ; Clear output character
   in    al,KBD_STATUS_PORT              ; Read keyboard status
   test  al,0x01                         ; Key available?
-  jz    KbGetKeyNoKey
+  jz    KbGetKey9
   in    al,KBD_DATA_PORT                ; Read key data
   mov   [KbWorkScanCode],al             ; Save scancode
   test  al,0x80                         ; Break code?
-  jnz   KbGetKeyOnBreak
+  jnz   KbGetKey4
   cmp   al,0x2A                         ; Shift down?
-  je    KbGetKeyShiftDown
+  je    KbGetKey5
   cmp   al,0x36
-  je    KbGetKeyShiftDown
+  je    KbGetKey5
   cmp   al,0x1C                         ; Enter?
-  je    KbGetKeyMakeEnter
+  je    KbGetKey7
   cmp   al,0x0E                         ; Backspace?
-  je    KbGetKeyMakeBackspace
+  je    KbGetKey8
   xor   esi,esi
   mov   al,[KbWorkScanCode]
   movzx esi,al                          ; ESI = scancode
   mov   bl,[KbModShift]                 ; BL = shift state
   test  bl,bl
-  jz    KbGetKeyUnshifted
-KbGetKeyShifted:
+  jz    KbGetKey2
+KbGetKey1:
   mov   al,[KbScanToAsciiShift+esi]     ; Shifted ASCII
-  jmp   KbGetKeyMaybeChar
-KbGetKeyUnshifted:
+  jmp   KbGetKey3
+KbGetKey2:
   mov   al,[KbScanToAscii+esi]          ; Unshifted ASCII
-KbGetKeyMaybeChar:
+KbGetKey3:
   test  al,al
-  jz    KbGetKeyNoKey
+  jz    KbGetKey9
   mov   bl,1
   mov   [KbOutHasKey],bl                ; Mark key present
   mov   bl,KEY_CHAR
   mov   [KbOutType],bl                  ; Mark as char
   mov   [KbOutChar],al                  ; Store char
   ret
-KbGetKeyOnBreak:
+KbGetKey4:
   and   al,0x7F                         ; Remove break bit
   cmp   al,0x2A                         ; Shift up?
-  je    KbGetKeyShiftUp
+  je    KbGetKey6
   cmp   al,0x36
-  je    KbGetKeyShiftUp
-  jmp   KbGetKeyNoKey
-KbGetKeyShiftDown:
+  je    KbGetKey6
+  jmp   KbGetKey9
+KbGetKey5:
   mov   al,1
   mov   [KbModShift],al                 ; Set shift
-  jmp   KbGetKeyNoKey
-KbGetKeyShiftUp:
+  jmp   KbGetKey9
+KbGetKey6:
   xor   eax,eax
   mov   [KbModShift],al                 ; Clear shift
-  jmp   KbGetKeyNoKey
-KbGetKeyMakeEnter:
+  jmp   KbGetKey9
+KbGetKey7:
   mov   al,1
   mov   [KbOutHasKey],al                ; Mark key present
   mov   al,KEY_ENTER
   mov   [KbOutType],al                  ; Mark as enter
   ret
-KbGetKeyMakeBackspace:
+KbGetKey8:
   mov   al,1
   mov   [KbOutHasKey],al                ; Mark key present
   mov   al,KEY_BACKSPACE
   mov   [KbOutType],al                  ; Mark as backspace
   ret
-KbGetKeyNoKey:
+KbGetKey9:
   ret
 
 ; ----- Storage -----

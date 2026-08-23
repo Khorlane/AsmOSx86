@@ -93,31 +93,31 @@ StrTrimLead:
   mov   edi,[pStr1]                     ; EDI = Str
   movzx ecx,word[edi]                  ; ECX = len
   test  ecx,ecx
-  jz    StrTrimLeadDone
+  jz    StrTrimLead4
   lea   esi,[edi+2]                    ; ESI = payload
   xor   eax,eax                        ; EAX = skip count
-StrTrimLeadScan:
+StrTrimLead1:
   test  ecx,ecx
-  jz    StrTrimLeadAllSpaces
+  jz    StrTrimLead2
   cmp   byte[esi],' '
-  jne   StrTrimLeadMove
+  jne   StrTrimLead3
   inc   esi
   inc   eax
   dec   ecx
-  jmp   StrTrimLeadScan
-StrTrimLeadAllSpaces:
+  jmp   StrTrimLead1
+StrTrimLead2:
   mov   word[edi],0
   ret
-StrTrimLeadMove:
+StrTrimLead3:
   test  eax,eax
-  jz    StrTrimLeadDone                ; no leading spaces
+  jz    StrTrimLead4                   ; no leading spaces
   movzx ecx,word[edi]                  ; ECX = old len
   sub   ecx,eax                        ; new len
   mov   [edi],cx
   lea   edi,[edi+2]                    ; dst = payload start
   ; ESI already at first non-space (src)
   rep   movsb
-StrTrimLeadDone:
+StrTrimLead4:
   ret
 
 ;------------------------------------------------------------------------------
@@ -134,22 +134,22 @@ StrTrimTrail:
   mov   edi,[pStr1]                     ; EDI = Str
   movzx ecx,word[edi]                  ; ECX = len
   test  ecx,ecx
-  jz    StrTrimTrailDone
+  jz    StrTrimTrail4
   lea   esi,[edi+2]
   lea   esi,[esi+ecx-1]                ; last char
 StrTrimTrail1:
   test  ecx,ecx
-  jz    StrTrimTrailAllSpaces
+  jz    StrTrimTrail2
   cmp   byte[esi],' '
-  jne   StrTrimTrailStore
+  jne   StrTrimTrail3
   dec   esi
   dec   ecx
   jmp   StrTrimTrail1
-StrTrimTrailAllSpaces:
+StrTrimTrail2:
   xor   ecx,ecx
-StrTrimTrailStore:
+StrTrimTrail3:
   mov   [edi],cx
-StrTrimTrailDone:
+StrTrimTrail4:
   ret
 
 ;------------------------------------------------------------------------------
