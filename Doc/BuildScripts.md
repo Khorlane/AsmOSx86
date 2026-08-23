@@ -1,6 +1,6 @@
 # Build Scripts
 
-AsmOSx86 build and run helpers live in `Scripts`. The normal workflow assumes the
+AsmOSx86 build helpers live in `Scripts`. The normal workflow assumes the
 terminal is already in the `Scripts` folder before running a script.
 
 Most scripts pause before exiting when run interactively. A few lower-level build
@@ -8,78 +8,9 @@ scripts accept `noexit` so wrapper scripts can call them without stopping.
 
 For the boot-sector layout and boot handoff details, see `Doc/BootProcess.md`.
 
-## Common Workflows
+## BuildBoot.ps1
 
-### Rebuild Kernel and Run
-
-Use this for the usual protected-mode kernel edit/test loop when `Boot.bin` and
-`floppy.img` are already valid.
-
-```powershell
-.\BuildKernelAndRun.ps1
-```
-
-This runs:
-
-```text
-BuildKernel.ps1 noexit
-BuildCopy.ps1
-Bochs
-```
-
-### Prepare Floppy From Scratch
-
-Use this after changing `Boot.asm`, after needing a clean floppy image, or after
-changing the raw floppy layout.
-
-```powershell
-.\BuildBoot.ps1
-.\BuildWriteBoot.ps1
-.\BuildKernel.ps1
-.\BuildCopy.ps1
-.\AsmOSx86Run.ps1
-```
-
-`BuildWriteBoot.ps1` recreates `floppy.img`, so anything previously copied into
-the image is removed.
-
-### Run Existing Image
-
-Use this when `floppy.img` has already been prepared and populated.
-
-```powershell
-.\AsmOSx86Run.ps1
-```
-
-This does not rebuild or copy files. It only launches Bochs with
-`AsmOSx86.bxrc`.
-
-## Script Reference
-
-### AsmOSx86Run.ps1
-
-Launches AsmOSx86 in Bochs.
-
-Inputs:
-
-- `AsmOSx86.bxrc`
-- `floppy.img`
-- Bochs at `C:\Program Files\Bochs-3.0\bochs.exe`
-
-Output:
-
-- Starts Bochs using the current `floppy.img`
-
-Notes:
-
-- Exit code `1` from Bochs is treated as an acceptable user power-off.
-- Does not rebuild or copy anything.
-- Tolerates non-interactive shells that cannot clear the host terminal or wait
-  for a keypress.
-
-### BuildBoot.ps1
-
-Assembles the boot sector.
+Assembles the 512-byte boot sector binary from `Boot.asm`.
 
 Inputs:
 
@@ -100,33 +31,51 @@ Notes:
 
 - Deletes old `Boot.bin` and `Boot.lst` before assembling.
 - `Boot.bin` must be exactly 512 bytes before `BuildWriteBoot.ps1` can use it.
+- Accepts `noexit` to skip the ending pause.
 
-### BuildWriteBoot.ps1
+## BuildCopy.ps1
 
-Creates and prepares `floppy.img` from scratch.
+Writes the AsmOSx86 raw floppy manifest and packed boot/runtime files into an
+existing `floppy.img`.
 
-Inputs:
+Required inputs:
 
-- `Boot.bin`
+- `floppy.img`
+- `Kernel.bin`
 
-Outputs:
+Optional inputs:
 
-- fresh `floppy.img`
+- `Prog1.bin`
+- `Prog2.bin`
+- `Prog3.bin`
+- `Prog4.bin`
+- `Data.txt`
+- non-empty `Startup.txt`
 
-Behavior:
+Writes:
 
-- Verifies `Boot.bin` exists and is exactly 512 bytes.
-- Deletes and recreates `floppy.img` as a blank 1.44MB image.
-- Writes `Boot.bin` to sector 0.
-- Verifies the `55 AA` boot signature.
+- sector `1`: the manifest sector with the `ASMF` manifest signature
+- sector `2+`: packed file bodies
+- a reserved, zero-filled `LOG.TXT` file entry
+
+Manifest format:
+
+- offset `0`: four-byte `ASMF` manifest signature
+- offset `4`: version word, currently `1`
+- offset `6`: entry-count word
+- offset `16`: first 32-byte file entry
+
+Each file entry records an uppercase 8.3 name, starting sector, byte size, and
+sector count.
 
 Notes:
 
-- Does not format the image as FAT12.
 - Does not mount the image.
-- `BuildCopy.ps1` must be run after this before the image can boot past Boot.
+- Does not copy files through FAT12.
+- Packs file bodies contiguously and pads each file to a whole sector.
+- Supports at most 15 manifest entries in this first version.
 
-### BuildKernel.ps1
+## BuildKernel.ps1
 
 Assembles the protected-mode kernel.
 
@@ -151,45 +100,81 @@ Arguments:
 - `noexit`: skip the ending pause for wrapper scripts.
 - `exit`: exit after completion for legacy behavior.
 
-### BuildCopy.ps1
+## BuildKernelAndRun.ps1
 
-Writes the AsmOSx86 raw floppy manifest and the protected-mode kernel image.
-
-Required inputs:
-
-- `floppy.img`
-- `Kernel.bin`
-
-Writes:
-
-- sector `1`: the manifest sector with the `ASMF` manifest signature
-- sector `2+`: `KERNEL.BIN`
-
-Manifest format:
-
-- offset `0`: four-byte `ASMF` manifest signature
-- offset `4`: version word, currently `1`
-- offset `6`: entry-count word
-- offset `16`: first 32-byte file entry
-
-Each file entry records an uppercase 8.3 name, starting sector, byte size, and
-sector count.
-
-Notes:
-
-- Does not mount the image.
-- Does not copy files through FAT12.
-- Packs file bodies contiguously and pads each file to a whole sector.
-
-### BuildKernelAndRun.ps1
-
-Wrapper script for rebuilding the kernel, copying files to the floppy, and
-launching Bochs.
+Builds the kernel, refreshes the floppy image contents, and launches AsmOSx86 in
+Bochs.
 
 Runs:
 
 - `BuildKernel.ps1 noexit`
 - `BuildCopy.ps1`
-- Bochs
+- Bochs through `AsmOSx86Run.ps1` behavior
 
-Use this for the usual kernel edit/test loop.
+Use this for the usual kernel edit/test loop when the boot sector and image
+already exist.
+
+Notes:
+
+- Does not rebuild `Boot.bin`.
+- Does not recreate `floppy.img`.
+- Use the from-scratch workflow after changing `Boot.asm` or the raw image
+  layout.
+
+## BuildPrograms.ps1
+
+Assembles available `Prog*.asm` user programs into flat binaries.
+
+Inputs:
+
+- `Prog1.asm`, if present
+- `Prog2.asm`, if present
+- `Prog3.asm`, if present
+- `Prog4.asm`, if present
+
+Outputs:
+
+- matching `.bin` files
+- matching `.lst` files
+
+Commands:
+
+```text
+nasm -f bin Prog1.asm -o Prog1.bin -l Prog1.lst
+nasm -f bin Prog2.asm -o Prog2.bin -l Prog2.lst
+nasm -f bin Prog3.asm -o Prog3.bin -l Prog3.lst
+nasm -f bin Prog4.asm -o Prog4.bin -l Prog4.lst
+```
+
+Notes:
+
+- Skips a program if the matching `.asm` file is not present.
+- User programs are raw flat binaries consumed by the current loader contract.
+- Run `BuildCopy.ps1` afterward to place rebuilt program binaries into
+  `floppy.img`.
+
+## BuildWriteBoot.ps1
+
+Creates a fresh raw 1.44MB floppy image, writes `Boot.bin` to sector 0, and
+verifies the boot signature.
+
+Inputs:
+
+- `Boot.bin`
+
+Outputs:
+
+- fresh `floppy.img`
+
+Behavior:
+
+- Verifies `Boot.bin` exists and is exactly 512 bytes.
+- Deletes and recreates `floppy.img` as a blank 1.44MB image.
+- Writes `Boot.bin` to sector 0.
+- Verifies the `55 AA` boot signature at bytes 510-511.
+
+Notes:
+
+- Does not format the image.
+- Does not mount the image.
+- Requires `BuildCopy.ps1` afterward before the image can boot past `Boot.asm`.
