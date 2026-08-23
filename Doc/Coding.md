@@ -3,7 +3,7 @@
 AsmOSx86 favors **clarity, consistency, and mechanical readability**
 over brevity or cleverness.
 
-These rules are enforced across the entire codebase.
+These rules are enforced across the entire kernel.
 
 ---
 

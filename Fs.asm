@@ -736,25 +736,25 @@ FsDrvFindEntry:
 FsDrvFindEntry1:
   mov   eax,[FsEntryLeft]
   test  eax,eax
-  jz    FsDrvFindEntryNotFound
+  jz    FsDrvFindEntry4
   mov   edi,[pFsEntry]
   mov   esi,FsName83
   mov   ecx,FSDRV_NAME_SIZE
-FsDrvFindEntryCmp:
+FsDrvFindEntry2:
   mov   al,[esi]
   cmp   al,[edi]
-  jne   FsDrvFindEntryNext
+  jne   FsDrvFindEntry3
   inc   esi
   inc   edi
   dec   ecx
-  jnz   FsDrvFindEntryCmp
+  jnz   FsDrvFindEntry2
   mov   dword[FsStatus],FS_STATUS_OK
   ret
-FsDrvFindEntryNext:
+FsDrvFindEntry3:
   add   dword[pFsEntry],FSDRV_ENTRY_SIZE
   dec   dword[FsEntryLeft]
   jmp   FsDrvFindEntry1
-FsDrvFindEntryNotFound:
+FsDrvFindEntry4:
   mov   dword[pFsEntry],0
   mov   dword[FsStatus],FS_STATUS_NOT_FOUND
   ret
