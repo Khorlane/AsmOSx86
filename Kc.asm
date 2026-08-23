@@ -695,14 +695,14 @@ KcMmGetMemoryHandler:
   mov   dword[KcResult0],0
   mov   dword[KcResult1],0
   mov   eax,[KcArg0]
-  mov   [TaskMemoryRequestBytes],eax
-  call  TaskMemoryGet
-  mov   eax,[TaskMemoryStatus]
-  cmp   eax,TASK_MEMORY_STATUS_OK
+  mov   [MemoryRequestBytes],eax
+  call  MemoryTaskGet
+  mov   eax,[MemoryStatus]
+  cmp   eax,MEM_STATUS_OK
   jne   KcMmGetMemoryHandler1
-  mov   eax,[TaskMemoryPointer]
+  mov   eax,[MemoryPointer]
   mov   [KcResult0],eax
-  mov   eax,[TaskMemoryBytes]
+  mov   eax,[MemoryBytes]
   mov   [KcResult1],eax
   mov   dword[KcStatus],KC_STATUS_OK
   ret
@@ -724,14 +724,14 @@ KcMmFreeMemoryHandler:
   mov   dword[KcResult0],0
   mov   dword[KcResult1],0
   mov   eax,[KcArg0]
-  mov   [TaskMemoryPointer],eax
+  mov   [MemoryPointer],eax
   mov   eax,[KcArg1]
-  mov   [TaskMemoryRequestBytes],eax
-  call  TaskMemoryFree
-  mov   eax,[TaskMemoryStatus]
-  cmp   eax,TASK_MEMORY_STATUS_OK
+  mov   [MemoryRequestBytes],eax
+  call  MemoryTaskFree
+  mov   eax,[MemoryStatus]
+  cmp   eax,MEM_STATUS_OK
   jne   KcMmFreeMemoryHandler1
-  mov   eax,[TaskMemoryBytes]
+  mov   eax,[MemoryBytes]
   mov   [KcResult1],eax
   mov   dword[KcStatus],KC_STATUS_OK
   ret
@@ -749,13 +749,13 @@ KcMmFreeMemoryHandler1:
 KcMmInfoHandler:
   mov   dword[KcResult0],0
   mov   dword[KcResult1],0
-  call  TaskMemoryInfo
-  mov   eax,[TaskMemoryStatus]
-  cmp   eax,TASK_MEMORY_STATUS_OK
+  call  MemoryTaskInfo
+  mov   eax,[MemoryStatus]
+  cmp   eax,MEM_STATUS_OK
   jne   KcMmInfoHandler1
-  mov   eax,[TaskMemoryMappedBytes]
+  mov   eax,[MemoryMappedBytes]
   mov   [KcResult0],eax
-  mov   eax,[TaskMemoryMaxBytes]
+  mov   eax,[MemoryMaxBytes]
   mov   [KcResult1],eax
   mov   dword[KcStatus],KC_STATUS_OK
   ret

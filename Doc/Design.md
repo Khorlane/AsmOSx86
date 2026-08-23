@@ -24,6 +24,7 @@ Console.asm
 Fs.asm
 Keyboard.asm
 Kc.asm
+Memory.asm
 Paging.asm
 Task.asm
 Time.asm
@@ -810,12 +811,16 @@ KcMmFreeMemory  - Release user memory
 KcMmInfo        - Get memory limits/available memory for task/session
 ```
 
-The current `KcMmGetMemory` / `KcMmFreeMemory` implementation is intentionally
-small. Trusted/system tasks can grow their own user mapping by whole pages from
-the task's reserved user-program slot. `FreeMemory` currently releases only the
-most recent allocation, keeping the first allocator stack-like instead of a full
-heap. `KcMmInfo` is normal-user accessible and returns the calling task's
-current mapped user bytes plus the fixed maximum user-program byte count.
+`Memory.asm` is the kernel memory-management boundary. The current
+`KcMmGetMemory` / `KcMmFreeMemory` path routes through `Memory.asm` to the
+task-owned user-memory allocator in `Task.asm`.
+
+The current implementation is intentionally small. Trusted/system tasks can grow
+their own user mapping by whole pages from the task's reserved user-program slot.
+`FreeMemory` currently releases only the most recent allocation, keeping the
+first allocator stack-like instead of a full heap. `KcMmInfo` is normal-user
+accessible and returns the calling task's current mapped user bytes plus the
+fixed maximum user-program byte count.
 
 The broader memory-service list should remain small until real user programs
 need more.

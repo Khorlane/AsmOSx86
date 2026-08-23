@@ -33,9 +33,6 @@
 ;   - TaskProgramPrintExitCodesN
 ;   - TaskEnterUserMode
 ;   - TaskIsUserMode
-;   - TaskMemoryInfo
-;   - TaskMemoryGet
-;   - TaskMemoryFree
 ;   - TaskExit
 ;   - TaskYield
 ;

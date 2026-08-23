@@ -108,6 +108,7 @@ Tss32:
 %include "Video.asm"
 %include "Paging.asm"
 %include "Fs.asm"
+%include "Memory.asm"
 %include "Kc.asm"
 %include "Task.asm"
 
@@ -134,6 +135,7 @@ FlushCS:
   lea   eax,[IDT2]                      ; Load the IDT
   lidt  [eax]                           ;  register
   call  PgInit                          ; Enable identity-mapped paging
+  call  MemoryInit                      ; Initialize memory-management layer
   call  KcInit                          ; Install user kernel-call interrupt gate
 
   ; Initialize subsystems
