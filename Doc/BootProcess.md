@@ -1,71 +1,27 @@
 # Boot Process
 
-This document describes how AsmOSx86 gets from a blank floppy image to a
-bootable disk, and then how the boot path proceeds from BIOS handoff through
+This document describes the AsmOSx86 boot path from BIOS handoff through
 `Boot.asm` and into the protected-mode kernel.
 
-## From Blank Image to Boot Disk
+For build-script details, including how `floppy.img` is created, populated, and
+run under Bochs, see `Doc/BuildScripts.md`.
 
-AsmOSx86 currently uses a 1.44MB raw floppy image named `floppy.img`.
+## Boot Media Assumptions
 
-The boot disk is created in two broad phases:
+AsmOSx86 currently boots from a 1.44MB raw floppy image named `floppy.img`.
 
-1. Prepare the blank floppy image and write the boot sector.
-2. Write the AsmOSx86 manifest and packed kernel/runtime files.
-
-The main preparation script is:
-
-```powershell
-.\BuildWriteBoot.ps1
-```
-
-That script assumes it is run from the `Scripts` folder.
-
-## BuildWriteBoot.ps1
-
-`BuildWriteBoot.ps1` creates a fresh floppy image and installs the boot sector.
-
-Its input is:
-
-```text
-Boot.bin
-```
-
-Its output is:
-
-```text
-floppy.img
-```
-
-The script does this:
-
-1. Verifies `Boot.bin` exists.
-2. Verifies `Boot.bin` is exactly 512 bytes.
-3. Deletes any existing `floppy.img`.
-4. Creates a new 1,474,560-byte image.
-5. Writes `Boot.bin` directly to byte offset 0.
-6. Verifies the boot signature at bytes `510-511` is `55 AA`.
-
-The script does not format the image as FAT12.
-
-## Raw Floppy Layout
-
-The current floppy layout is:
+The boot path assumes this high-level sector layout:
 
 ```text
 Sector 0      Boot.bin
 Sector 1      AsmOSx86 file manifest
-Sector 2+     Kernel.bin
-Next sectors  Prog1.bin
-Next sectors  Prog2.bin
-Next sectors  Prog3.bin
-Next sectors  Prog4.bin, if present
-Next sectors  Data.txt, if present
-Next sectors  Startup.txt, if present
-Final sectors LOG.TXT reserved console mirror
+Sector 2+     Kernel.bin sectors
 ```
 
-The manifest is one 512-byte sector.
+The image is not FAT12. It is a raw sector image with an AsmOSx86 `ASMF`
+manifest in sector 1. Boot only needs the manifest entry for `KERNEL.BIN`.
+
+The manifest is one 512-byte sector. The fields Boot depends on are:
 
 Manifest header:
 
@@ -85,52 +41,11 @@ Offset +16   4 bytes  File byte size
 Offset +20   4 bytes  File sector count
 ```
 
-File data is packed contiguously after the manifest and rounded up to whole
-512-byte sectors.
-
-## Copying Files After Preparation
-
-After `floppy.img` exists, the normal copy script is:
-
-```powershell
-.\BuildCopy.ps1
-```
-
-That script writes the manifest and raw file data.
-
-`KERNEL.BIN` is required.
-
-The script also includes optional input files when they exist:
-
-```text
-PROG1.BIN
-PROG2.BIN
-PROG3.BIN
-PROG4.BIN
-DATA.TXT
-STARTUP.TXT
-```
-
-`LOG.TXT` is a reserved kernel-owned console mirror file. The build script
-preallocates it, and the kernel clears it during startup before logging begins.
-
-`STARTUP.TXT` is optional. When present, the kernel console reads it after
-initialization and runs each nonblank line through the normal console command
-dispatcher. `Startup.txt` is the source file normally packed into the image as
-`STARTUP.TXT`. Its expected contents are ordinary console commands, such as
-diagnostics, smoke-test runs, setup commands, or `shutdown` for an automated
-test image.
-
-The console `Run` command can launch one to three programs together, for example
-`run prog1.bin | prog2.bin | prog3.bin`.
-
 ## Real Hardware Note
 
 `floppy.img` is intended to remain a standard 1.44MB sector image that can later
 be written sector-for-sector to a real floppy, for example with WinImage and a
 USB floppy drive.
-
-It is no longer intended to be mounted or edited as a FAT12 floppy.
 
 ## BIOS Handoff
 
@@ -148,9 +63,7 @@ At this point, AsmOSx86 is executing `Boot.asm`.
 
 `Boot.asm` is the current AsmOSx86 boot loader.
 
-It is deliberately small because it must fit in one 512-byte boot sector, but it
-now performs the whole boot handoff itself. There is no separate `Boot2.asm`
-stage in the current boot path.
+It is deliberately small because it must fit in one 512-byte boot sector, but it performs the whole boot handoff itself.
 
 Boot is responsible for:
 
@@ -271,26 +184,9 @@ Boot intentionally does not leave interrupts enabled for the kernel handoff.
 
 ## End-to-End Summary
 
-The full path looks like this:
+The boot path looks like this:
 
 ```text
-BuildBoot.ps1
-  -> Boot.asm becomes Boot.bin
-
-BuildWriteBoot.ps1
-  -> creates blank floppy.img
-  -> writes Boot.bin to sector 0
-
-BuildKernel.ps1
-  -> Kernel.asm and included modules become Kernel.bin
-
-BuildPrograms.ps1
-  -> Prog1/2/3/4.asm become raw Prog*.bin
-
-BuildCopy.ps1
-  -> writes the ASMF manifest to sector 1
-  -> writes Kernel.bin and optional runtime files contiguously from sector 2
-
 BIOS
   -> loads sector 0 to 0000:7C00
   -> jumps to Boot
