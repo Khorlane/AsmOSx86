@@ -84,6 +84,9 @@ BootLoad:
     call  FloppyRead
     inc   si
     add   bx,512
+    jnc   BootLoad1
+    inc   byte [FdcDmaPage]
+BootLoad1:
     dec   bp
     jnz   BootLoad
 
