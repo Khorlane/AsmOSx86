@@ -503,24 +503,24 @@ TimeIsLeapYear:
   mov   ecx,4
   div   ecx
   test  edx,edx
-  jnz   TimeIsLeapYear1
+  jnz   TimeIsLeapYear2
   movzx eax,word[TimeYear]
   xor   edx,edx
   mov   ecx,100
   div   ecx
   test  edx,edx
-  jnz   TimeIsLeapYear2
+  jnz   TimeIsLeapYear1
   movzx eax,word[TimeYear]
   xor   edx,edx
   mov   ecx,400
   div   ecx
   test  edx,edx
-  jnz   TimeIsLeapYear1
-TimeIsLeapYear2:
+  jnz   TimeIsLeapYear2
+TimeIsLeapYear1:
   mov   al,1
   mov   [TimeLeapOut],al
   ret
-TimeIsLeapYear1:
+TimeIsLeapYear2:
   xor   al,al
   mov   [TimeLeapOut],al
   ret

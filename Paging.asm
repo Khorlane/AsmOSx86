@@ -154,9 +154,9 @@ PgMapUserProgram:
   mov   eax,1
 PgMapUserProgram1:
   cmp   eax,PG_USER_MAX_PAGES
-  jbe   PgMapUserProgram3
+  jbe   PgMapUserProgram2
   mov   eax,PG_USER_MAX_PAGES
-PgMapUserProgram3:
+PgMapUserProgram2:
   mov   [PgUserPageLeft],eax
   mov   [PgUserMappedCount],eax
   mov   eax,[PgUserPhysBase]
@@ -164,7 +164,7 @@ PgMapUserProgram3:
   mov   [PgUserMapPhys],eax
   mov   eax,PgTable0+(PG_USER_PTE*4)
   mov   [PgUserPteAddr],eax
-PgMapUserProgram2:
+PgMapUserProgram3:
   mov   eax,[PgUserMapPhys]
   or    eax,PG_USER_FLAGS
   mov   edi,[PgUserPteAddr]
@@ -177,7 +177,7 @@ PgMapUserProgram2:
   mov   eax,[PgUserPageLeft]
   dec   eax
   mov   [PgUserPageLeft],eax
-  jnz   PgMapUserProgram2
+  jnz   PgMapUserProgram3
   mov   eax,PG_USER_MAX_PAGES
   sub   eax,[PgUserMappedCount]
   mov   [PgUserClearLeft],eax
