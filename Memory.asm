@@ -9,11 +9,14 @@
 ; Contains
 ;   - Memory status constants
 ;   - Memory service globals
+;   - Shared physical-page allocation foundation
 ;   - Simple kernel-owned stack-like heap
 ;   - Current-task user memory routing
 ;
 ; Public API
 ;   - MemoryInit
+;   - MemoryPhysicalGet
+;   - MemoryPhysicalFree
 ;   - MemoryKernelGet
 ;   - MemoryKernelFree
 ;   - MemoryTaskInfo
@@ -21,6 +24,8 @@
 ;   - MemoryTaskFree
 ;
 ; Notes
+;   - The shared physical-page pool currently manages a fixed, identity-mapped
+;     staging range. Kernel and task allocators will migrate to it separately.
 ;   - Kernel memory is currently a small page-rounded stack-like heap.
 ;   - User memory routing intentionally preserves the existing task-memory
 ;     behavior.
@@ -37,6 +42,10 @@ MEM_STATUS_OK        equ 0
 MEM_STATUS_BAD_ARG   equ 1
 MEM_STATUS_NO_MEMORY equ 2
 MEM_KERNEL_HEAP_BYTES equ 00010000h
+MEM_PHYSICAL_POOL_START equ 00800000h
+MEM_PHYSICAL_POOL_END equ 01000000h
+MEM_PHYSICAL_PAGE_COUNT equ (MEM_PHYSICAL_POOL_END-MEM_PHYSICAL_POOL_START)/PG_PAGE_SIZE
+MEM_PHYSICAL_BITMAP_BYTES equ MEM_PHYSICAL_PAGE_COUNT/8
 
 ;--------------------------------------------------------------------------------------------------
 ; Memory Globals
@@ -53,6 +62,16 @@ MemoryKernelHeapEnd  dd 0               ; exclusive kernel heap end
 MemoryKernelNext     dd 0               ; next kernel heap byte
 MemoryClearPtr       dd 0               ; work: memory clear pointer
 MemoryClearLeft      dd 0               ; work: bytes left to clear
+MemoryPhysicalRequestPages dd 0         ; input: contiguous physical pages requested/freed
+MemoryPhysicalAddress dd 0              ; input/output: first physical page address
+MemoryPhysicalStatus dd 0               ; output: MEM_STATUS_*
+MemoryPhysicalPageIndex dd 0            ; work: physical-pool page index
+MemoryPhysicalRunStart dd 0             ; work: first page index in candidate run
+MemoryPhysicalRunLength dd 0            ; work: free pages in candidate run
+MemoryPhysicalMarkLeft dd 0              ; work: pages left to mark
+MemoryPhysicalBitSet dd 0                ; output: 1 when selected bitmap bit is set
+MemoryPhysicalBitmap:
+  times MEM_PHYSICAL_BITMAP_BYTES db 0
 
 ;--------------------------------------------------------------------------------------------------
 ; External Routines
@@ -76,7 +95,135 @@ MemoryInit:
   mov   [MemoryKernelNext],eax
   add   eax,MEM_KERNEL_HEAP_BYTES
   mov   [MemoryKernelHeapEnd],eax
+  call  MemoryPhysicalInit
   mov   dword[MemoryStatus],MEM_STATUS_OK
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; MemoryPhysicalGet
+;   Input:
+;     MemoryPhysicalRequestPages = number of contiguous physical pages requested.
+;   Output:
+;     MemoryPhysicalStatus  = MEM_STATUS_*.
+;     MemoryPhysicalAddress = first allocated physical page, or 0.
+;   Notes:
+;     Allocated pages are cleared before they are returned.
+;--------------------------------------------------------------------------------------------------
+MemoryPhysicalGet:
+  mov   dword[MemoryPhysicalStatus],MEM_STATUS_BAD_ARG
+  mov   dword[MemoryPhysicalAddress],0
+  mov   eax,[MemoryPhysicalRequestPages]
+  test  eax,eax
+  jz    MemoryPhysicalGet6
+  cmp   eax,MEM_PHYSICAL_PAGE_COUNT
+  ja    MemoryPhysicalGet5
+  mov   dword[MemoryPhysicalPageIndex],0
+  mov   dword[MemoryPhysicalRunStart],0
+  mov   dword[MemoryPhysicalRunLength],0
+MemoryPhysicalGet1:
+  call  MemoryPhysicalTestBit
+  cmp   dword[MemoryPhysicalBitSet],0
+  jne   MemoryPhysicalGet3
+  cmp   dword[MemoryPhysicalRunLength],0
+  jne   MemoryPhysicalGet2
+  mov   eax,[MemoryPhysicalPageIndex]
+  mov   [MemoryPhysicalRunStart],eax
+MemoryPhysicalGet2:
+  inc   dword[MemoryPhysicalRunLength]
+  mov   eax,[MemoryPhysicalRunLength]
+  cmp   eax,[MemoryPhysicalRequestPages]
+  je    MemoryPhysicalGet7
+  jmp   MemoryPhysicalGet4
+MemoryPhysicalGet3:
+  mov   dword[MemoryPhysicalRunLength],0
+MemoryPhysicalGet4:
+  inc   dword[MemoryPhysicalPageIndex]
+  cmp   dword[MemoryPhysicalPageIndex],MEM_PHYSICAL_PAGE_COUNT
+  jb    MemoryPhysicalGet1
+MemoryPhysicalGet5:
+  mov   dword[MemoryPhysicalStatus],MEM_STATUS_NO_MEMORY
+MemoryPhysicalGet6:
+  ret
+MemoryPhysicalGet7:
+  mov   eax,[MemoryPhysicalRunStart]
+  mov   [MemoryPhysicalPageIndex],eax
+  mov   eax,[MemoryPhysicalRequestPages]
+  mov   [MemoryPhysicalMarkLeft],eax
+MemoryPhysicalGet8:
+  call  MemoryPhysicalSetBit
+  inc   dword[MemoryPhysicalPageIndex]
+  dec   dword[MemoryPhysicalMarkLeft]
+  jnz   MemoryPhysicalGet8
+  mov   eax,[MemoryPhysicalRunStart]
+  mov   ebx,PG_PAGE_SIZE
+  mul   ebx
+  add   eax,MEM_PHYSICAL_POOL_START
+  mov   [MemoryPhysicalAddress],eax
+  mov   [MemoryClearPtr],eax
+  mov   eax,[MemoryPhysicalRequestPages]
+  mov   ebx,PG_PAGE_SIZE
+  mul   ebx
+  mov   [MemoryClearLeft],eax
+  call  MemoryClear
+  mov   dword[MemoryPhysicalStatus],MEM_STATUS_OK
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; MemoryPhysicalFree
+;   Input:
+;     MemoryPhysicalAddress      = first physical page to free.
+;     MemoryPhysicalRequestPages = number of contiguous physical pages to free.
+;   Output:
+;     MemoryPhysicalStatus = MEM_STATUS_*.
+;   Notes:
+;     The complete range is validated before any bitmap bits are cleared.
+;--------------------------------------------------------------------------------------------------
+MemoryPhysicalFree:
+  mov   dword[MemoryPhysicalStatus],MEM_STATUS_BAD_ARG
+  mov   eax,[MemoryPhysicalRequestPages]
+  test  eax,eax
+  jz    MemoryPhysicalFree3
+  cmp   eax,MEM_PHYSICAL_PAGE_COUNT
+  ja    MemoryPhysicalFree3
+  mov   eax,[MemoryPhysicalAddress]
+  cmp   eax,MEM_PHYSICAL_POOL_START
+  jb    MemoryPhysicalFree3
+  cmp   eax,MEM_PHYSICAL_POOL_END
+  jae   MemoryPhysicalFree3
+  test  eax,PG_PAGE_SIZE-1
+  jnz   MemoryPhysicalFree3
+  sub   eax,MEM_PHYSICAL_POOL_START
+  mov   ebx,PG_PAGE_SIZE
+  xor   edx,edx
+  div   ebx
+  mov   [MemoryPhysicalPageIndex],eax
+  add   eax,[MemoryPhysicalRequestPages]
+  cmp   eax,MEM_PHYSICAL_PAGE_COUNT
+  ja    MemoryPhysicalFree3
+  mov   eax,[MemoryPhysicalRequestPages]
+  mov   [MemoryPhysicalMarkLeft],eax
+MemoryPhysicalFree1:
+  call  MemoryPhysicalTestBit
+  cmp   dword[MemoryPhysicalBitSet],1
+  jne   MemoryPhysicalFree3
+  inc   dword[MemoryPhysicalPageIndex]
+  dec   dword[MemoryPhysicalMarkLeft]
+  jnz   MemoryPhysicalFree1
+  mov   eax,[MemoryPhysicalAddress]
+  sub   eax,MEM_PHYSICAL_POOL_START
+  mov   ebx,PG_PAGE_SIZE
+  xor   edx,edx
+  div   ebx
+  mov   [MemoryPhysicalPageIndex],eax
+  mov   eax,[MemoryPhysicalRequestPages]
+  mov   [MemoryPhysicalMarkLeft],eax
+MemoryPhysicalFree2:
+  call  MemoryPhysicalClearBit
+  inc   dword[MemoryPhysicalPageIndex]
+  dec   dword[MemoryPhysicalMarkLeft]
+  jnz   MemoryPhysicalFree2
+  mov   dword[MemoryPhysicalStatus],MEM_STATUS_OK
+MemoryPhysicalFree3:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -216,6 +363,76 @@ MemoryTaskFree:
 ;--------------------------------------------------------------------------------------------------
 ; Internal Routines
 ;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; MemoryPhysicalInit
+;   Output:
+;     Clears the physical-page allocation bitmap.
+;--------------------------------------------------------------------------------------------------
+MemoryPhysicalInit:
+  mov   dword[MemoryPhysicalRequestPages],0
+  mov   dword[MemoryPhysicalAddress],0
+  mov   dword[MemoryPhysicalStatus],MEM_STATUS_OK
+  mov   eax,MemoryPhysicalBitmap
+  mov   [MemoryClearPtr],eax
+  mov   dword[MemoryClearLeft],MEM_PHYSICAL_BITMAP_BYTES
+  call  MemoryClear
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; MemoryPhysicalTestBit
+;   Input:
+;     MemoryPhysicalPageIndex = physical-pool page index.
+;   Output:
+;     MemoryPhysicalBitSet = 1 when allocated, otherwise 0.
+;--------------------------------------------------------------------------------------------------
+MemoryPhysicalTestBit:
+  mov   dword[MemoryPhysicalBitSet],0
+  mov   eax,[MemoryPhysicalPageIndex]
+  mov   ecx,eax
+  and   ecx,7
+  shr   eax,3
+  movzx ebx,byte[MemoryPhysicalBitmap+eax]
+  mov   eax,1
+  shl   eax,cl
+  test  ebx,eax
+  jz    MemoryPhysicalTestBit1
+  mov   dword[MemoryPhysicalBitSet],1
+MemoryPhysicalTestBit1:
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; MemoryPhysicalSetBit
+;   Input:
+;     MemoryPhysicalPageIndex = physical-pool page index.
+;--------------------------------------------------------------------------------------------------
+MemoryPhysicalSetBit:
+  mov   eax,[MemoryPhysicalPageIndex]
+  mov   ecx,eax
+  and   ecx,7
+  shr   eax,3
+  lea   edi,[MemoryPhysicalBitmap+eax]
+  mov   ebx,1
+  shl   ebx,cl
+  or    [edi],bl
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; MemoryPhysicalClearBit
+;   Input:
+;     MemoryPhysicalPageIndex = physical-pool page index.
+;--------------------------------------------------------------------------------------------------
+MemoryPhysicalClearBit:
+  mov   eax,[MemoryPhysicalPageIndex]
+  mov   ecx,eax
+  and   ecx,7
+  shr   eax,3
+  lea   edi,[MemoryPhysicalBitmap+eax]
+  mov   ebx,1
+  shl   ebx,cl
+  not   ebx
+  and   [edi],bl
+  ret
 
 ;--------------------------------------------------------------------------------------------------
 ; MemoryClear

@@ -10,6 +10,7 @@
 ;   - Fault IDT gate installation
 ;   - Identity-mapped page directory and page tables
 ;   - Shared user virtual page-range remapping
+;   - General mapping helpers for existing page tables
 ;   - CR3/CR0 paging enable path
 ;   - Minimal fault handlers for page fault and general protection fault
 ;
@@ -53,6 +54,9 @@ PG_USER_PF_EXIT_CODE equ 00000F0Eh
 PG_USER_PTE     equ 512
 PG_USER_MAX_PAGES equ 16
 PG_USER_KC_PTE  equ PG_USER_PTE+PG_USER_MAX_PAGES
+PG_STATUS_OK    equ 0
+PG_STATUS_BAD_ARG equ 1
+PG_STATUS_NO_TABLE equ 2
 
 ;--------------------------------------------------------------------------------------------------
 ; Paging Permission Intent
@@ -99,6 +103,11 @@ PgFaultError    dd 0                    ; debug: error code from CPU-pushed faul
 PgFaultCr2      dd 0                    ; debug: CR2 linear address for page faults
 PgLastFaultVector dd 0                  ; debug: last fault vector entered
 PgLastFaultIsUser dd 0                  ; debug: 1 if fault frame came from ring 3
+PgMapVirtualAddress dd 0                ; input: page-aligned virtual address
+PgMapPhysicalAddress dd 0               ; input: page-aligned physical address
+PgMapFlags      dd 0                    ; input: PG_* entry flags
+PgMapStatus     dd 0                    ; output: PG_STATUS_*
+PgMapPteAddress dd 0                    ; work: selected page-table entry
 String  PgUserFaultStr,"User fault 0000 cs 0000 eip 00000000 addr 00000000"
 
 align 4096
@@ -204,8 +213,98 @@ PgMapUserProgram5:
   ret
 
 ;--------------------------------------------------------------------------------------------------
+; PgMapPage
+;   Input:
+;     PgMapVirtualAddress  = page-aligned virtual address.
+;     PgMapPhysicalAddress = page-aligned physical address.
+;     PgMapFlags           = writable/user flags for the page-table entry.
+;   Output:
+;     PgMapStatus = PG_STATUS_*.
+;   Notes:
+;     Maps one page through an existing page table and reloads CR3. This helper
+;     does not allocate page tables.
+;--------------------------------------------------------------------------------------------------
+PgMapPage:
+  mov   dword[PgMapStatus],PG_STATUS_BAD_ARG
+  mov   eax,[PgMapVirtualAddress]
+  test  eax,PG_PAGE_SIZE-1
+  jnz   PgMapPage1
+  mov   eax,[PgMapPhysicalAddress]
+  test  eax,PG_PAGE_SIZE-1
+  jnz   PgMapPage1
+  call  PgFindPte
+  cmp   dword[PgMapStatus],PG_STATUS_OK
+  jne   PgMapPage1
+  mov   eax,[PgMapPhysicalAddress]
+  mov   ebx,[PgMapFlags]
+  and   ebx,00000FFFh
+  or    eax,ebx
+  or    eax,PG_PRESENT
+  mov   edi,[PgMapPteAddress]
+  mov   [edi],eax
+  mov   eax,PgDirectory
+  mov   cr3,eax
+PgMapPage1:
+  ret
+
+;--------------------------------------------------------------------------------------------------
+; PgUnmapPage
+;   Input:
+;     PgMapVirtualAddress = page-aligned virtual address.
+;   Output:
+;     PgMapStatus = PG_STATUS_*.
+;   Notes:
+;     Clears one entry in an existing page table and reloads CR3.
+;--------------------------------------------------------------------------------------------------
+PgUnmapPage:
+  mov   dword[PgMapStatus],PG_STATUS_BAD_ARG
+  mov   eax,[PgMapVirtualAddress]
+  test  eax,PG_PAGE_SIZE-1
+  jnz   PgUnmapPage1
+  call  PgFindPte
+  cmp   dword[PgMapStatus],PG_STATUS_OK
+  jne   PgUnmapPage1
+  mov   edi,[PgMapPteAddress]
+  mov   dword[edi],0
+  mov   eax,PgDirectory
+  mov   cr3,eax
+PgUnmapPage1:
+  ret
+
+;--------------------------------------------------------------------------------------------------
 ; Internal Routines
 ;--------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------
+; PgFindPte
+;   Input:
+;     PgMapVirtualAddress = page-aligned virtual address.
+;   Output:
+;     PgMapStatus     = PG_STATUS_OK or PG_STATUS_NO_TABLE.
+;     PgMapPteAddress = selected page-table entry when successful.
+;--------------------------------------------------------------------------------------------------
+PgFindPte:
+  mov   dword[PgMapStatus],PG_STATUS_NO_TABLE
+  mov   dword[PgMapPteAddress],0
+  mov   eax,[PgMapVirtualAddress]
+  mov   ebx,eax
+  shr   eax,22
+  shl   eax,2
+  mov   edi,PgDirectory
+  add   edi,eax
+  mov   eax,[edi]
+  test  eax,PG_PRESENT
+  jz    PgFindPte1
+  and   eax,0FFFFF000h
+  mov   edi,eax
+  shr   ebx,12
+  and   ebx,000003FFh
+  shl   ebx,2
+  add   edi,ebx
+  mov   [PgMapPteAddress],edi
+  mov   dword[PgMapStatus],PG_STATUS_OK
+PgFindPte1:
+  ret
 
 ;--------------------------------------------------------------------------------------------------
 ; PgInstallFaultGates
