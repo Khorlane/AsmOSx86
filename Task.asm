@@ -13,7 +13,7 @@
 ;   - Ready-task selection and cooperative task switching
 ;   - Stack-slot bounds helpers
 ;   - Raw user-program loading and task setup
-;   - Shared virtual user-program page mapping
+;   - Per-task physical-page ownership and shared virtual-page mapping
 ;
 ; Public API
 ;   - TaskGetCurrentRecord
@@ -39,7 +39,7 @@
 ; Notes
 ;   - Task metadata is kernel-owned.
 ;   - Task stacks live in the low-memory stack-slot arena.
-;   - Loaded user programs reserve physical pages above the kernel.
+;   - Loaded user programs and task growth use the shared physical-page pool.
 ;   - User tasks run through a shared virtual base range.
 ;   - Registers are scratch only.
 ;   - Persistent inputs/outputs use Task* globals.
@@ -95,7 +95,9 @@ TASK_USER_IRET_ESP   equ 96
 TASK_MODE            equ 100
 TASK_AUTHORITY       equ 104
 TASK_IMAGE_PAGES     equ 108
-TASK_RECORD_SIZE     equ 112
+TASK_PAGE_LIST       equ 112
+TASK_PAGE_LIST_COUNT equ 16
+TASK_RECORD_SIZE     equ TASK_PAGE_LIST+(TASK_PAGE_LIST_COUNT*4)
 
 ;--------------------------------------------------------------------------------------------------
 ; Task Table and Stack-Slot Constants
@@ -115,11 +117,12 @@ TASK_PROGRAM_STATUS_BAD_TASK    equ 2
 TASK_PROGRAM_STATUS_BAD_STACK   equ 3
 TASK_PROGRAM_STATUS_BAD_IMAGE   equ 4
 TASK_PROGRAM_STATUS_FS_ERROR    equ 5
+TASK_PROGRAM_STATUS_NO_MEMORY   equ 6
 TASK_MEMORY_STATUS_OK            equ 0
 TASK_MEMORY_STATUS_BAD_ARG       equ 1
 TASK_MEMORY_STATUS_NO_MEMORY     equ 2
 USER_PROGRAM_SLOT_SIZE          equ 00001000h
-USER_PROGRAM_MAX_PAGES          equ PG_USER_MAX_PAGES
+USER_PROGRAM_MAX_PAGES          equ TASK_PAGE_LIST_COUNT
 USER_PROGRAM_MAX_SIZE           equ USER_PROGRAM_SLOT_SIZE*USER_PROGRAM_MAX_PAGES
 USER_PROGRAM_VIRTUAL_BASE       equ 00200000h
 USER_PROGRAM_KCBLOCK_SIZE       equ 32
@@ -186,6 +189,7 @@ TaskUserPtr          dd 0               ; input: user pointer to validate
 TaskUserSize         dd 0               ; input: validation byte count
 TaskUserLimit        dd 0               ; work: exclusive range limit
 TaskUserOk           dd 0               ; output: 1 if range is valid, else 0
+TaskInitIndex        dd 0               ; work: task record being reclaimed
 TaskInitPtr          dd 0               ; work: table clear pointer
 TaskInitLeft         dd 0               ; work: table clear byte count
 pTaskProgramName     dd 0               ; input: pointer to kernel Str filename
@@ -207,16 +211,15 @@ TaskModeIsUser      dd 0                ; output: 1 if pTaskRecord is user mode
 TaskInterruptFrameEsp dd 0              ; input: ring 3 interrupt-frame ESP
 TaskProgramEntryPtr  dd 0               ; output: loaded program entry address
 TaskProgramKcBlockPtr dd 0              ; output: loaded program KcBlock address
-TaskProgramNextLoadBase dd 0            ; work: next dynamic user-program load base
 TaskProgramLoadBase  dd 0               ; work: selected program load base
-TaskProgramAllocSize  dd 0              ; work: bytes reserved for loaded program
 TaskProgramPageCount  dd 0              ; work: pages reserved for loaded program
 TaskProgramImageSize dd 0               ; work: raw image size
 TaskProgramImageAllocSize dd 0          ; work: bytes reserved for raw image
 TaskProgramKcBlockPhysPtr dd 0          ; work: physical KcBlock page address
 TaskProgramHandle    dd 0               ; work: open file handle
-TaskProgramClearPtr   dd 0              ; work: user slot clear pointer
-TaskProgramClearLeft  dd 0              ; work: user slot clear byte count
+TaskProgramPageIndex dd 0               ; work: user page-list index
+TaskProgramPageLeft dd 0                ; work: user pages left to record
+TaskProgramPagePhys dd 0                ; work: physical user page address
 TaskProgramDone       dd 0              ; work: 1 when test tasks have exited
 TaskExitCodeSum       dd 0              ; work: low 16-bit exit-code sum
 TaskExitCodeYield     dd 0              ; work: high 16-bit exit-code yield count
@@ -230,6 +233,12 @@ TaskMemoryStatus     dd 0               ; output: TASK_MEMORY_STATUS_*
 TaskMemoryPageCount  dd 0               ; work: page count for memory request
 TaskMemoryPageIndex  dd 0               ; work: page index for memory pointer
 TaskMemoryNewPages   dd 0               ; work: new mapped user page count
+TaskMemoryPhysicalAddress dd 0          ; work: first allocated physical page
+TaskMemoryPageLeft  dd 0                ; work: physical pages left to store/free
+TaskMapPageIndex    dd 0                ; work: selected task page-list index
+TaskMapVirtualAddress dd 0              ; work: selected user virtual page
+TaskReleasePageIndex dd 0               ; work: owned page-list index
+TaskReleasePageLeft dd 0                ; work: owned pages left to release
 String  TaskProgramExitStr,"Task 0 exit 0000 0000"
 TaskTable:
   times MAX_TASKS * TASK_RECORD_SIZE db 0
@@ -340,7 +349,17 @@ TaskValidateUserRange:
   mov   [TaskUserLimit],eax
   cmp   ebx,USER_PROGRAM_VIRTUAL_BASE
   jb    TaskValidateUserRange1
-  cmp   eax,USER_PROGRAM_VIRTUAL_BASE+USER_PROGRAM_MAX_SIZE
+  cmp   ebx,USER_PROGRAM_VIRTUAL_BASE+USER_PROGRAM_MAX_SIZE
+  jae   TaskValidateUserRange1
+  mov   eax,[TaskCurrentIndex]
+  mov   ecx,TASK_RECORD_SIZE
+  mul   ecx
+  lea   edi,[TaskTable+eax]
+  mov   eax,[edi+TASK_PROGRAM_PAGES]
+  mov   ecx,PG_PAGE_SIZE
+  mul   ecx
+  add   eax,USER_PROGRAM_VIRTUAL_BASE
+  cmp   [TaskUserLimit],eax
   jbe   TaskValidateUserRange2
 TaskValidateUserRange1:
   cmp   ebx,USER_PROGRAM_KCBLOCK_BASE
@@ -542,6 +561,7 @@ TaskExitFromInterrupt:
   mov   dword[edi+TASK_SLEEP_ACTIVE],0
   mov   dword[edi+TASK_KEY_WAIT_ACTIVE],0
   mov   dword[edi+TASK_STATE],TASK_STATE_EXITED
+  call  TaskReleaseMemory
 TaskExitFromInterrupt1:
   call  TaskSelectNext
   call  TaskResumeSelected
@@ -640,14 +660,13 @@ TaskKeyboardReadFromInterrupt3:
 ;     TaskProgramEntryPtr   = loaded program entry address.
 ;     TaskProgramKcBlockPtr = loaded program KcBlock address.
 ;   Notes:
-;     Reads a raw flat binary into the next physical load area and seeds a
-;     ready task record. It does not start the task.
+;     Allocates physical image and KcBlock pages, reads the raw flat binary,
+;     and seeds a ready task record. It does not start the task.
 ;--------------------------------------------------------------------------------------------------
 TaskProgramLoad:
   mov   dword[TaskProgramEntryPtr],0
   mov   dword[TaskProgramKcBlockPtr],0
   mov   dword[TaskProgramLoadBase],0
-  mov   dword[TaskProgramAllocSize],0
   mov   dword[TaskProgramPageCount],0
   mov   dword[TaskProgramImageSize],0
   mov   dword[TaskProgramImageAllocSize],0
@@ -683,7 +702,9 @@ TaskProgramLoad:
   test  eax,eax
   jnz   TaskProgramLoad5
   call  TaskProgramAlloc
-  call  TaskProgramClearSlot
+  mov   eax,[TaskProgramStatus]
+  test  eax,eax
+  jnz   TaskProgramLoad5
   mov   eax,[TaskProgramHandle]
   mov   [FsReadHandle],eax
   mov   eax,[TaskProgramLoadBase]
@@ -693,7 +714,7 @@ TaskProgramLoad:
   call  FsRead
   mov   eax,[FsStatus]
   cmp   eax,FS_STATUS_OK
-  jne   TaskProgramLoad5
+  jne   TaskProgramLoad6
   mov   edi,[pTaskRecord]
   mov   dword[edi+TASK_STATE],TASK_STATE_READY
   mov   eax,[TaskProgramStackSlot]
@@ -740,23 +761,27 @@ TaskProgramLoad:
   mov   dword[edi+TASK_RUN_COUNT],0
   mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_OK
   call  TaskProgramCloseFile
-  jmp   TaskProgramLoad6
+  jmp   TaskProgramLoad8
 TaskProgramLoad1:
   mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_BAD_TASK
-  jmp   TaskProgramLoad6
+  jmp   TaskProgramLoad8
 TaskProgramLoad2:
   mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_BAD_STACK
-  jmp   TaskProgramLoad6
+  jmp   TaskProgramLoad8
 TaskProgramLoad3:
   mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_BAD_IMAGE
-  jmp   TaskProgramLoad6
+  jmp   TaskProgramLoad8
 TaskProgramLoad4:
   mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_NOT_FOUND
-  jmp   TaskProgramLoad6
+  jmp   TaskProgramLoad8
 TaskProgramLoad5:
-  call  TaskProgramCloseFile
-  mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_FS_ERROR
+  jmp   TaskProgramLoad7
 TaskProgramLoad6:
+  call  TaskReleaseMemory
+  mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_FS_ERROR
+TaskProgramLoad7:
+  call  TaskProgramCloseFile
+TaskProgramLoad8:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -764,19 +789,30 @@ TaskProgramLoad6:
 ;   Output:
 ;     Clears the task table and records the current kernel console context as task 0.
 ;   Notes:
-;     Used by console-driven user-program smoke tests before loading mock images.
+;     Reclaims pages from prior task records before preparing a new Run batch.
 ;--------------------------------------------------------------------------------------------------
 TaskProgramInit:
-  mov   eax,[MemoryKernelHeapEnd]
-  mov   [TaskProgramNextLoadBase],eax
+  mov   dword[TaskInitIndex],0
+TaskProgramInit1:
+  mov   eax,[TaskInitIndex]
+  cmp   eax,MAX_TASKS
+  jae   TaskProgramInit2
+  mov   ebx,TASK_RECORD_SIZE
+  mul   ebx
+  lea   edi,[TaskTable+eax]
+  mov   [pTaskRecord],edi
+  call  TaskReleaseMemory
+  inc   dword[TaskInitIndex]
+  jmp   TaskProgramInit1
+TaskProgramInit2:
   mov   eax,TaskTable
   mov   [TaskInitPtr],eax
   mov   eax,MAX_TASKS * TASK_RECORD_SIZE
   mov   [TaskInitLeft],eax
-TaskProgramInit1:
+TaskProgramInit3:
   mov   eax,[TaskInitLeft]
   test  eax,eax
-  jz    TaskProgramInit2
+  jz    TaskProgramInit4
   mov   edi,[TaskInitPtr]
   mov   byte[edi],0
   inc   edi
@@ -784,8 +820,8 @@ TaskProgramInit1:
   mov   eax,[TaskInitLeft]
   dec   eax
   mov   [TaskInitLeft],eax
-  jmp   TaskProgramInit1
-TaskProgramInit2:
+  jmp   TaskProgramInit3
+TaskProgramInit4:
   mov   dword[TaskCurrentIndex],0
   mov   dword[TaskNextIndex],0
   mov   dword[TaskIndex],0
@@ -1061,8 +1097,8 @@ TaskMemoryInfo1:
 ;     TaskMemoryPointer = allocated user virtual address.
 ;     TaskMemoryBytes   = page-rounded byte count.
 ;   Notes:
-;     Minimal per-task page allocator. Pages come from the task's reserved user
-;     program slot after the loaded image and are mapped into the current task.
+;     Pages come from the shared physical pool and are mapped after the loaded
+;     image in the task's user virtual range.
 ;--------------------------------------------------------------------------------------------------
 TaskMemoryGet:
   mov   dword[TaskMemoryStatus],TASK_MEMORY_STATUS_BAD_ARG
@@ -1070,7 +1106,7 @@ TaskMemoryGet:
   mov   dword[TaskMemoryBytes],0
   mov   eax,[TaskMemoryRequestBytes]
   test  eax,eax
-  jz    TaskMemoryGet2
+  jz    TaskMemoryGet4
   add   eax,00000FFFh
   and   eax,0FFFFF000h
   mov   [TaskMemoryBytes],eax
@@ -1082,30 +1118,53 @@ TaskMemoryGet:
   mov   ebx,TASK_RECORD_SIZE
   mul   ebx
   lea   edi,[TaskTable+eax]
+  mov   [pTaskRecord],edi
   cmp   dword[edi+TASK_MODE],TASK_MODE_USER
-  jne   TaskMemoryGet2
+  jne   TaskMemoryGet4
   mov   eax,[edi+TASK_PROGRAM_PHYS]
   test  eax,eax
-  jz    TaskMemoryGet2
+  jz    TaskMemoryGet4
   mov   eax,[edi+TASK_PROGRAM_PAGES]
+  mov   [TaskMemoryPageIndex],eax
   add   eax,[TaskMemoryPageCount]
   cmp   eax,USER_PROGRAM_MAX_PAGES
-  ja    TaskMemoryGet1
+  ja    TaskMemoryGet3
   mov   [TaskMemoryNewPages],eax
-  mov   eax,[edi+TASK_PROGRAM_PAGES]
+  mov   eax,[TaskMemoryPageCount]
+  mov   [MemoryPhysicalRequestPages],eax
+  call  MemoryPhysicalGet
+  cmp   dword[MemoryPhysicalStatus],MEM_STATUS_OK
+  jne   TaskMemoryGet3
+  mov   eax,[MemoryPhysicalAddress]
+  mov   [TaskMemoryPhysicalAddress],eax
+  mov   eax,[TaskMemoryPageCount]
+  mov   [TaskMemoryPageLeft],eax
+TaskMemoryGet1:
+  mov   eax,[TaskMemoryPageIndex]
+  shl   eax,2
+  mov   ebx,[TaskMemoryPhysicalAddress]
+  mov   edi,[pTaskRecord]
+  mov   [edi+TASK_PAGE_LIST+eax],ebx
+  add   dword[TaskMemoryPhysicalAddress],PG_PAGE_SIZE
+  inc   dword[TaskMemoryPageIndex]
+  dec   dword[TaskMemoryPageLeft]
+  jnz   TaskMemoryGet1
+TaskMemoryGet2:
+  mov   eax,[TaskMemoryNewPages]
+  sub   eax,[TaskMemoryPageCount]
   mov   ebx,USER_PROGRAM_SLOT_SIZE
   mul   ebx
   add   eax,USER_PROGRAM_VIRTUAL_BASE
   mov   [TaskMemoryPointer],eax
+  mov   edi,[pTaskRecord]
   mov   eax,[TaskMemoryNewPages]
   mov   [edi+TASK_PROGRAM_PAGES],eax
-  mov   [pTaskRecord],edi
   call  TaskMapSelectedProgram
   mov   dword[TaskMemoryStatus],TASK_MEMORY_STATUS_OK
   ret
-TaskMemoryGet1:
+TaskMemoryGet3:
   mov   dword[TaskMemoryStatus],TASK_MEMORY_STATUS_NO_MEMORY
-TaskMemoryGet2:
+TaskMemoryGet4:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -1125,7 +1184,7 @@ TaskMemoryFree:
   mov   dword[TaskMemoryBytes],0
   mov   eax,[TaskMemoryRequestBytes]
   test  eax,eax
-  jz    TaskMemoryFree1
+  jz    TaskMemoryFree3
   add   eax,00000FFFh
   and   eax,0FFFFF000h
   mov   [TaskMemoryBytes],eax
@@ -1135,12 +1194,12 @@ TaskMemoryFree:
   mov   [TaskMemoryPageCount],eax
   mov   eax,[TaskMemoryPointer]
   cmp   eax,USER_PROGRAM_VIRTUAL_BASE
-  jb    TaskMemoryFree1
+  jb    TaskMemoryFree3
   sub   eax,USER_PROGRAM_VIRTUAL_BASE
   cmp   eax,USER_PROGRAM_MAX_SIZE
-  jae   TaskMemoryFree1
+  jae   TaskMemoryFree3
   test  eax,00000FFFh
-  jnz   TaskMemoryFree1
+  jnz   TaskMemoryFree3
   mov   ebx,USER_PROGRAM_SLOT_SIZE
   xor   edx,edx
   div   ebx
@@ -1149,24 +1208,52 @@ TaskMemoryFree:
   mov   ebx,TASK_RECORD_SIZE
   mul   ebx
   lea   edi,[TaskTable+eax]
+  mov   [pTaskRecord],edi
   cmp   dword[edi+TASK_MODE],TASK_MODE_USER
-  jne   TaskMemoryFree1
+  jne   TaskMemoryFree3
   mov   eax,[edi+TASK_PROGRAM_PHYS]
   test  eax,eax
-  jz    TaskMemoryFree1
+  jz    TaskMemoryFree3
   mov   eax,[edi+TASK_PROGRAM_PAGES]
   sub   eax,[edi+TASK_IMAGE_PAGES]
   cmp   eax,[TaskMemoryPageCount]
-  jb    TaskMemoryFree1
+  jb    TaskMemoryFree3
   mov   eax,[edi+TASK_PROGRAM_PAGES]
   sub   eax,[TaskMemoryPageCount]
   cmp   eax,[TaskMemoryPageIndex]
-  jne   TaskMemoryFree1
+  jne   TaskMemoryFree3
+  mov   eax,[TaskMemoryPageCount]
+  mov   [TaskMemoryPageLeft],eax
+TaskMemoryFree1:
+  mov   eax,[TaskMemoryPageLeft]
+  test  eax,eax
+  jz    TaskMemoryFree2
+  mov   eax,[TaskMemoryPageIndex]
+  shl   eax,2
+  mov   edi,[pTaskRecord]
+  mov   ebx,[edi+TASK_PAGE_LIST+eax]
+  test  ebx,ebx
+  jz    TaskMemoryFree3
+  mov   [MemoryPhysicalAddress],ebx
+  mov   dword[MemoryPhysicalRequestPages],1
+  call  MemoryPhysicalFree
+  cmp   dword[MemoryPhysicalStatus],MEM_STATUS_OK
+  jne   TaskMemoryFree3
+  mov   eax,[TaskMemoryPageIndex]
+  shl   eax,2
+  mov   edi,[pTaskRecord]
+  mov   dword[edi+TASK_PAGE_LIST+eax],0
+  inc   dword[TaskMemoryPageIndex]
+  dec   dword[TaskMemoryPageLeft]
+  jmp   TaskMemoryFree1
+TaskMemoryFree2:
+  mov   edi,[pTaskRecord]
+  mov   eax,[edi+TASK_PROGRAM_PAGES]
+  sub   eax,[TaskMemoryPageCount]
   mov   [edi+TASK_PROGRAM_PAGES],eax
-  mov   [pTaskRecord],edi
   call  TaskMapSelectedProgram
   mov   dword[TaskMemoryStatus],TASK_MEMORY_STATUS_OK
-TaskMemoryFree1:
+TaskMemoryFree3:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -1188,6 +1275,8 @@ TaskExit:
   mov   [edi+TASK_RUN_COUNT],eax
   mov   dword[edi+TASK_SLEEP_ACTIVE],0
   mov   dword[edi+TASK_STATE],TASK_STATE_EXITED
+  mov   [pTaskRecord],edi
+  call  TaskReleaseMemory
   call  TaskYield
   ret
 
@@ -1479,26 +1568,55 @@ TaskGetStateRecord1:
 ;   Input:
 ;     pTaskRecord = selected task record.
 ;   Output:
-;     Shared user virtual range maps to the selected task's loaded image, or
-;     identity maps USER_PROGRAM_VIRTUAL_BASE for kernel task 0.
+;     Shared user virtual range maps to the selected task's owned physical
+;     pages. Unused user pages are unmapped.
 ;--------------------------------------------------------------------------------------------------
 TaskMapSelectedProgram:
-  mov   edi,[pTaskRecord]
-  mov   eax,[edi+TASK_PROGRAM_PHYS]
-  test  eax,eax
-  jnz   TaskMapSelectedProgram1
-  mov   eax,USER_PROGRAM_VIRTUAL_BASE
-  mov   dword[PgUserPageCount],USER_PROGRAM_MAX_PAGES
-  mov   dword[PgUserKcPhysBase],USER_PROGRAM_KCBLOCK_BASE
-  jmp   TaskMapSelectedProgram2
+  mov   dword[TaskMapPageIndex],0
+  mov   dword[TaskMapVirtualAddress],USER_PROGRAM_VIRTUAL_BASE
 TaskMapSelectedProgram1:
-  mov   ebx,[edi+TASK_PROGRAM_PAGES]
-  mov   [PgUserPageCount],ebx
-  mov   ebx,[edi+TASK_KCBLOCK_PHYS]
-  mov   [PgUserKcPhysBase],ebx
+  mov   eax,[TaskMapPageIndex]
+  cmp   eax,USER_PROGRAM_MAX_PAGES
+  jae   TaskMapSelectedProgram4
+  mov   edi,[pTaskRecord]
+  cmp   dword[edi+TASK_MODE],TASK_MODE_USER
+  jne   TaskMapSelectedProgram2
+  cmp   eax,[edi+TASK_PROGRAM_PAGES]
+  jae   TaskMapSelectedProgram2
+  shl   eax,2
+  mov   ebx,[edi+TASK_PAGE_LIST+eax]
+  test  ebx,ebx
+  jz    TaskMapSelectedProgram2
+  mov   eax,[TaskMapVirtualAddress]
+  mov   [PgMapVirtualAddress],eax
+  mov   [PgMapPhysicalAddress],ebx
+  mov   dword[PgMapFlags],PG_USER_FLAGS
+  call  PgMapPage
+  jmp   TaskMapSelectedProgram3
 TaskMapSelectedProgram2:
-  mov   [PgUserPhysBase],eax
-  call  PgMapUserProgram
+  mov   eax,[TaskMapVirtualAddress]
+  mov   [PgMapVirtualAddress],eax
+  call  PgUnmapPage
+TaskMapSelectedProgram3:
+  inc   dword[TaskMapPageIndex]
+  add   dword[TaskMapVirtualAddress],PG_PAGE_SIZE
+  jmp   TaskMapSelectedProgram1
+TaskMapSelectedProgram4:
+  mov   edi,[pTaskRecord]
+  cmp   dword[edi+TASK_MODE],TASK_MODE_USER
+  jne   TaskMapSelectedProgram5
+  mov   eax,[edi+TASK_KCBLOCK_PHYS]
+  test  eax,eax
+  jz    TaskMapSelectedProgram5
+  mov   dword[PgMapVirtualAddress],USER_PROGRAM_KCBLOCK_BASE
+  mov   [PgMapPhysicalAddress],eax
+  mov   dword[PgMapFlags],PG_KCBLOCK_FLAGS
+  call  PgMapPage
+  jmp   TaskMapSelectedProgram6
+TaskMapSelectedProgram5:
+  mov   dword[PgMapVirtualAddress],USER_PROGRAM_KCBLOCK_BASE
+  call  PgUnmapPage
+TaskMapSelectedProgram6:
   call  TaskMapSelectedStack
   ret
 
@@ -1615,14 +1733,14 @@ TaskProgramValidateImage1:
 ;--------------------------------------------------------------------------------------------------
 ; TaskProgramAlloc
 ;   Output:
-;     TaskProgramLoadBase = next dynamic user-program load base.
-;     TaskProgramAllocSize = allocation bytes.
-;     TaskProgramPageCount = initial image pages.
-;     TaskProgramNextLoadBase advanced to the next 4K boundary.
+;     TaskProgramStatus         = TASK_PROGRAM_STATUS_*.
+;     TaskProgramLoadBase       = first physical image page.
+;     TaskProgramPageCount      = initial image pages.
+;     TaskProgramKcBlockPhysPtr = physical KcBlock page.
+;     pTaskRecord owns the allocated pages.
 ;--------------------------------------------------------------------------------------------------
 TaskProgramAlloc:
-  mov   eax,[TaskProgramNextLoadBase]
-  mov   [TaskProgramLoadBase],eax
+  mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_NO_MEMORY
   mov   eax,[TaskProgramImageSize]
   add   eax,00000FFFh
   and   eax,0FFFFF000h
@@ -1631,17 +1749,47 @@ TaskProgramAlloc:
   xor   edx,edx
   div   ebx
   mov   [TaskProgramPageCount],eax
+  mov   [MemoryPhysicalRequestPages],eax
+  call  MemoryPhysicalGet
+  cmp   dword[MemoryPhysicalStatus],MEM_STATUS_OK
+  jne   TaskProgramAlloc4
+  mov   eax,[MemoryPhysicalAddress]
+  mov   [TaskProgramLoadBase],eax
+  mov   [TaskProgramPagePhys],eax
+  mov   dword[TaskProgramPageIndex],0
+  mov   eax,[TaskProgramPageCount]
+  mov   [TaskProgramPageLeft],eax
+  mov   edi,[pTaskRecord]
   mov   eax,[TaskProgramLoadBase]
-  add   eax,USER_PROGRAM_MAX_SIZE
+  mov   [edi+TASK_PROGRAM_PHYS],eax
+  mov   eax,[TaskProgramPageCount]
+  mov   [edi+TASK_PROGRAM_PAGES],eax
+  mov   [edi+TASK_IMAGE_PAGES],eax
+  mov   dword[edi+TASK_KCBLOCK_PHYS],0
+TaskProgramAlloc1:
+  mov   eax,[TaskProgramPageIndex]
+  shl   eax,2
+  mov   edi,[pTaskRecord]
+  mov   ebx,[TaskProgramPagePhys]
+  mov   [edi+TASK_PAGE_LIST+eax],ebx
+  add   dword[TaskProgramPagePhys],PG_PAGE_SIZE
+  inc   dword[TaskProgramPageIndex]
+  dec   dword[TaskProgramPageLeft]
+  jnz   TaskProgramAlloc1
+TaskProgramAlloc2:
+  mov   dword[MemoryPhysicalRequestPages],1
+  call  MemoryPhysicalGet
+  cmp   dword[MemoryPhysicalStatus],MEM_STATUS_OK
+  jne   TaskProgramAlloc3
+  mov   eax,[MemoryPhysicalAddress]
   mov   [TaskProgramKcBlockPhysPtr],eax
-  mov   eax,USER_PROGRAM_MAX_SIZE
-  add   eax,USER_PROGRAM_SLOT_SIZE
-  mov   [TaskProgramAllocSize],eax
-  mov   eax,[TaskProgramLoadBase]
-  add   eax,[TaskProgramAllocSize]
-  add   eax,00000FFFh
-  and   eax,0FFFFF000h
-  mov   [TaskProgramNextLoadBase],eax
+  mov   edi,[pTaskRecord]
+  mov   [edi+TASK_KCBLOCK_PHYS],eax
+  mov   dword[TaskProgramStatus],TASK_PROGRAM_STATUS_OK
+  jmp   TaskProgramAlloc4
+TaskProgramAlloc3:
+  call  TaskReleaseMemory
+TaskProgramAlloc4:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -1662,29 +1810,53 @@ TaskProgramCloseFile1:
   ret
 
 ;--------------------------------------------------------------------------------------------------
-; TaskProgramClearSlot
+; TaskReleaseMemory
 ;   Input:
-;     TaskProgramLoadBase = selected user-program load base.
+;     pTaskRecord = task whose physical pages are to be released.
 ;   Output:
-;     Clears the current user-program allocation.
+;     Returns all user image/growth and KcBlock pages to the physical pool.
+;     Clears physical-page ownership fields in the task record.
 ;--------------------------------------------------------------------------------------------------
-TaskProgramClearSlot:
-  mov   eax,[TaskProgramLoadBase]
-  mov   [TaskProgramClearPtr],eax
-  mov   eax,[TaskProgramAllocSize]
-  mov   [TaskProgramClearLeft],eax
-TaskProgramClearSlot1:
-  mov   eax,[TaskProgramClearLeft]
+TaskReleaseMemory:
+  mov   dword[TaskReleasePageIndex],0
+  mov   edi,[pTaskRecord]
+  mov   eax,[edi+TASK_PROGRAM_PAGES]
+  mov   [TaskReleasePageLeft],eax
+TaskReleaseMemory1:
+  mov   eax,[TaskReleasePageLeft]
   test  eax,eax
-  jz    TaskProgramClearSlot2
-  mov   edi,[TaskProgramClearPtr]
-  mov   byte[edi],0
-  inc   edi
-  mov   [TaskProgramClearPtr],edi
-  dec   eax
-  mov   [TaskProgramClearLeft],eax
-  jmp   TaskProgramClearSlot1
-TaskProgramClearSlot2:
+  jz    TaskReleaseMemory3
+  mov   eax,[TaskReleasePageIndex]
+  shl   eax,2
+  mov   edi,[pTaskRecord]
+  mov   ebx,[edi+TASK_PAGE_LIST+eax]
+  test  ebx,ebx
+  jz    TaskReleaseMemory2
+  mov   [MemoryPhysicalAddress],ebx
+  mov   dword[MemoryPhysicalRequestPages],1
+  call  MemoryPhysicalFree
+  mov   eax,[TaskReleasePageIndex]
+  shl   eax,2
+  mov   edi,[pTaskRecord]
+  mov   dword[edi+TASK_PAGE_LIST+eax],0
+TaskReleaseMemory2:
+  inc   dword[TaskReleasePageIndex]
+  dec   dword[TaskReleasePageLeft]
+  jmp   TaskReleaseMemory1
+TaskReleaseMemory3:
+  mov   edi,[pTaskRecord]
+  mov   eax,[edi+TASK_KCBLOCK_PHYS]
+  test  eax,eax
+  jz    TaskReleaseMemory4
+  mov   [MemoryPhysicalAddress],eax
+  mov   dword[MemoryPhysicalRequestPages],1
+  call  MemoryPhysicalFree
+TaskReleaseMemory4:
+  mov   edi,[pTaskRecord]
+  mov   dword[edi+TASK_PROGRAM_PHYS],0
+  mov   dword[edi+TASK_PROGRAM_PAGES],0
+  mov   dword[edi+TASK_IMAGE_PAGES],0
+  mov   dword[edi+TASK_KCBLOCK_PHYS],0
   ret
 
 ;--------------------------------------------------------------------------------------------------

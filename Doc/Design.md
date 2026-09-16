@@ -325,7 +325,8 @@ User programs should not directly access kernel internals or call arbitrary kern
 
 ## 7. Userland Concept
 
-Userland will eventually consist of one or more programs loaded above the resident kernel.
+Userland consists of one or more raw programs loaded from the filesystem and
+mapped into per-task user memory.
 
 A user program may contain:
 
@@ -336,18 +337,15 @@ stack
 heap/work area
 ```
 
-A simple early model could use fixed-size user slots:
+Each task currently has a fixed-size virtual program range:
 
 ```text
-UserSlot0
-UserSlot1
-UserSlot2
-UserSlot3
+00200000h through 0020FFFFh
 ```
 
-Each slot can hold one resident user program.
-
-A more advanced model can later replace fixed slots with a memory allocator or variable-sized regions.
+Physical backing is allocated by page and retained in the task record. Multiple
+tasks can therefore use the same virtual addresses while occupying different
+physical pages.
 
 The important concept is not the exact address or slot size. The important concept is that user memory is managed separately from the kernel and can be dispatched independently.
 
@@ -811,20 +809,26 @@ KcMmFreeMemory  - Release user memory
 KcMmInfo        - Get memory limits/available memory for task/session
 ```
 
-`Memory.asm` is the kernel memory-management boundary. It currently owns a small
-page-rounded kernel heap after `KernelEnd` and routes the `KcMmGetMemory` /
-`KcMmFreeMemory` path to the task-owned user-memory allocator in `Task.asm`.
+`Memory.asm` is the kernel memory-management boundary. A bitmap-backed physical
+page allocator currently manages the fixed, identity-mapped `00800000h` through
+`00FFFFFFh` range. It finds contiguous page runs, records allocated/free state,
+and clears newly allocated pages.
 
-The current implementation is intentionally small. Trusted/system tasks can grow
-their own user mapping by whole pages from the task's reserved user-program slot.
-`FreeMemory` currently releases only the most recent allocation, keeping the
-first allocator stack-like instead of a full heap. `KcMmInfo` is normal-user
-accessible and returns the calling task's current mapped user bytes plus the
-fixed maximum user-program byte count.
+Kernel-owned allocations use `MemoryKernelGet` / `MemoryKernelFree` over that
+shared page pool. Kernel allocations can be freed independently. `Fs.asm` uses
+this path to load the self-describing system catalog.
 
-Kernel-owned allocations use `MemoryKernelGet` / `MemoryKernelFree`. The first
-kernel heap is also stack-like and page-rounded. `Fs.asm` uses it to load the
-self-describing system catalog.
+User program images, task growth pages, and each task's KcBlock page also come
+from the shared pool. Each task record owns a physical-page list for its user
+virtual range. Task switching maps that list at `00200000h` through the general
+`PgMapPage` / `PgUnmapPage` helpers, so a task's pages need not form one physical
+run. Task exit returns all owned pages to the pool.
+
+Trusted/system tasks can grow their own user mapping by whole pages. `FreeMemory`
+currently releases only the most recent virtual allocation, keeping the user
+allocation contract stack-like instead of providing a general-purpose heap.
+`KcMmInfo` is normal-user accessible and returns the calling task's current
+mapped user bytes plus the fixed maximum user-program byte count.
 
 The broader memory-service list should remain small until real user programs
 need more.
@@ -998,38 +1002,30 @@ That remains the kernel-side text output path. Future userland display output sh
 
 ---
 
-## 18. Memory Layout Direction
+## 18. Current Memory Layout
 
-The current concrete base is:
-
-```text
-KernelBase = 00100000h
-```
-
-Future layout should keep the kernel resident and place user memory above it.
-
-Example conceptual layout:
+The current physical layout includes:
 
 ```text
-00100000h  KernelBase
-           resident kernel image
-           kernel globals
-           kernel stacks
-           kernel buffers
-KernelEnd
-           small kernel heap
-KernelHeapEnd
-
-UserPoolBase
-           user task memory blocks
-           user stacks
-           user data
-UserPoolEnd
+00001000h - 0008FFFFh   low-memory task stack arena
+00100000h - KernelEnd   resident kernel image and globals
+00800000h - 00FFFFFFh   bitmap-managed physical page pool
 ```
 
-The exact addresses do not need to be locked yet.
+Paging identity-maps the first 16 MiB for kernel access. Kernel allocations,
+user images, user growth pages, and KcBlock pages are backed by the physical
+page pool.
 
-Early experimentation may use fixed user slots. Later versions can use a user memory allocator.
+Each selected user task sees its owned pages through this virtual layout:
+
+```text
+00200000h                 user program/image base
+00200000h + 16 pages      maximum program and growth range
+00210000h                 task KcBlock and startup argument page
+```
+
+Different tasks use the same user virtual addresses while their task records
+identify different physical backing pages.
 
 ---
 

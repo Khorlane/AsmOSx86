@@ -366,7 +366,8 @@ task states: Free, Ready, Running, Blocked, Exited
 saved ESP per task
 low-memory stack-slot assignment
 file-backed raw user-program loading
-per-task physical program allocation above the kernel
+shared physical-page allocation for task images, growth, and KcBlock pages
+per-task physical-page ownership lists
 fixed user virtual base at 00200000h
 per-task KcBlock page at 00210000h
 round-robin scan for the next Ready task
@@ -466,8 +467,11 @@ KcAuthorize rejects user calls that do not meet that authority
 KcMmGetMemory and KcMmFreeMemory are real trusted-only page services
 KcMmInfo is a normal-user memory introspection service
 Memory.asm is now the memory-management boundary
-current Memory.asm routes task-owned user memory to Task.asm
-Memory.asm owns a small kernel heap used by Fs.asm for the system catalog
+Memory.asm owns a shared bitmap-backed physical page pool
+kernel allocations and the Fs.asm system catalog use the shared page pool
+task images, task growth, and KcBlock pages use the shared page pool
+task records retain page ownership and task exit returns owned pages
+Paging.asm maps task page lists through general page map/unmap helpers
 legacy gateway address 00100005h is denied
 STARTUP.TXT exercises privilege smoke tests through ordinary console commands
 ```

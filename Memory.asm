@@ -25,10 +25,8 @@
 ;
 ; Notes
 ;   - The shared physical-page pool currently manages a fixed, identity-mapped
-;     staging range. Kernel allocations use it now; task allocation migration
-;     remains separate.
-;   - User memory routing intentionally preserves the existing task-memory
-;     behavior.
+;     staging range used by kernel and task allocations.
+;   - Task policy and per-task page ownership remain in Task.asm.
 ;   - Registers are scratch only.
 ;   - Persistent inputs/outputs use Memory* globals.
 ;**************************************************************************************************
@@ -41,7 +39,6 @@
 MEM_STATUS_OK        equ 0
 MEM_STATUS_BAD_ARG   equ 1
 MEM_STATUS_NO_MEMORY equ 2
-MEM_KERNEL_HEAP_BYTES equ 00010000h
 MEM_PHYSICAL_POOL_START equ 00800000h
 MEM_PHYSICAL_POOL_END equ 01000000h
 MEM_PHYSICAL_PAGE_COUNT equ (MEM_PHYSICAL_POOL_END-MEM_PHYSICAL_POOL_START)/PG_PAGE_SIZE
@@ -57,7 +54,6 @@ MemoryBytes          dd 0               ; output: page-rounded byte count
 MemoryMappedBytes    dd 0               ; output: mapped bytes for info calls
 MemoryMaxBytes       dd 0               ; output: maximum bytes for info calls
 MemoryStatus         dd 0               ; output: MEM_STATUS_*
-MemoryKernelHeapEnd  dd 0               ; temporary low-memory task-image floor
 MemoryClearPtr       dd 0               ; work: memory clear pointer
 MemoryClearLeft      dd 0               ; work: bytes left to clear
 MemoryPhysicalRequestPages dd 0         ; input: contiguous physical pages requested/freed
@@ -86,11 +82,6 @@ MemoryInit:
   mov   dword[MemoryBytes],0
   mov   dword[MemoryMappedBytes],0
   mov   dword[MemoryMaxBytes],0
-  mov   eax,KernelEnd
-  add   eax,PG_PAGE_SIZE-1
-  and   eax,0FFFFF000h
-  add   eax,MEM_KERNEL_HEAP_BYTES
-  mov   [MemoryKernelHeapEnd],eax
   call  MemoryPhysicalInit
   mov   dword[MemoryStatus],MEM_STATUS_OK
   ret
