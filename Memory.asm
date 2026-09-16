@@ -10,7 +10,7 @@
 ;   - Memory status constants
 ;   - Memory service globals
 ;   - Shared physical-page allocation foundation
-;   - Simple kernel-owned stack-like heap
+;   - Physical-page-backed kernel allocation
 ;   - Current-task user memory routing
 ;
 ; Public API
@@ -25,8 +25,8 @@
 ;
 ; Notes
 ;   - The shared physical-page pool currently manages a fixed, identity-mapped
-;     staging range. Kernel and task allocators will migrate to it separately.
-;   - Kernel memory is currently a small page-rounded stack-like heap.
+;     staging range. Kernel allocations use it now; task allocation migration
+;     remains separate.
 ;   - User memory routing intentionally preserves the existing task-memory
 ;     behavior.
 ;   - Registers are scratch only.
@@ -57,9 +57,7 @@ MemoryBytes          dd 0               ; output: page-rounded byte count
 MemoryMappedBytes    dd 0               ; output: mapped bytes for info calls
 MemoryMaxBytes       dd 0               ; output: maximum bytes for info calls
 MemoryStatus         dd 0               ; output: MEM_STATUS_*
-MemoryKernelHeapStart dd 0              ; first kernel heap byte
-MemoryKernelHeapEnd  dd 0               ; exclusive kernel heap end
-MemoryKernelNext     dd 0               ; next kernel heap byte
+MemoryKernelHeapEnd  dd 0               ; temporary low-memory task-image floor
 MemoryClearPtr       dd 0               ; work: memory clear pointer
 MemoryClearLeft      dd 0               ; work: bytes left to clear
 MemoryPhysicalRequestPages dd 0         ; input: contiguous physical pages requested/freed
@@ -91,8 +89,6 @@ MemoryInit:
   mov   eax,KernelEnd
   add   eax,PG_PAGE_SIZE-1
   and   eax,0FFFFF000h
-  mov   [MemoryKernelHeapStart],eax
-  mov   [MemoryKernelNext],eax
   add   eax,MEM_KERNEL_HEAP_BYTES
   mov   [MemoryKernelHeapEnd],eax
   call  MemoryPhysicalInit
@@ -241,25 +237,20 @@ MemoryKernelGet:
   mov   dword[MemoryBytes],0
   mov   eax,[MemoryRequestBytes]
   test  eax,eax
-  jz    MemoryKernelGet2
+  jz    MemoryKernelGet1
   add   eax,PG_PAGE_SIZE-1
   and   eax,0FFFFF000h
   mov   [MemoryBytes],eax
-  mov   ebx,[MemoryKernelNext]
-  add   eax,ebx
-  cmp   eax,[MemoryKernelHeapEnd]
-  ja    MemoryKernelGet1
-  mov   [MemoryKernelNext],eax
-  mov   [MemoryPointer],ebx
-  mov   [MemoryClearPtr],ebx
-  mov   eax,[MemoryBytes]
-  mov   [MemoryClearLeft],eax
-  call  MemoryClear
-  mov   dword[MemoryStatus],MEM_STATUS_OK
-  ret
+  shr   eax,12
+  mov   [MemoryPhysicalRequestPages],eax
+  call  MemoryPhysicalGet
+  mov   eax,[MemoryPhysicalStatus]
+  mov   [MemoryStatus],eax
+  cmp   eax,MEM_STATUS_OK
+  jne   MemoryKernelGet1
+  mov   eax,[MemoryPhysicalAddress]
+  mov   [MemoryPointer],eax
 MemoryKernelGet1:
-  mov   dword[MemoryStatus],MEM_STATUS_NO_MEMORY
-MemoryKernelGet2:
   ret
 
 ;--------------------------------------------------------------------------------------------------
@@ -270,9 +261,6 @@ MemoryKernelGet2:
 ;   Output:
 ;     MemoryStatus = MEM_STATUS_*.
 ;     MemoryBytes  = page-rounded freed byte count.
-;   Notes:
-;     This first kernel heap is stack-like: only the most recent allocation can
-;     be freed.
 ;--------------------------------------------------------------------------------------------------
 MemoryKernelFree:
   mov   dword[MemoryStatus],MEM_STATUS_BAD_ARG
@@ -283,18 +271,13 @@ MemoryKernelFree:
   add   eax,PG_PAGE_SIZE-1
   and   eax,0FFFFF000h
   mov   [MemoryBytes],eax
-  mov   ebx,[MemoryPointer]
-  cmp   ebx,[MemoryKernelHeapStart]
-  jb    MemoryKernelFree1
-  cmp   ebx,[MemoryKernelHeapEnd]
-  jae   MemoryKernelFree1
-  test  ebx,PG_PAGE_SIZE-1
-  jnz   MemoryKernelFree1
-  add   eax,ebx
-  cmp   eax,[MemoryKernelNext]
-  jne   MemoryKernelFree1
-  mov   [MemoryKernelNext],ebx
-  mov   dword[MemoryStatus],MEM_STATUS_OK
+  shr   eax,12
+  mov   [MemoryPhysicalRequestPages],eax
+  mov   eax,[MemoryPointer]
+  mov   [MemoryPhysicalAddress],eax
+  call  MemoryPhysicalFree
+  mov   eax,[MemoryPhysicalStatus]
+  mov   [MemoryStatus],eax
 MemoryKernelFree1:
   ret
 
